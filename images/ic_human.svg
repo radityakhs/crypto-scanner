@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 400" fill="none">
+  <defs>
+    <linearGradient id="humanGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#04dbd7;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#06b6d4;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0891b2;stop-opacity:1" />
+    </linearGradient>
+    <filter id="humanGlow">
+      <feGaussianBlur stdDeviation="1.5" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Head Outline (Frontal View) -->
+  <ellipse cx="150" cy="180" rx="80" ry="100" stroke="url(#humanGradient)" stroke-width="2.5" fill="none" opacity="0.8" filter="url(#humanGlow)"/>
+  
+  <!-- Forehead and Top -->
+  <path d="M 90 130 Q 150 100 210 130" stroke="url(#humanGradient)" stroke-width="2" fill="none" opacity="0.7"/>
+  <path d="M 100 150 Q 150 135 200 150" stroke="url(#humanGradient)" stroke-width="1.5" fill="none" opacity="0.6"/>
+  
+  <!-- Hair Line -->
+  <path d="M 80 120 Q 90 105 100 100 Q 120 95 150 90 Q 180 95 200 100 Q 210 105 220 120" 
+        stroke="url(#humanGradient)" stroke-width="2" fill="none" opacity="0.75"/>
+  
+  <!-- LEFT EYE -->
+  <ellipse cx="120" cy="170" rx="20" ry="12" stroke="url(#humanGradient)" stroke-width="2" fill="none" opacity="0.85" filter="url(#humanGlow)"/>
+  <ellipse cx="120" cy="170" rx="12" ry="8" stroke="url(#humanGradient)" stroke-width="1.5" fill="none" opacity="0.7"/>
+  <circle cx="120" cy="170" r="6" fill="url(#humanGradient)" opacity="0.9">
+    <animate attributeName="opacity" values="0.9;0.3;0.9" dur="3s" repeatCount="indefinite"/>
+  </circle>
+  <!-- Left Eyebrow -->
+  <path d="M 100 155 Q 120 150 140 155" stroke="url(#humanGradient)" stroke-width="2.5" fill="none" opacity="0.8" stroke-linecap="round"/>
+  
+  <!-- RIGHT EYE -->
+  <ellipse cx="180" cy="170" rx="20" ry="12" stroke="url(#humanGradient)" stroke-width="2" fill="none" opacity="0.85" filter="url(#humanGlow)"/>
+  <ellipse cx="180" cy="170" rx="12" ry="8" stroke="url(#humanGradient)" stroke-width="1.5" fill="none" opacity="0.7"/>
+  <circle cx="180" cy="170" r="6" fill="url(#humanGradient)" opacity="0.9">
+    <animate attributeName="opacity" values="0.9;0.3;0.9" dur="3s" repeatCount="indefinite"/>
+  </circle>
+  <!-- Right Eyebrow -->
+  <path d="M 160 155 Q 180 150 200 155" stroke="url(#humanGradient)" stroke-width="2.5" fill="none" opacity="0.8" stroke-linecap="round"/>
+  
+  <!-- NOSE -->
+  <line x1="150" y1="180" x2="150" y2="210" stroke="url(#humanGradient)" stroke-width="2.5" opacity="0.75" stroke-linecap="round"/>
+  <path d="M 140 210 Q 145 215 150 218 Q 155 215 160 210" 
+        stroke="url(#humanGradient)" stroke-width="2" fill="none" opacity="0.75" stroke-linecap="round"/>
+  <!-- Nose Bridge -->
+  <line x1="145" y1="180" x2="142" y2="200" stroke="url(#humanGradient)" stroke-width="1.5" opacity="0.6"/>
+  <line x1="155" y1="180" x2="158" y2="200" stroke="url(#humanGradient)" stroke-width="1.5" opacity="0.6"/>
+  
+  <!-- MOUTH -->
+  <path d="M 130 240 Q 150 250 170 240" 
+        stroke="url(#humanGradient)" stroke-width="2.5" fill="none" opacity="0.85" stroke-linecap="round" filter="url(#humanGlow)"/>
+  <path d="M 130 240 Q 150 235 170 240" 
+        stroke="url(#humanGradient)" stroke-width="1.5" fill="none" opacity="0.5" stroke-linecap="round"/>
+  
+  <!-- CHEEKS -->
+  <path d="M 85 190 Q 80 210 85 230" stroke="url(#humanGradient)" stroke-width="1.5" fill="none" opacity="0.6"/>
+  <path d="M 215 190 Q 220 210 215 230" stroke="url(#humanGradient)" stroke-width="1.5" fill="none" opacity="0.6"/>
+  
+  <!-- CHIN -->
+  <path d="M 110 250 Q 130 270 150 275 Q 170 270 190 250" 
+        stroke="url(#humanGradient)" stroke-width="2" fill="none" opacity="0.75"/>
+  <ellipse cx="150" cy="265" rx="25" ry="15" stroke="url(#humanGradient)" stroke-width="1.5" fill="none" opacity="0.6"/>
+  
+  <!-- EARS -->
+  <!-- Left Ear -->
+  <ellipse cx="75" cy="190" rx="15" ry="35" stroke="url(#humanGradient)" stroke-width="2" fill="none" opacity="0.7"/>
+  <path d="M 80 180 Q 85 190 80 200" stroke="url(#humanGradient)" stroke-width="1.5" fill="none" opacity="0.5"/>
+  
+  <!-- Right Ear -->
+  <ellipse cx="225" cy="190" rx="15" ry="35" stroke="url(#humanGradient)" stroke-width="2" fill="none" opacity="0.7"/>
+  <path d="M 220 180 Q 215 190 220 200" stroke="url(#humanGradient)" stroke-width="1.5" fill="none" opacity="0.5"/>
+  
+  <!-- NECK -->
+  <path d="M 120 275 Q 115 310 115 340" stroke="url(#humanGradient)" stroke-width="2.5" fill="none" opacity="0.75" filter="url(#humanGlow)"/>
+  <path d="M 180 275 Q 185 310 185 340" stroke="url(#humanGradient)" stroke-width="2.5" fill="none" opacity="0.75" filter="url(#humanGlow)"/>
+  <line x1="115" y1="310" x2="185" y2="310" stroke="url(#humanGradient)" stroke-width="1.5" opacity="0.5"/>
+  
+  <!-- SHOULDERS -->
+  <path d="M 115 340 Q 90 360 70 370" stroke="url(#humanGradient)" stroke-width="2.5" fill="none" opacity="0.7"/>
+  <path d="M 185 340 Q 210 360 230 370" stroke="url(#humanGradient)" stroke-width="2.5" fill="none" opacity="0.7"/>
+  
+  <!-- Facial Grid Lines (3D Effect) -->
+  <path d="M 90 160 Q 150 155 210 160" stroke="url(#humanGradient)" stroke-width="0.8" opacity="0.3"/>
+  <path d="M 95 190 Q 150 185 205 190" stroke="url(#humanGradient)" stroke-width="0.8" opacity="0.3"/>
+  <path d="M 100 220 Q 150 215 200 220" stroke="url(#humanGradient)" stroke-width="0.8" opacity="0.3"/>
+  <path d="M 110 250 Q 150 245 190 250" stroke="url(#humanGradient)" stroke-width="0.8" opacity="0.3"/>
+  
+  <!-- Vertical Center Line -->
+  <line x1="150" y1="100" x2="150" y2="275" stroke="url(#humanGradient)" stroke-width="0.5" opacity="0.2"/>
+  
+  <!-- Key Points -->
+  <circle cx="150" cy="100" r="2" fill="#04dbd7" opacity="0.8"/>
+  <circle cx="120" cy="170" r="2" fill="#06b6d4" opacity="0.8"/>
+  <circle cx="180" cy="170" r="2" fill="#06b6d4" opacity="0.8"/>
+  <circle cx="150" cy="210" r="2" fill="#0891b2" opacity="0.8"/>
+  <circle cx="150" cy="240" r="2" fill="#04dbd7" opacity="0.8"/>
+  <circle cx="150" cy="275" r="2" fill="#06b6d4" opacity="0.8"/>
+  
+  <!-- Scan Effect -->
+  <line x1="60" y1="180" x2="240" y2="180" stroke="#04dbd7" stroke-width="0.8" opacity="0.3">
+    <animate attributeName="y1" values="90;370;90" dur="5s" repeatCount="indefinite"/>
+    <animate attributeName="y2" values="90;370;90" dur="5s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0;0.6;0" dur="5s" repeatCount="indefinite"/>
+  </line>
+  
+  <!-- Frame Corners -->
+  <path d="M 50 80 L 70 80 M 50 80 L 50 100" stroke="#04dbd7" stroke-width="2" opacity="0.5"/>
+  <path d="M 250 80 L 230 80 M 250 80 L 250 100" stroke="#04dbd7" stroke-width="2" opacity="0.5"/>
+  <path d="M 50 380 L 70 380 M 50 380 L 50 360" stroke="#04dbd7" stroke-width="2" opacity="0.5"/>
+  <path d="M 250 380 L 230 380 M 250 380 L 250 360" stroke="#04dbd7" stroke-width="2" opacity="0.5"/>
+</svg>

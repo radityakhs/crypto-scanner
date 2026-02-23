@@ -1,0 +1,18 @@
+{
+  "name": "crypto-scanner",
+  "version": "1.0.0",
+  "description": "Dashboard crypto berbasis web untuk analisa pasar, sinyal whale, dan expert analysis (moon phase, MA/EMA/MACD, support & resistance) lengkap dengan rekomendasi futures.",
+  "main": "advanced-analysis.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "node-fetch": "^2.7.0"
+  }
+}

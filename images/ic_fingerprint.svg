@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 400" fill="none">
+  <defs>
+    <linearGradient id="fpGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#04dbd7;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#06b6d4;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0891b2;stop-opacity:1" />
+    </linearGradient>
+    <filter id="fpGlow">
+      <feGaussianBlur stdDeviation="1" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Core Center -->
+  <ellipse cx="150" cy="200" rx="15" ry="20" stroke="url(#fpGradient)" stroke-width="2.5" fill="none" opacity="0.9" filter="url(#fpGlow)"/>
+  
+  <!-- Inner Whorl Pattern -->
+  <path d="M 150 165 Q 165 170 170 185 Q 172 200 170 215 Q 165 230 150 235 Q 135 230 130 215 Q 128 200 130 185 Q 135 170 150 165" 
+        stroke="url(#fpGradient)" stroke-width="2.5" fill="none" opacity="0.85" stroke-linecap="round"/>
+  
+  <path d="M 150 145 Q 175 150 185 175 Q 190 200 185 225 Q 175 250 150 255 Q 125 250 115 225 Q 110 200 115 175 Q 125 150 150 145" 
+        stroke="url(#fpGradient)" stroke-width="2.5" fill="none" opacity="0.8" stroke-linecap="round"/>
+  
+  <!-- Middle Ridges -->
+  <path d="M 150 125 Q 185 130 200 165 Q 208 200 200 235 Q 185 270 150 275 Q 115 270 100 235 Q 92 200 100 165 Q 115 130 150 125" 
+        stroke="url(#fpGradient)" stroke-width="2.5" fill="none" opacity="0.75" stroke-linecap="round"/>
+  
+  <path d="M 150 105 Q 195 110 215 155 Q 226 200 215 245 Q 195 290 150 295 Q 105 290 85 245 Q 74 200 85 155 Q 105 110 150 105" 
+        stroke="url(#fpGradient)" stroke-width="2.5" fill="none" opacity="0.7" stroke-linecap="round"/>
+  
+  <!-- Outer Ridges -->
+  <path d="M 150 85 Q 205 90 230 145 Q 244 200 230 255 Q 205 310 150 315 Q 95 310 70 255 Q 56 200 70 145 Q 95 90 150 85" 
+        stroke="url(#fpGradient)" stroke-width="2.5" fill="none" opacity="0.65" stroke-linecap="round"/>
+  
+  <path d="M 150 65 Q 215 70 245 135 Q 262 200 245 265 Q 215 330 150 335 Q 85 330 55 265 Q 38 200 55 135 Q 85 70 150 65" 
+        stroke="url(#fpGradient)" stroke-width="2.5" fill="none" opacity="0.6" stroke-linecap="round"/>
+  
+  <!-- Left Side Ridges (Bifurcation) -->
+  <path d="M 100 175 Q 95 185 95 195 Q 95 205 97 215" 
+        stroke="url(#fpGradient)" stroke-width="2.5" fill="none" opacity="0.75" stroke-linecap="round"/>
+  <path d="M 85 165 Q 78 180 78 200 Q 78 220 82 235" 
+        stroke="url(#fpGradient)" stroke-width="2.5" fill="none" opacity="0.7" stroke-linecap="round"/>
+  <path d="M 70 155 Q 62 175 62 200 Q 62 225 68 245" 
+        stroke="url(#fpGradient)" stroke-width="2.5" fill="none" opacity="0.65" stroke-linecap="round"/>
+  
+  <!-- Right Side Ridges (Bifurcation) -->
+  <path d="M 200 175 Q 205 185 205 195 Q 205 205 203 215" 
+        stroke="url(#fpGradient)" stroke-width="2.5" fill="none" opacity="0.75" stroke-linecap="round"/>
+  <path d="M 215 165 Q 222 180 222 200 Q 222 220 218 235" 
+        stroke="url(#fpGradient)" stroke-width="2.5" fill="none" opacity="0.7" stroke-linecap="round"/>
+  <path d="M 230 155 Q 238 175 238 200 Q 238 225 232 245" 
+        stroke="url(#fpGradient)" stroke-width="2.5" fill="none" opacity="0.65" stroke-linecap="round"/>
+  
+  <!-- Top Arch Lines -->
+  <path d="M 130 130 Q 150 120 170 130" 
+        stroke="url(#fpGradient)" stroke-width="2.5" fill="none" opacity="0.7" stroke-linecap="round"/>
+  <path d="M 120 110 Q 150 95 180 110" 
+        stroke="url(#fpGradient)" stroke-width="2.5" fill="none" opacity="0.65" stroke-linecap="round"/>
+  <path d="M 110 90 Q 150 70 190 90" 
+        stroke="url(#fpGradient)" stroke-width="2.5" fill="none" opacity="0.6" stroke-linecap="round"/>
+  
+  <!-- Bottom Arch Lines -->
+  <path d="M 130 270 Q 150 280 170 270" 
+        stroke="url(#fpGradient)" stroke-width="2.5" fill="none" opacity="0.7" stroke-linecap="round"/>
+  <path d="M 120 290 Q 150 305 180 290" 
+        stroke="url(#fpGradient)" stroke-width="2.5" fill="none" opacity="0.65" stroke-linecap="round"/>
+  <path d="M 110 310 Q 150 330 190 310" 
+        stroke="url(#fpGradient)" stroke-width="2.5" fill="none" opacity="0.6" stroke-linecap="round"/>
+  
+  <!-- Additional Detail Lines (Ridge Endings) -->
+  <path d="M 115 190 Q 110 200 115 210" 
+        stroke="url(#fpGradient)" stroke-width="2" fill="none" opacity="0.65" stroke-linecap="round"/>
+  <path d="M 185 190 Q 190 200 185 210" 
+        stroke="url(#fpGradient)" stroke-width="2" fill="none" opacity="0.65" stroke-linecap="round"/>
+  
+  <!-- Center Split (Core Pattern) -->
+  <line x1="145" y1="190" x2="145" y2="210" stroke="url(#fpGradient)" stroke-width="2" opacity="0.7" stroke-linecap="round"/>
+  <line x1="155" y1="190" x2="155" y2="210" stroke="url(#fpGradient)" stroke-width="2" opacity="0.7" stroke-linecap="round"/>
+  
+  <!-- Minutiae Points (Characteristic Points) -->
+  <circle cx="150" cy="200" r="2.5" fill="#04dbd7" opacity="0.9">
+    <animate attributeName="opacity" values="0.9;0.4;0.9" dur="2s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="130" cy="185" r="2" fill="#06b6d4" opacity="0.8">
+    <animate attributeName="opacity" values="0.8;0.3;0.8" dur="2.2s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="170" cy="185" r="2" fill="#06b6d4" opacity="0.8">
+    <animate attributeName="opacity" values="0.8;0.3;0.8" dur="1.9s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="135" cy="215" r="2" fill="#0891b2" opacity="0.7">
+    <animate attributeName="opacity" values="0.7;0.3;0.7" dur="2.4s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="165" cy="215" r="2" fill="#0891b2" opacity="0.7">
+    <animate attributeName="opacity" values="0.7;0.3;0.7" dur="2.1s" repeatCount="indefinite"/>
+  </circle>
+  
+  <!-- Scan Line Effect -->
+  <line x1="40" y1="200" x2="260" y2="200" stroke="#04dbd7" stroke-width="0.8" opacity="0.3">
+    <animate attributeName="y1" values="60;340;60" dur="4s" repeatCount="indefinite"/>
+    <animate attributeName="y2" values="60;340;60" dur="4s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0;0.5;0" dur="4s" repeatCount="indefinite"/>
+  </line>
+</svg>

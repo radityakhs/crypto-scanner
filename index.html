@@ -1,0 +1,2178 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crypto Scanner & Trading History</title>
+    <link rel="icon" type="image/svg+xml" href="images/ic_logo.png">
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@2.2.1"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><img src="images/ic_logo.png" alt="logo" style="width: 38px; height: 38px; vertical-align: middle; margin-right: 10px; border-radius: 8px; object-fit: cover;"> Crypy cryp Scanner</h1>
+            <div id="moonPhase" class="moon-phase-container">
+                <!-- Moon phase will be inserted here by JavaScript -->
+            </div>
+            <div class="header-info">
+                <span id="lastUpdate">Last Update: --</span>
+                <span class="realtime-badge"><img src="images/ic_connection.svg" alt="" style="width: 16px; height: 16px; vertical-align: middle;"> AUTO-REFRESH (5min)</span>
+                <button id="refreshBtn" class="btn-refresh"><img src="images/ic_run.svg" alt="" style="width: 16px; height: 16px; vertical-align: middle;"> Refresh</button>
+            </div>
+        </header>
+
+        <!-- Navigation Tabs -->
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="scanner"><img src="images/ic_dashboard_1.svg" alt="" style="width: 20px; height: 20px; vertical-align: middle;"> 🪙 Crypto Scanner</button>
+            <button class="tab-btn" data-tab="dex-analyzer"><img src="images/ic_build.png" alt="" style="width: 20px; height: 20px; vertical-align: middle; border-radius:4px;"> 🔬 DEX Analyzer</button>
+            <button class="tab-btn" data-tab="idx-stocks"><img src="images/ic_db.svg" alt="" style="width: 20px; height: 20px; vertical-align: middle;"> 🇮🇩 IDX Stocks</button>
+            <button class="tab-btn" data-tab="us-stocks"><img src="images/ic_rules.svg" alt="" style="width: 20px; height: 20px; vertical-align: middle;"> �� US Stocks</button>
+            <button class="tab-btn" data-tab="news"><img src="images/ic_planet.svg" alt="" style="width: 20px; height: 20px; vertical-align: middle;"> News</button>
+            <button class="tab-btn" data-tab="token-scanner"><img src="images/ic_aurora.svg" alt="" style="width: 20px; height: 20px; vertical-align: middle;"> New Tokens</button>
+            <button class="tab-btn" data-tab="smart-money"><img src="images/ic_universe.svg" alt="" style="width: 20px; height: 20px; vertical-align: middle;"> Smart Money</button>
+            <button class="tab-btn" data-tab="wallet"><img src="images/ic_fingerprint.svg" alt="" style="width: 20px; height: 20px; vertical-align: middle;"> Wallet Tracker</button>
+            <button class="tab-btn" data-tab="history"><img src="images/ic_stars.svg" alt="" style="width: 20px; height: 20px; vertical-align: middle;"> Trading History</button>
+            <button class="tab-btn" data-tab="portfolio"><img src="images/ic_performance.svg" alt="" style="width: 20px; height: 20px; vertical-align: middle;"> Portfolio</button>
+            <button class="tab-btn" data-tab="okx">🟠 OKX Trading</button>
+            <button class="tab-btn" data-tab="solana-swap">🪐 Solana Swap</button>
+        </div>
+
+        <!-- ╔══════════════════════════════════════════╗
+             ║         PORTFOLIO — EXPERT JOURNAL      ║
+             ╚══════════════════════════════════════════╝ -->
+        <div id="portfolio" class="tab-content active">
+          <div class="pf-root">
+
+            <!-- ── TOP BAR ── -->
+            <div class="pf-topbar">
+              <div class="pf-topbar-left">
+                <span class="pf-title">🏦 Expert Trading Journal</span>
+                <span class="pf-sync-badge" id="pfSyncBadge">⏺ NOT SYNCED</span>
+              </div>
+              <div class="pf-topbar-right">
+                <div id="pfWalletConnected" style="display:none;" class="pf-wallet-pill">
+                  <span class="pf-wallet-dot"></span>
+                  <span id="pfWalletAddr">0x…</span>
+                  <span id="pfWalletNet" class="pf-wallet-net">—</span>
+                  <button class="pf-btn-ghost pf-btn-sm" onclick="portfolioTracker.disconnectWallet()">Disconnect</button>
+                </div>
+                <button id="pfConnectBtn" class="pf-btn-primary" onclick="portfolioTracker.connectWallet()">
+                  🔗 Connect Wallet
+                </button>
+                <button class="pf-btn-ghost pf-btn-sm" onclick="portfolioTracker.exportCSV()" title="Export CSV">📤 Export</button>
+                <button class="pf-btn-ghost pf-btn-sm" onclick="portfolioTracker.openAddTrade()" title="Log a trade">＋ Add Trade</button>
+              </div>
+            </div>
+
+            <!-- ── DASHBOARD STAT CARDS ── -->
+            <div class="pf-stats-grid">
+              <div class="pf-stat-card">
+                <div class="pf-stat-label">Portfolio Value</div>
+                <div class="pf-stat-value" id="pfTotalValue">$0.00</div>
+                <div class="pf-stat-sub" id="pfTotalCost">Cost: $0.00</div>
+              </div>
+              <div class="pf-stat-card">
+                <div class="pf-stat-label">Unrealized PnL</div>
+                <div class="pf-stat-value" id="pfUnrealizedPnL">$0.00</div>
+                <div class="pf-stat-sub" id="pfUnrealizedPct">0.00%</div>
+              </div>
+              <div class="pf-stat-card">
+                <div class="pf-stat-label">Realized PnL</div>
+                <div class="pf-stat-value" id="pfRealizedPnL">$0.00</div>
+                <div class="pf-stat-sub" id="pfTotalTrades">0 closed trades</div>
+              </div>
+              <div class="pf-stat-card">
+                <div class="pf-stat-label">Win Rate</div>
+                <div class="pf-stat-value" id="pfWinRate">—</div>
+                <div class="pf-stat-sub" id="pfWinLoss">0W / 0L</div>
+              </div>
+              <div class="pf-stat-card">
+                <div class="pf-stat-label">Profit Factor</div>
+                <div class="pf-stat-value" id="pfProfitFactor">—</div>
+                <div class="pf-stat-sub" id="pfAvgRR">Avg R:R —</div>
+              </div>
+              <div class="pf-stat-card">
+                <div class="pf-stat-label">Best Trade</div>
+                <div class="pf-stat-value positive" id="pfBestTrade">—</div>
+                <div class="pf-stat-sub" id="pfBestTradeAsset">—</div>
+              </div>
+              <div class="pf-stat-card">
+                <div class="pf-stat-label">Worst Trade</div>
+                <div class="pf-stat-value negative" id="pfWorstTrade">—</div>
+                <div class="pf-stat-sub" id="pfWorstTradeAsset">—</div>
+              </div>
+              <div class="pf-stat-card">
+                <div class="pf-stat-label">Open Positions</div>
+                <div class="pf-stat-value" id="pfOpenCount">0</div>
+                <div class="pf-stat-sub" id="pfOpenValue">$0.00</div>
+              </div>
+            </div>
+
+            <!-- ── EQUITY CURVE ── -->
+            <div class="pf-equity-section">
+              <div class="pf-equity-header">
+                <span class="pf-section-title">📈 Equity Curve</span>
+                <div class="pf-equity-tabs">
+                  <button class="pf-eq-tab active" onclick="portfolioTracker.setEquityPeriod('all',this)">All</button>
+                  <button class="pf-eq-tab" onclick="portfolioTracker.setEquityPeriod('3m',this)">3M</button>
+                  <button class="pf-eq-tab" onclick="portfolioTracker.setEquityPeriod('1m',this)">1M</button>
+                  <button class="pf-eq-tab" onclick="portfolioTracker.setEquityPeriod('1w',this)">1W</button>
+                </div>
+              </div>
+              <div class="pf-equity-chart-wrap">
+                <canvas id="pfEquityChart" height="90"></canvas>
+                <div class="pf-equity-empty" id="pfEquityEmpty">No trade data yet. Log your first trade to see your equity curve.</div>
+              </div>
+            </div>
+
+            <!-- ── SUB-TABS ── -->
+            <div class="pf-subtabs">
+              <button class="pf-subtab active" data-pftab="positions">📊 Open Positions</button>
+              <button class="pf-subtab" data-pftab="journal">📔 Trade Journal</button>
+              <button class="pf-subtab" data-pftab="analytics">🧠 Analytics</button>
+              <button class="pf-subtab" data-pftab="calendar">📅 Calendar</button>
+            </div>
+
+            <!-- ── OPEN POSITIONS ── -->
+            <div class="pf-panel" id="pfPanel-positions">
+              <div class="pf-panel-topbar">
+                <span class="pf-section-title">Open Positions</span>
+                <div class="pf-panel-actions">
+                  <button id="pfRefreshBtn" class="pf-btn-ghost pf-btn-sm" onclick="portfolioTracker.refreshPrices()">🔄 Refresh Prices</button>
+                  <button class="pf-btn-primary pf-btn-sm" onclick="portfolioTracker.openAddPosition()">＋ Add Position</button>
+                </div>
+              </div>
+              <!-- Quick snapshot bar -->
+              <div class="pf-quick-bar" id="pfQuickBar" style="display:none;">
+                <div class="pf-quick-item"><span>Invested</span><strong id="pfQBCost">$0</strong></div>
+                <div class="pf-quick-sep"></div>
+                <div class="pf-quick-item"><span>Current Value</span><strong id="pfQBValue">$0</strong></div>
+                <div class="pf-quick-sep"></div>
+                <div class="pf-quick-item"><span>Unrealized PnL</span><strong id="pfQBPnL" class="positive">$0</strong></div>
+                <div class="pf-quick-sep"></div>
+                <div class="pf-quick-item"><span>Best Position</span><strong id="pfQBBest" class="positive">—</strong></div>
+                <div class="pf-quick-sep"></div>
+                <div class="pf-quick-item"><span>Worst Position</span><strong id="pfQBWorst" class="negative">—</strong></div>
+              </div>
+              <div class="pf-table-wrap">
+                <table class="pf-table">
+                  <thead>
+                    <tr>
+                      <th>Asset</th>
+                      <th>Chain/Exchange</th>
+                      <th>Qty</th>
+                      <th>Avg Entry</th>
+                      <th>Current Price</th>
+                      <th>Value</th>
+                      <th>Unr. PnL</th>
+                      <th>PnL %</th>
+                      <th>Allocation</th>
+                      <th>Since</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="pfPositionsBody">
+                    <tr><td colspan="11" class="pf-empty">No open positions yet. Click <strong>+ Add Position</strong> to start.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- ── TRADE JOURNAL ── -->
+            <div class="pf-panel" id="pfPanel-journal" style="display:none;">
+              <div class="pf-panel-topbar">
+                <span class="pf-section-title">Trade Journal</span>
+                <div class="pf-panel-actions">
+                  <select class="pf-select pf-filter-select" id="pfJournalTypeFilter" onchange="portfolioTracker.filterJournal()">
+                    <option value="">All Types</option>
+                    <option value="BUY">Buy</option>
+                    <option value="SELL">Sell</option>
+                  </select>
+                  <select class="pf-select pf-filter-select" id="pfJournalStratFilter" onchange="portfolioTracker.filterJournal()">
+                    <option value="">All Strategies</option>
+                    <option value="DCA">DCA</option>
+                    <option value="Breakout">Breakout</option>
+                    <option value="Scalp">Scalp</option>
+                    <option value="Swing">Swing</option>
+                    <option value="Reversal">Reversal</option>
+                    <option value="News">News Play</option>
+                    <option value="Other">Other</option>
+                  </select>
+                  <select class="pf-select pf-filter-select" id="pfJournalOutcomeFilter" onchange="portfolioTracker.filterJournal()">
+                    <option value="">All Outcomes</option>
+                    <option value="WIN">Win</option>
+                    <option value="LOSS">Loss</option>
+                    <option value="OPEN">Still Open</option>
+                  </select>
+                  <button class="pf-btn-primary pf-btn-sm" onclick="portfolioTracker.openAddTrade()">＋ Log Trade</button>
+                </div>
+              </div>
+              <div class="pf-table-wrap">
+                <table class="pf-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Asset</th>
+                      <th>Type</th>
+                      <th>Entry</th>
+                      <th>Exit</th>
+                      <th>Qty</th>
+                      <th>PnL</th>
+                      <th>PnL %</th>
+                      <th>Strategy</th>
+                      <th>Emotion</th>
+                      <th>R:R</th>
+                      <th>Duration</th>
+                      <th>Notes</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="pfJournalBody">
+                    <tr><td colspan="14" class="pf-empty">No trades logged. Click <strong>+ Log Trade</strong> to start.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- ── ANALYTICS ── -->
+            <div class="pf-panel" id="pfPanel-analytics" style="display:none;">
+              <div class="pf-analytics-grid">
+                <div class="pf-analytics-card">
+                  <div class="pf-analytics-title">📊 Performance Breakdown</div>
+                  <div class="pf-analytics-rows" id="pfAnalyticsBreakdown">
+                    <div class="pf-analytics-row"><span>Win Rate</span><span id="pfA-winRate">—</span></div>
+                    <div class="pf-analytics-row"><span>Avg Win</span><span id="pfA-avgWin" class="positive">—</span></div>
+                    <div class="pf-analytics-row"><span>Avg Loss</span><span id="pfA-avgLoss" class="negative">—</span></div>
+                    <div class="pf-analytics-row"><span>Profit Factor</span><span id="pfA-pf">—</span></div>
+                    <div class="pf-analytics-row"><span>Max Drawdown</span><span id="pfA-mdd" class="negative">—</span></div>
+                    <div class="pf-analytics-row"><span>Avg Hold Time</span><span id="pfA-avgHold">—</span></div>
+                    <div class="pf-analytics-row"><span>Total Trades</span><span id="pfA-total">0</span></div>
+                    <div class="pf-analytics-row"><span>Largest Win</span><span id="pfA-largestWin" class="positive">—</span></div>
+                    <div class="pf-analytics-row"><span>Largest Loss</span><span id="pfA-largestLoss" class="negative">—</span></div>
+                  </div>
+                </div>
+                <div class="pf-analytics-card">
+                  <div class="pf-analytics-title">🏷️ By Strategy</div>
+                  <div id="pfStrategyStats" class="pf-strategy-list">
+                    <div class="pf-empty-sm">No data yet.</div>
+                  </div>
+                </div>
+                <div class="pf-analytics-card">
+                  <div class="pf-analytics-title">😤 By Emotion</div>
+                  <div id="pfEmotionStats" class="pf-emotion-list">
+                    <div class="pf-empty-sm">No data yet.</div>
+                  </div>
+                </div>
+                <div class="pf-analytics-card pf-analytics-wide">
+                  <div class="pf-analytics-title">📉 PnL by Asset (Top 10)</div>
+                  <div id="pfAssetPnLBars" class="pf-asset-bars">
+                    <div class="pf-empty-sm">No closed trades yet.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ── CALENDAR ── -->
+            <div class="pf-panel" id="pfPanel-calendar" style="display:none;">
+              <div class="pf-panel-topbar">
+                <span class="pf-section-title">📅 Daily PnL Calendar</span>
+                <div class="pf-panel-actions">
+                  <button class="pf-btn-ghost pf-btn-sm" onclick="portfolioTracker.prevCalMonth()">◀</button>
+                  <span id="pfCalMonthLabel" class="pf-cal-month-label">—</span>
+                  <button class="pf-btn-ghost pf-btn-sm" onclick="portfolioTracker.nextCalMonth()">▶</button>
+                </div>
+              </div>
+              <div class="pf-calendar-legend">
+                <span class="pf-cal-legend-dot" style="background:#22c55e"></span>Profit day
+                <span class="pf-cal-legend-dot" style="background:#ef4444;margin-left:12px"></span>Loss day
+                <span class="pf-cal-legend-dot" style="background:#334155;margin-left:12px"></span>No trade
+              </div>
+              <div class="pf-calendar-grid" id="pfCalendarGrid"></div>
+            </div>
+
+          </div><!-- /pf-root -->
+        </div><!-- /portfolio -->
+
+        <!-- ════════════════════════════════════════
+             ADD POSITION MODAL
+             ════════════════════════════════════════ -->
+        <div id="pfAddPositionOverlay" class="pf-overlay" style="display:none;" onclick="portfolioTracker.closeAddPosition(event)">
+          <div class="pf-modal" onclick="event.stopPropagation()">
+            <div class="pf-modal-header">
+              <span>📊 Add Open Position</span>
+              <button class="pf-modal-close" onclick="portfolioTracker.closeAddPosition()">✕</button>
+            </div>
+            <div class="pf-modal-body">
+              <div class="pf-form-row">
+                <div class="pf-form-group">
+                  <label>Asset Symbol *</label>
+                  <input class="pf-input" id="pfPosSymbol" placeholder="BTC, ETH, SOL…" oninput="portfolioTracker.searchSymbol(this.value,'pfPosCoinId','pfPosCurrentPrice')">
+                  <input type="hidden" id="pfPosCoinId">
+                </div>
+                <div class="pf-form-group">
+                  <label>Chain / Exchange</label>
+                  <input class="pf-input" id="pfPosChain" placeholder="Binance, ETH, SOL…">
+                </div>
+              </div>
+              <div class="pf-form-row">
+                <div class="pf-form-group">
+                  <label>Quantity *</label>
+                  <input class="pf-input" id="pfPosQty" type="number" placeholder="0.00" step="any">
+                </div>
+                <div class="pf-form-group">
+                  <label>Avg Entry Price (USD) *</label>
+                  <input class="pf-input" id="pfPosEntry" type="number" placeholder="0.00" step="any">
+                </div>
+              </div>
+              <div class="pf-form-row">
+                <div class="pf-form-group">
+                  <label>Current Price (auto or manual)</label>
+                  <input class="pf-input" id="pfPosCurrentPrice" type="number" placeholder="auto" step="any">
+                </div>
+                <div class="pf-form-group">
+                  <label>Date Opened</label>
+                  <input class="pf-input" id="pfPosDate" type="date">
+                </div>
+              </div>
+              <div class="pf-form-row">
+                <div class="pf-form-group">
+                  <label>Stop Loss (optional)</label>
+                  <input class="pf-input" id="pfPosSL" type="number" placeholder="0.00" step="any">
+                </div>
+                <div class="pf-form-group">
+                  <label>Take Profit (optional)</label>
+                  <input class="pf-input" id="pfPosTP" type="number" placeholder="0.00" step="any">
+                </div>
+              </div>
+              <div class="pf-form-group">
+                <label>Notes</label>
+                <textarea class="pf-input pf-textarea" id="pfPosNotes" placeholder="Why did you enter? Setup reason…"></textarea>
+              </div>
+            </div>
+            <div class="pf-modal-footer">
+              <button class="pf-btn-ghost" onclick="portfolioTracker.closeAddPosition()">Cancel</button>
+              <button class="pf-btn-primary" onclick="portfolioTracker.savePosition()">Save Position</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ════════════════════════════════════════
+             ADD / EDIT TRADE MODAL
+             ════════════════════════════════════════ -->
+        <div id="pfAddTradeOverlay" class="pf-overlay" style="display:none;" onclick="portfolioTracker.closeAddTrade(event)">
+          <div class="pf-modal pf-modal-lg" onclick="event.stopPropagation()">
+            <div class="pf-modal-header">
+              <span id="pfTradeModalTitle">📔 Log Trade</span>
+              <button class="pf-modal-close" onclick="portfolioTracker.closeAddTrade()">✕</button>
+            </div>
+            <div class="pf-modal-body">
+              <div class="pf-form-row">
+                <div class="pf-form-group">
+                  <label>Asset Symbol *</label>
+                  <input class="pf-input" id="pfTradeSymbol" placeholder="BTC, ETH, SOL…">
+                </div>
+                <div class="pf-form-group">
+                  <label>Type *</label>
+                  <select class="pf-input pf-select" id="pfTradeType">
+                    <option value="BUY">BUY (Long)</option>
+                    <option value="SELL">SELL / Short</option>
+                  </select>
+                </div>
+                <div class="pf-form-group">
+                  <label>Chain / Exchange</label>
+                  <input class="pf-input" id="pfTradeChain" placeholder="Binance, ETH, SOL…">
+                </div>
+              </div>
+              <div class="pf-form-row">
+                <div class="pf-form-group">
+                  <label>Entry Price (USD) *</label>
+                  <input class="pf-input" id="pfTradeEntry" type="number" placeholder="0.00" step="any">
+                </div>
+                <div class="pf-form-group">
+                  <label>Exit Price (USD)</label>
+                  <input class="pf-input" id="pfTradeExit" type="number" placeholder="leave blank if still open" step="any">
+                </div>
+                <div class="pf-form-group">
+                  <label>Quantity *</label>
+                  <input class="pf-input" id="pfTradeQty" type="number" placeholder="0.00" step="any">
+                </div>
+              </div>
+              <div class="pf-form-row">
+                <div class="pf-form-group">
+                  <label>Entry Date *</label>
+                  <input class="pf-input" id="pfTradeEntryDate" type="datetime-local">
+                </div>
+                <div class="pf-form-group">
+                  <label>Exit Date</label>
+                  <input class="pf-input" id="pfTradeExitDate" type="datetime-local">
+                </div>
+              </div>
+              <div class="pf-form-row">
+                <div class="pf-form-group">
+                  <label>Stop Loss</label>
+                  <input class="pf-input" id="pfTradeSL" type="number" placeholder="0.00" step="any">
+                </div>
+                <div class="pf-form-group">
+                  <label>Take Profit</label>
+                  <input class="pf-input" id="pfTradeTP" type="number" placeholder="0.00" step="any">
+                </div>
+                <div class="pf-form-group">
+                  <label>Position Size (% of portfolio)</label>
+                  <input class="pf-input" id="pfTradeSize" type="number" placeholder="e.g. 5" step="any">
+                </div>
+              </div>
+              <div class="pf-form-row">
+                <div class="pf-form-group">
+                  <label>Strategy *</label>
+                  <select class="pf-input pf-select" id="pfTradeStrategy">
+                    <option value="DCA">DCA</option>
+                    <option value="Breakout">Breakout</option>
+                    <option value="Scalp">Scalp</option>
+                    <option value="Swing">Swing</option>
+                    <option value="Reversal">Reversal</option>
+                    <option value="News">News Play</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                <div class="pf-form-group">
+                  <label>Emotion / Mindset</label>
+                  <select class="pf-input pf-select" id="pfTradeEmotion">
+                    <option value="Confident">😎 Confident</option>
+                    <option value="Neutral">😐 Neutral</option>
+                    <option value="FOMO">😰 FOMO</option>
+                    <option value="Fear">😨 Fear</option>
+                    <option value="Greedy">🤑 Greedy</option>
+                    <option value="Disciplined">🎯 Disciplined</option>
+                  </select>
+                </div>
+                <div class="pf-form-group">
+                  <label>Outcome</label>
+                  <select class="pf-input pf-select" id="pfTradeOutcome">
+                    <option value="OPEN">Still Open</option>
+                    <option value="WIN">Win ✅</option>
+                    <option value="LOSS">Loss ❌</option>
+                    <option value="BREAK">Breakeven</option>
+                  </select>
+                </div>
+              </div>
+              <div class="pf-form-group">
+                <label>Trade Notes / Setup Reason</label>
+                <textarea class="pf-input pf-textarea" id="pfTradeNotes" placeholder="Why did you enter? What was the setup? Lessons learned…" rows="3"></textarea>
+              </div>
+            </div>
+            <div class="pf-modal-footer">
+              <button class="pf-btn-ghost" onclick="portfolioTracker.closeAddTrade()">Cancel</button>
+              <button class="pf-btn-primary" id="pfSaveTradeBtn" onclick="portfolioTracker.saveTrade()">Save Trade</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ════════════════════════════════════════
+             CLOSE POSITION MODAL
+             ════════════════════════════════════════ -->
+        <div id="pfClosePositionOverlay" class="pf-overlay" style="display:none;" onclick="portfolioTracker.cancelClosePos(event)">
+          <div class="pf-modal" onclick="event.stopPropagation()">
+            <div class="pf-modal-header">
+              <span>💰 Close Position — <span id="pfCloseSymLabel"></span></span>
+              <button class="pf-modal-close" onclick="portfolioTracker.cancelClosePos()">✕</button>
+            </div>
+            <div class="pf-modal-body">
+              <div class="pf-form-row">
+                <div class="pf-form-group">
+                  <label>Exit Price (USD) *</label>
+                  <input class="pf-input" id="pfCloseExitPrice" type="number" placeholder="0.00" step="any">
+                </div>
+                <div class="pf-form-group">
+                  <label>Exit Date</label>
+                  <input class="pf-input" id="pfCloseExitDate" type="datetime-local">
+                </div>
+              </div>
+              <div class="pf-form-row">
+                <div class="pf-form-group">
+                  <label>Outcome</label>
+                  <select class="pf-input pf-select" id="pfCloseOutcome">
+                    <option value="WIN">Win ✅</option>
+                    <option value="LOSS">Loss ❌</option>
+                    <option value="BREAK">Breakeven</option>
+                  </select>
+                </div>
+                <div class="pf-form-group">
+                  <label>Emotion when closing</label>
+                  <select class="pf-input pf-select" id="pfCloseEmotion">
+                    <option value="Confident">😎 Confident</option>
+                    <option value="Neutral">😐 Neutral</option>
+                    <option value="Fear">😨 Fear</option>
+                    <option value="Greedy">🤑 Greedy</option>
+                    <option value="Disciplined">🎯 Disciplined</option>
+                  </select>
+                </div>
+              </div>
+              <div class="pf-form-group">
+                <label>Closing Notes / Lessons Learned</label>
+                <textarea class="pf-input pf-textarea" id="pfCloseNotes" placeholder="What happened? Lessons learned?"></textarea>
+              </div>
+            </div>
+            <div class="pf-modal-footer">
+              <button class="pf-btn-ghost" onclick="portfolioTracker.cancelClosePos()">Cancel</button>
+              <button class="pf-btn-primary" onclick="portfolioTracker.confirmClosePos()">Close Position &amp; Record Trade</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Scanner Tab -->
+        <div id="scanner" class="tab-content">
+
+            <!-- ── DEX-STYLE STAT BAR ────────────────────────────── -->
+            <div class="dex-stat-bar">
+                <div class="dex-stat-item">
+                    <span class="dex-stat-label">24H VOLUME</span>
+                    <span class="dex-stat-value" id="totalVolume"><span class="loading-dot"></span></span>
+                </div>
+                <div class="dex-stat-sep"></div>
+                <div class="dex-stat-item">
+                    <span class="dex-stat-label">MARKET CAP</span>
+                    <span class="dex-stat-value" id="totalMarketCap"><span class="loading-dot"></span></span>
+                </div>
+                <div class="dex-stat-sep"></div>
+                <div class="dex-stat-item">
+                    <span class="dex-stat-label">BTC DOM</span>
+                    <span class="dex-stat-value" id="btcDominance"><span class="loading-dot"></span></span>
+                </div>
+                <div class="dex-stat-sep"></div>
+                <div class="dex-stat-item">
+                    <span class="dex-stat-label">ACTIVE</span>
+                    <span class="dex-stat-value" id="activeCryptos"><span class="loading-dot"></span></span>
+                </div>
+                <div class="dex-stat-sep"></div>
+                <div class="dex-stat-item">
+                    <span class="dex-stat-label">FEAR & GREED</span>
+                    <span class="dex-stat-value" id="fearGreedBadge">—</span>
+                </div>
+            </div>
+
+            <!-- ── DEX-STYLE FILTER BAR ──────────────────────────── -->
+            <div class="dex-filter-bar">
+                <!-- Left: timeframe & quick filters -->
+                <div class="dex-filter-left">
+                    <div class="dex-timeframe-group">
+                        <button class="dex-tf-btn" data-tf="1h">1H</button>
+                        <button class="dex-tf-btn active" data-tf="24h">24H</button>
+                        <button class="dex-tf-btn" data-tf="7d">7D</button>
+                    </div>
+                    <div class="dex-quick-filters">
+                        <button class="dex-qf-btn active" data-qf="all">🌐 All</button>
+                        <button class="dex-qf-btn" data-qf="trending">🔥 Trending</button>
+                        <button class="dex-qf-btn" data-qf="gainers">↑ Gainers</button>
+                        <button class="dex-qf-btn" data-qf="losers">↓ Losers</button>
+                        <button class="dex-qf-btn" data-qf="whale">🐋 Whale</button>
+                        <button class="dex-qf-btn" data-qf="long">🟢 Long</button>
+                        <button class="dex-qf-btn" data-qf="short">🔴 Short</button>
+                        <button class="dex-qf-btn" data-qf="favorites">⭐ Watchlist</button>
+                    </div>
+                </div>
+                <!-- Right: search + filter modal + AI scores -->
+                <div class="dex-filter-right">
+                    <div class="dex-search-wrap">
+                        <span class="dex-search-icon">🔍</span>
+                        <input type="text" id="searchCoin" class="dex-search-input" placeholder="Search token... (/)">
+                    </div>
+                    <button class="dex-filter-modal-btn" onclick="openFilterModal()">
+                        <span>⚙ Filters</span>
+                        <span class="dex-filter-count" id="activeFilterCount" style="display:none">0</span>
+                    </button>
+                    <button class="dex-ai-btn" onclick="calculateAllAIScores()">
+                        <img src="images/ic_ai.svg" style="width:14px;height:14px;"> AI Rank
+                    </button>
+                    <button class="dex-refresh-btn" id="refreshBtn" onclick="refreshData()">↻</button>
+                </div>
+            </div>
+
+            <!-- ── ACTIVE FILTER CHIPS ───────────────────────────── -->
+            <div class="dex-active-chips" id="activeFilterChips" style="display:none"></div>
+
+            <!-- ── MAIN TABLE ────────────────────────────────────── -->
+            <div class="dex-table-wrap">
+                <table class="dex-table" id="cryptoTable">
+                    <thead>
+                        <tr>
+                            <th class="th-fav">⭐</th>
+                            <th class="th-num">#</th>
+                            <th class="th-token">TOKEN</th>
+                            <th class="th-price sortable" data-sort="price">PRICE <span class="sort-arrow">↕</span></th>
+                            <th class="th-age">AGE</th>
+                            <th class="th-pct sortable" data-sort="1h" id="th-1h">1H% <span class="sort-arrow">↕</span></th>
+                            <th class="th-pct sortable active-sort" data-sort="24h" id="th-24h">24H% <span class="sort-arrow">↓</span></th>
+                            <th class="th-pct sortable" data-sort="7d" id="th-7d">7D% <span class="sort-arrow">↕</span></th>
+                            <th class="th-vol sortable" data-sort="volume">VOLUME <span class="sort-arrow">↕</span></th>
+                            <th class="th-mcap sortable" data-sort="mcap">MCAP <span class="sort-arrow">↕</span></th>
+                            <th class="th-liq sortable" data-sort="liquidity">LIQUIDITY <span class="sort-arrow">↕</span></th>
+                            <th class="th-fib" title="Fibonacci Retracement/Extension — level support &amp; resistance teknikal berdasarkan rasio Fibonacci (23.6%, 38.2%, 50%, 61.8%, 78.6%). ↑ = harga di atas level, ↓ = di bawah. 🎯 = harga sangat dekat level (&lt;1.5%).">FIB <span style="font-size:0.6rem;opacity:0.6;cursor:help;">ℹ</span></th>
+                            <th class="th-signal">SIGNAL</th>
+                            <th class="th-futures">⚡ FUTURES</th>
+                            <th class="th-whale">WHALE</th>
+                            <th class="th-ai sortable" data-sort="ai">AI <span class="sort-arrow">↕</span></th>
+                            <th class="th-chart">CHART 7D</th>
+                            <th class="th-action">ACTION</th>
+                        </tr>
+                    </thead>
+                    <tbody id="cryptoTableBody">
+                        <tr><td colspan="18" class="dex-loading">Loading tokens...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            <div id="pagination" class="dex-pagination"></div>
+
+            <!-- ── FILTER MODAL ───────────────────────────────────── -->
+            <div class="dex-modal-overlay" id="filterModal" style="display:none" onclick="if(event.target===this)closeFilterModal()">
+                <div class="dex-modal">
+                    <div class="dex-modal-header">
+                        <h3>⚙ Customize Filters</h3>
+                        <button class="dex-modal-close" onclick="closeFilterModal()">✕</button>
+                    </div>
+                    <div class="dex-modal-body">
+                        <div class="dex-filter-group">
+                            <label>Liquidity (USD)</label>
+                            <div class="dex-range-row">
+                                <span>$</span><input type="number" id="fMinLiquidity" placeholder="Min">
+                                <span>—</span>
+                                <span>$</span><input type="number" id="fMaxLiquidity" placeholder="Max">
+                            </div>
+                        </div>
+                        <div class="dex-filter-group">
+                            <label>Market Cap (USD)</label>
+                            <div class="dex-range-row">
+                                <span>$</span><input type="number" id="fMinMcap" placeholder="Min">
+                                <span>—</span>
+                                <span>$</span><input type="number" id="fMaxMcap" placeholder="Max">
+                            </div>
+                        </div>
+                        <div class="dex-filter-group">
+                            <label>24H Volume (USD)</label>
+                            <div class="dex-range-row">
+                                <span>$</span><input type="number" id="fMinVolume" placeholder="Min">
+                                <span>—</span>
+                                <span>$</span><input type="number" id="fMaxVolume" placeholder="Max">
+                            </div>
+                        </div>
+                        <div class="dex-filter-group">
+                            <label>24H Change (%)</label>
+                            <div class="dex-range-row">
+                                <input type="number" id="fMinChange" placeholder="Min e.g. -10">
+                                <span>—</span>
+                                <input type="number" id="fMaxChange" placeholder="Max e.g. 50">
+                            </div>
+                        </div>
+                        <div class="dex-filter-group">
+                            <label>Futures Direction</label>
+                            <div class="dex-radio-row">
+                                <label><input type="radio" name="fFutures" value="all" checked> All</label>
+                                <label><input type="radio" name="fFutures" value="long"> 🟢 Long only</label>
+                                <label><input type="radio" name="fFutures" value="short"> 🔴 Short only</label>
+                                <label><input type="radio" name="fFutures" value="neutral"> ⚪ Neutral</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="dex-modal-footer">
+                        <button class="dex-btn-clear" onclick="clearFilters()">Clear All</button>
+                        <button class="dex-btn-apply" onclick="applyFilters()">✓ Apply</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── WHALE ACTIVITY MONITOR ────────────────────────── -->
+            <section class="whale-activity-section">
+                <div class="whale-monitor">
+                    <h3><img src="images/ic_universe.svg" alt="" style="width: 20px; height: 20px; vertical-align: middle;"> Whale Activity Monitor</h3>
+                    <div class="whale-stats">
+                        <div class="whale-stat-card accumulation clickable" onclick="showWhaleDetails('accumulation')">
+                            <div class="whale-icon"><img src="images/ic_aurora.svg" alt="" style="width: 28px; height: 28px;"></div>
+                            <div class="whale-stat-content">
+                                <div class="whale-stat-label">Accumulation</div>
+                                <div class="whale-stat-value" id="whaleAccumulation">0</div>
+                                <div class="whale-stat-desc">Coins being bought</div>
+                            </div>
+                            <div class="whale-click-hint">Details →</div>
+                        </div>
+                        <div class="whale-stat-card distribution clickable" onclick="showWhaleDetails('distribution')">
+                            <div class="whale-icon"><img src="images/ic_send.svg" alt="" style="width: 28px; height: 28px;"></div>
+                            <div class="whale-stat-content">
+                                <div class="whale-stat-label">Distribution</div>
+                                <div class="whale-stat-value" id="whaleDistribution">0</div>
+                                <div class="whale-stat-desc">Coins being sold</div>
+                            </div>
+                            <div class="whale-click-hint">Details →</div>
+                        </div>
+                        <div class="whale-stat-card neutral clickable" onclick="showWhaleDetails('neutral')">
+                            <div class="whale-icon"><img src="images/ic_connection.svg" alt="" style="width: 28px; height: 28px;"></div>
+                            <div class="whale-stat-content">
+                                <div class="whale-stat-label">Neutral</div>
+                                <div class="whale-stat-value" id="whaleNeutral">0</div>
+                                <div class="whale-stat-desc">Balanced behavior</div>
+                            </div>
+                            <div class="whale-click-hint">Details →</div>
+                        </div>
+                        <!-- Whale alert inline -->
+                        <div class="whale-alert-inline">
+                            <div class="alert-header-mini">
+                                <span><img src="images/ic_monitoring.svg" style="width:16px;height:16px;vertical-align:middle"> Whale Alerts</span>
+                                <span class="alert-status-dot" id="alertStatus">Scanning...</span>
+                            </div>
+                            <div id="alertContent" class="alert-content-mini">
+                                <div class="no-signal"><div class="pulse-dot"></div><p>Scanning...</p></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ── ANALYSIS + EXIT STRATEGY (hidden until triggered) -->
+            <section class="analysis-section" id="analysisSection" style="display: none;">
+                <div class="analysis-container" id="analysisContainer"></div>
+            </section>
+
+            <!-- ── MARKET SECTIONS GRID ──────────────────────────── -->
+            <div class="dex-bottom-grid">
+                <!-- Narratives -->
+                <section class="narratives-section">
+                    <div class="narratives-header">
+                        <h2><img src="images/ic_abstract.svg" alt="" style="width:20px;height:20px;vertical-align:middle"> Market Narratives</h2>
+                    </div>
+                    <div class="narrative-grid" id="narrativeGrid"><div class="loading">Analyzing...</div></div>
+                </section>
+
+                <!-- Macro Agenda -->
+                <section class="macro-agenda-section">
+                    <div class="agenda-header">
+                        <h2><img src="images/ic_rules.svg" alt="" style="width:20px;height:20px;vertical-align:middle"> Macro Agenda</h2>
+                        <div class="agenda-filters">
+                            <button class="agenda-filter-btn active" data-filter="all">All</button>
+                            <button class="agenda-filter-btn" data-filter="fomc">FOMC</button>
+                            <button class="agenda-filter-btn" data-filter="cpi">CPI</button>
+                        </div>
+                    </div>
+                    <div class="agenda-content" id="macroAgendaContent"><div class="loading">Loading...</div></div>
+                </section>
+
+                <!-- Global Sessions -->
+                <section class="global-session-section">
+                    <div class="session-header">
+                        <h2><img src="images/ic_portal.svg" alt="" style="width:20px;height:20px;vertical-align:middle"> Market Sessions</h2>
+                    </div>
+                    <div class="session-grid" id="globalSessionGrid"></div>
+                </section>
+            </div>
+
+            <!-- ── EXIT STRATEGY ─────────────────────────────────── -->
+            <section class="exit-strategy-section">
+                <div class="exit-strategy-header">
+                    <h2><img src="images/ic_development.svg" alt="" style="width:20px;height:20px;vertical-align:middle"> Advanced Exit Strategy</h2>
+                    <p class="info-text">💡 Klik "Analyze" pada coin di tabel untuk melihat exit strategy</p>
+                </div>
+                <div id="exitStrategyContainer" class="exit-strategy-container">
+                    <div class="no-analysis">
+                        <img src="images/ic_development.svg" style="width:48px;height:48px;opacity:0.3">
+                        <p>Pilih coin dari tabel → klik Analyze → Exit Strategy</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ── AI COIN SCORING ───────────────────────────────── -->
+            <section class="coin-scoring-section">
+                <div class="score-header">
+                    <h2><img src="images/ic_build.png" alt="AI" class="score-header-img"> AI Coin Scoring & Rankings</h2>
+                    <div class="score-filters">
+                        <button class="score-filter-btn active" data-filter="all">All</button>
+                        <button class="score-filter-btn" data-filter="excellent">⭐ Excellent (80+)</button>
+                        <button class="score-filter-btn" data-filter="good">👍 Good (60+)</button>
+                        <button class="score-filter-btn" data-filter="best-liquidity">💧 Best Liquidity</button>
+                    </div>
+                </div>
+                <div class="coin-score-grid" id="coinScoreGrid">
+                    <p class="dex-empty-hint">👆 Klik "AI Rank" di toolbar untuk mulai analisis 200 koin</p>
+                </div>
+            </section>
+        </div>
+
+        <!-- IDX Stocks Tab -->
+        <div id="idx-stocks" class="tab-content">
+            <section class="idx-header-section">
+                <h2>🇮🇩 Indonesia Stock Exchange (IDX)</h2>
+                <p class="market-subtitle">Bursa Efek Indonesia analysis with sector rotation & market timing</p>
+            </section>
+
+            <!-- IDX Top Movers -->
+            <section class="stock-movers-section" id="idxMoversSection">
+                <div class="movers-tabs-bar">
+                    <button class="stock-mover-tab active" data-market="idx" data-mover="gainers">🚀 Top Gainers</button>
+                    <button class="stock-mover-tab" data-market="idx" data-mover="losers">📉 Top Losers</button>
+                    <button class="stock-mover-tab" data-market="idx" data-mover="active">⚡ Most Active</button>
+                    <button class="stock-mover-tab" data-market="idx" data-mover="watchlist">⭐ Watchlist IDX</button>
+                    <span class="movers-last-update" id="idxMoversTime"></span>
+                </div>
+                <div class="stock-movers-grid" id="idxMoversGrid">
+                    <div class="movers-loading">Loading market data...</div>
+                </div>
+            </section>
+
+            <!-- Market Session -->
+            <section class="market-session-section">
+                <h3>📅 Trading Session</h3>
+                <div class="session-timeline">
+                    <div class="session-block pre-opening">
+                        <div class="session-time">08:45 - 09:00</div>
+                        <div class="session-name">Pre-Opening</div>
+                        <div class="session-status" id="idxPreOpeningStatus">Closed</div>
+                    </div>
+                    <div class="session-block session1">
+                        <div class="session-time">09:00 - 12:00</div>
+                        <div class="session-name">Session 1</div>
+                        <div class="session-status" id="idxSession1Status">Closed</div>
+                    </div>
+                    <div class="session-block break">
+                        <div class="session-time">12:00 - 13:30</div>
+                        <div class="session-name">Break</div>
+                        <div class="session-status">-</div>
+                    </div>
+                    <div class="session-block session2">
+                        <div class="session-time">13:30 - 14:49</div>
+                        <div class="session-name">Session 2</div>
+                        <div class="session-status" id="idxSession2Status">Closed</div>
+                    </div>
+                    <div class="session-block post-trading">
+                        <div class="session-time">14:49 - 15:15</div>
+                        <div class="session-name">Post Trading</div>
+                        <div class="session-status" id="idxPostTradingStatus">Closed</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- IDX Stats -->
+            <section class="idx-stats-section">
+                <h3>📊 Market Statistics</h3>
+                <div class="idx-stats-grid">
+                    <div class="idx-stat-card">
+                        <div class="stat-label">IHSG</div>
+                        <div class="stat-value" id="ihsgValue">Loading...</div>
+                    </div>
+                    <div class="idx-stat-card">
+                        <div class="stat-label">Daily Change</div>
+                        <div class="stat-value" id="ihsgChange">Loading...</div>
+                    </div>
+                    <div class="idx-stat-card">
+                        <div class="stat-label">Volume (Lot)</div>
+                        <div class="stat-value" id="idxVolume">Loading...</div>
+                    </div>
+                    <div class="idx-stat-card">
+                        <div class="stat-label">Value (Rp)</div>
+                        <div class="stat-value" id="idxValue">Loading...</div>
+                    </div>
+                    <div class="idx-stat-card">
+                        <div class="stat-label">Foreign Flow</div>
+                        <div class="stat-value" id="idxForeignFlow">Loading...</div>
+                    </div>
+                    <div class="idx-stat-card">
+                        <div class="stat-label">Market Breadth</div>
+                        <div class="stat-value" id="idxBreadth">Loading...</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Sector Heatmap IDX -->
+            <section class="sector-heatmap-section">
+                <h3>🗺️ Sector Heatmap</h3>
+                <p class="section-subtitle">Performance by sector (Banking, Mining, Consumer, Infrastructure, etc.)</p>
+                <div class="heatmap-grid" id="idxSectorHeatmap">
+                    <div class="heatmap-item" data-sector="banking">
+                        <div class="sector-name">Banking</div>
+                        <div class="sector-change">--</div>
+                        <div class="sector-stocks">BBCA, BMRI, BBRI</div>
+                    </div>
+                    <div class="heatmap-item" data-sector="mining">
+                        <div class="sector-name">Mining</div>
+                        <div class="sector-change">--</div>
+                        <div class="sector-stocks">ANTM, ADRO, ITMG</div>
+                    </div>
+                    <div class="heatmap-item" data-sector="consumer">
+                        <div class="sector-name">Consumer</div>
+                        <div class="sector-change">--</div>
+                        <div class="sector-stocks">UNVR, ICBP, INDF</div>
+                    </div>
+                    <div class="heatmap-item" data-sector="infrastructure">
+                        <div class="sector-name">Infrastructure</div>
+                        <div class="sector-change">--</div>
+                        <div class="sector-stocks">TLKM, JSMR, PTPP</div>
+                    </div>
+                    <div class="heatmap-item" data-sector="property">
+                        <div class="sector-name">Property</div>
+                        <div class="sector-change">--</div>
+                        <div class="sector-stocks">BSDE, CTRA, PWON</div>
+                    </div>
+                    <div class="heatmap-item" data-sector="healthcare">
+                        <div class="sector-name">Healthcare</div>
+                        <div class="sector-change">--</div>
+                        <div class="sector-stocks">HEAL, MIKA, SILO</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- IDX Stock Scanner -->
+            <section class="idx-scanner-section">
+                <h3>🔍 IDX Stock Scanner</h3>
+                <div class="scanner-toolbar">
+                    <input type="text" id="idxSearchStock" placeholder="🔍 Search stock (e.g., BBCA, BMRI)">
+                    <select id="idxSectorFilter">
+                        <option value="all">All Sectors</option>
+                        <option value="banking">Banking</option>
+                        <option value="mining">Mining</option>
+                        <option value="consumer">Consumer</option>
+                        <option value="infrastructure">Infrastructure</option>
+                        <option value="property">Property</option>
+                        <option value="healthcare">Healthcare</option>
+                    </select>
+                </div>
+                <div class="table-container">
+                    <table id="idxStockTable">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Stock</th>
+                                <th>Sector</th>
+                                <th>Price</th>
+                                <th>Change</th>
+                                <th>Volume</th>
+                                <th>Value</th>
+                                <th>Foreign</th>
+                                <th>Market Cap</th>
+                                <th>📊 Technical</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="idxStockTableBody">
+                            <tr>
+                                <td colspan="11" class="loading">Loading IDX stock data...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- IDX Analysis Detail -->
+            <section class="idx-analysis-section" id="idxAnalysisSection" style="display: none;">
+                <div class="analysis-container" id="idxAnalysisContainer">
+                    <!-- Will be populated dynamically -->
+                </div>
+            </section>
+        </div>
+
+        <!-- US Stocks Tab -->
+        <div id="us-stocks" class="tab-content">
+            <section class="us-header-section">
+                <h2>🇺🇸 US Stock Market</h2>
+                <p class="market-subtitle">NYSE & NASDAQ analysis with market narrative & sector rotation</p>
+            </section>
+
+            <!-- US Top Movers -->
+            <section class="stock-movers-section" id="usMoversSection">
+                <div class="movers-tabs-bar">
+                    <button class="stock-mover-tab active" data-market="us" data-mover="gainers">🚀 Top Gainers</button>
+                    <button class="stock-mover-tab" data-market="us" data-mover="losers">📉 Top Losers</button>
+                    <button class="stock-mover-tab" data-market="us" data-mover="active">⚡ Most Active</button>
+                    <button class="stock-mover-tab" data-market="us" data-mover="watchlist">⭐ Watchlist US</button>
+                    <span class="movers-last-update" id="usMoversTime"></span>
+                </div>
+                <div class="stock-movers-grid" id="usMoversGrid">
+                    <div class="movers-loading">Loading market data...</div>
+                </div>
+            </section>
+
+            <!-- US Market Session -->
+            <section class="market-session-section">
+                <h3>📅 Trading Session (ET)</h3>
+                <div class="session-timeline">
+                    <div class="session-block pre-market">
+                        <div class="session-time">04:00 - 09:30</div>
+                        <div class="session-name">Pre-Market</div>
+                        <div class="session-status" id="usPreMarketStatus">Closed</div>
+                    </div>
+                    <div class="session-block regular">
+                        <div class="session-time">09:30 - 16:00</div>
+                        <div class="session-name">Regular Hours</div>
+                        <div class="session-status" id="usRegularStatus">Closed</div>
+                    </div>
+                    <div class="session-block after-hours">
+                        <div class="session-time">16:00 - 20:00</div>
+                        <div class="session-name">After Hours</div>
+                        <div class="session-status" id="usAfterHoursStatus">Closed</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- US Market Stats -->
+            <section class="us-stats-section">
+                <h3>📊 Major Indices</h3>
+                <div class="us-stats-grid">
+                    <div class="us-stat-card">
+                        <div class="stat-label">S&P 500</div>
+                        <div class="stat-value" id="sp500Value">Loading...</div>
+                    </div>
+                    <div class="us-stat-card">
+                        <div class="stat-label">NASDAQ</div>
+                        <div class="stat-value" id="nasdaqValue">Loading...</div>
+                    </div>
+                    <div class="us-stat-card">
+                        <div class="stat-label">Dow Jones</div>
+                        <div class="stat-value" id="dowValue">Loading...</div>
+                    </div>
+                    <div class="us-stat-card">
+                        <div class="stat-label">VIX (Fear Index)</div>
+                        <div class="stat-value" id="vixValue">Loading...</div>
+                    </div>
+                    <div class="us-stat-card">
+                        <div class="stat-label">10Y Treasury</div>
+                        <div class="stat-value" id="treasury10yValue">Loading...</div>
+                    </div>
+                    <div class="us-stat-card">
+                        <div class="stat-label">DXY (Dollar)</div>
+                        <div class="stat-value" id="dxyValue">Loading...</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Sector Rotation Heatmap -->
+            <section class="sector-rotation-section">
+                <h3>🔄 Sector Rotation Heatmap</h3>
+                <p class="section-subtitle">Track which sectors are rotating IN (accumulation) or OUT (distribution)</p>
+                <div class="rotation-heatmap" id="usSectorRotation">
+                    <div class="rotation-item" data-sector="technology">
+                        <div class="sector-name">Technology</div>
+                        <div class="sector-change">--</div>
+                        <div class="sector-stocks">AAPL, MSFT, GOOGL</div>
+                        <div class="rotation-status">--</div>
+                    </div>
+                    <div class="rotation-item" data-sector="healthcare">
+                        <div class="sector-name">Healthcare</div>
+                        <div class="sector-change">--</div>
+                        <div class="sector-stocks">JNJ, UNH, PFE</div>
+                        <div class="rotation-status">--</div>
+                    </div>
+                    <div class="rotation-item" data-sector="financials">
+                        <div class="sector-name">Financials</div>
+                        <div class="sector-change">--</div>
+                        <div class="sector-stocks">JPM, BAC, WFC</div>
+                        <div class="rotation-status">--</div>
+                    </div>
+                    <div class="rotation-item" data-sector="energy">
+                        <div class="sector-name">Energy</div>
+                        <div class="sector-change">--</div>
+                        <div class="sector-stocks">XOM, CVX, COP</div>
+                        <div class="rotation-status">--</div>
+                    </div>
+                    <div class="rotation-item" data-sector="consumer">
+                        <div class="sector-name">Consumer</div>
+                        <div class="sector-change">--</div>
+                        <div class="sector-stocks">AMZN, TSLA, WMT</div>
+                        <div class="rotation-status">--</div>
+                    </div>
+                    <div class="rotation-item" data-sector="industrials">
+                        <div class="sector-name">Industrials</div>
+                        <div class="sector-change">--</div>
+                        <div class="sector-stocks">BA, CAT, GE</div>
+                        <div class="rotation-status">--</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- US Stock Scanner -->
+            <section class="us-scanner-section">
+                <h3>🔍 US Stock Scanner</h3>
+                <div class="scanner-toolbar">
+                    <input type="text" id="usSearchStock" placeholder="🔍 Search stock (e.g., AAPL, TSLA)">
+                    <select id="usSectorFilter">
+                        <option value="all">All Sectors</option>
+                        <option value="technology">Technology</option>
+                        <option value="healthcare">Healthcare</option>
+                        <option value="financials">Financials</option>
+                        <option value="energy">Energy</option>
+                        <option value="consumer">Consumer</option>
+                        <option value="industrials">Industrials</option>
+                    </select>
+                    <select id="usExchangeFilter">
+                        <option value="all">All Exchanges</option>
+                        <option value="nyse">NYSE</option>
+                        <option value="nasdaq">NASDAQ</option>
+                    </select>
+                </div>
+                <div class="table-container">
+                    <table id="usStockTable">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Stock</th>
+                                <th>Sector</th>
+                                <th>Exchange</th>
+                                <th>Price</th>
+                                <th>Change</th>
+                                <th>Volume</th>
+                                <th>Market Cap</th>
+                                <th>📊 Technical</th>
+                                <th>💹 Options</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usStockTableBody">
+                            <tr>
+                                <td colspan="11" class="loading">Loading US stock data...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- US Analysis Detail -->
+            <section class="us-analysis-section" id="usAnalysisSection" style="display: none;">
+                <div class="analysis-container" id="usAnalysisContainer">
+                    <!-- Will be populated dynamically -->
+                </div>
+            </section>
+        </div>
+
+        <!-- Crypto News Tab -->
+        <div id="news" class="tab-content">
+            
+            <!-- Top Movers Section -->
+            <section class="top-movers-section">
+                <div class="movers-header">
+                    <h2><img src="images/ic_check.svg" alt="" style="width: 28px; height: 28px; vertical-align: middle;"> Market Highlights</h2>
+                </div>
+                
+                <div class="movers-tabs">
+                    <button class="mover-tab active" data-tab="gainers">🚀 Top Gainers</button>
+                    <button class="mover-tab" data-tab="losers">📉 Top Losers</button>
+                    <button class="mover-tab" data-tab="new-listings">✨ New Listings</button>
+                    <button class="mover-tab" data-tab="trending">🔥 Trending</button>
+                </div>
+                
+                <div id="topMoversContent" class="movers-content">
+                    <!-- Content will be loaded dynamically -->
+                </div>
+            </section>
+            
+            <!-- Market News Section -->
+            <section class="news-section">
+                <div class="news-header">
+                    <h2><img src="images/ic_planet.svg" alt="" style="width: 28px; height: 28px; vertical-align: middle;"> Market News & Updates</h2>
+                    <div class="news-controls">
+                        <select id="newsCategory" class="news-filter">
+                            <option value="all">All News</option>
+                            <option value="bitcoin">Bitcoin</option>
+                            <option value="ethereum">Ethereum</option>
+                            <option value="altcoin">Altcoins</option>
+                            <option value="defi">DeFi</option>
+                            <option value="nft">NFT</option>
+                            <option value="regulation">Regulation</option>
+                        </select>
+                        <button id="refreshNewsBtn" class="btn-primary">
+                            <img src="images/ic_automation.svg" alt="" style="width: 16px; height: 16px; vertical-align: middle;"> Refresh News
+                        </button>
+                    </div>
+                </div>
+
+                <!-- News Stats -->
+                <div class="news-stats-grid">
+                    <div class="news-stat-card">
+                        <div class="stat-icon">📰</div>
+                        <div class="stat-info">
+                            <div class="stat-label">Total Articles</div>
+                            <div class="stat-value" id="newsTotal">0</div>
+                        </div>
+                    </div>
+                    <div class="news-stat-card">
+                        <div class="stat-icon">📈</div>
+                        <div class="stat-info">
+                            <div class="stat-label">Bullish News</div>
+                            <div class="stat-value positive" id="newsBullish">0</div>
+                        </div>
+                    </div>
+                    <div class="news-stat-card">
+                        <div class="stat-icon">📉</div>
+                        <div class="stat-info">
+                            <div class="stat-label">Bearish News</div>
+                            <div class="stat-value negative" id="newsBearish">0</div>
+                        </div>
+                    </div>
+                    <div class="news-stat-card">
+                        <div class="stat-icon">⚖️</div>
+                        <div class="stat-info">
+                            <div class="stat-label">Sentiment Score</div>
+                            <div class="stat-value" id="sentimentScore">Neutral</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- News Feed -->
+                <div class="news-feed">
+                    <div id="newsList" class="news-list">
+                        <div class="empty-state">
+                            <img src="images/ic_connection.svg" alt="" style="width: 64px; height: 64px; opacity: 0.3;">
+                            <p>Click "Refresh News" to load latest articles</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Wallet Tracker Tab -->
+        <div id="wallet" class="tab-content">
+            <section class="wallet-tracker-section">
+
+                <!-- Header -->
+                <div class="wt-header">
+                    <div class="wt-title-row">
+                        <h2><img src="images/ic_fingerprint.svg" alt="" style="width:28px;height:28px;vertical-align:middle;"> Wallet Tracker</h2>
+                        <span class="wt-badge" id="wtWalletCount">0 wallets</span>
+                        <button class="wt-notif-btn" id="wtNotifBtn" onclick="walletTracker.requestNotifPermission()">🔔 Enable Notifications</button>
+                    </div>
+                    <p class="wt-desc">Lacak wallet siapapun — dapat notifikasi otomatis saat ada transaksi baru.</p>
+                    <!-- Notification permission banner -->
+                    <div class="wt-notif-banner" id="wtNotifBanner" style="display:none">
+                        <span>⚠️ Notifikasi browser belum diizinkan. Klik <b>Enable Notifications</b> di atas.</span>
+                    </div>
+                </div>
+
+                <!-- API Key Setup -->
+                <div class="wt-apikey-bar" id="wtApiBar">
+                    <span>🔑 <b>Opsional:</b> Masukkan API key gratis untuk batas request lebih tinggi.</span>
+                    <button class="wt-apikey-toggle" onclick="walletTracker.toggleApiForm()">⚙ Set API Keys</button>
+                    <div class="wt-apikey-form" id="wtApiForm" style="display:none">
+                        <div class="wt-api-row">
+                            <label>Etherscan API Key <a href="https://etherscan.io/apis" target="_blank">(free)</a></label>
+                            <input type="text" id="wtEthKey" class="wt-api-input" placeholder="Paste Etherscan key...">
+                        </div>
+                        <div class="wt-api-row">
+                            <label>BscScan API Key <a href="https://bscscan.com/apis" target="_blank">(free)</a></label>
+                            <input type="text" id="wtBscKey" class="wt-api-input" placeholder="Paste BscScan key...">
+                        </div>
+                        <button class="btn-primary" onclick="walletTracker.saveApiKeys()" style="margin-top:8px">💾 Save Keys</button>
+                    </div>
+                </div>
+
+                <!-- Add Wallet Form -->
+                <div class="wt-add-form">
+                    <div class="wt-form-row">
+                        <select id="wtChain" class="wt-select">
+                            <option value="ethereum">⟠ Ethereum (ETH)</option>
+                            <option value="bsc">🔶 BSC (BNB)</option>
+                            <option value="bitcoin">₿ Bitcoin (BTC)</option>
+                            <option value="solana">◎ Solana (SOL)</option>
+                        </select>
+                        <input type="text" id="wtAddress" class="wt-input-addr" placeholder="Alamat wallet (0x... / bc1... / sol...)" onkeydown="if(event.key==='Enter') walletTracker.previewWallet()">
+                        <input type="text" id="wtLabel" class="wt-input-label" placeholder="Label (e.g. Whale #1)">
+                        <button class="wt-preview-btn" onclick="walletTracker.previewWallet()">🔍 Preview</button>
+                        <button class="wt-add-btn" onclick="walletTracker.addWallet()">+ Track</button>
+                    </div>
+                    <p class="wt-hint">💡 Klik <b>Preview</b> untuk melihat isi wallet sebelum ditambahkan ke tracker.</p>
+                </div>
+
+                <!-- Wallet Preview Panel (Arkham-style) -->
+                <div class="wt-preview-panel" id="wtPreviewPanel" style="display:none">
+                    <!-- content injected by JS -->
+                </div>
+
+                <!-- Tracked Wallets Grid -->
+                <div class="wt-wallets-section">
+                    <div class="wt-section-head">
+                        <h3>Wallet Dilacak</h3>
+                        <button id="wtRefreshAllBtn" class="wt-refresh-all-btn" onclick="walletTracker.refreshAll()">↻ Refresh Semua</button>
+                    </div>
+                    <div class="wt-wallet-grid" id="wtWalletGrid">
+                        <div class="wt-empty">
+                            <span style="font-size:2.5rem">👁</span>
+                            <p>Belum ada wallet. Tambahkan alamat wallet di atas untuk mulai melacak.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Live Transaction Feed -->
+                <div class="wt-tx-section">
+                    <div class="wt-section-head">
+                        <h3>📡 Live Transaksi</h3>
+                        <div class="wt-tx-filters">
+                            <button class="wt-tf-btn active" data-tf="all" onclick="walletTracker.filterTx('all',this)">All</button>
+                            <button class="wt-tf-btn" data-tf="in" onclick="walletTracker.filterTx('in',this)">⬇ IN</button>
+                            <button class="wt-tf-btn" data-tf="out" onclick="walletTracker.filterTx('out',this)">⬆ OUT</button>
+                            <button class="wt-tf-btn" data-tf="large" onclick="walletTracker.filterTx('large',this)">🐋 Large</button>
+                        </div>
+                    </div>
+                    <div class="wt-tx-list" id="wtTxList">
+                        <div class="wt-empty">
+                            <span style="font-size:2rem">📭</span>
+                            <p>Belum ada transaksi. Transaksi baru akan muncul otomatis saat terdeteksi.</p>
+                        </div>
+                    </div>
+                </div>
+
+            </section>
+        </div>
+
+        <!-- New Token Scanner Tab -->
+        <div id="token-scanner" class="tab-content">
+            <section class="dsx-section">
+
+                <!-- ── Header ───────────────────────────────── -->
+                <div class="dsx-header">
+                    <div class="dsx-title-row">
+                        <h2><img src="images/ic_aurora.svg" style="width:26px;height:26px;vertical-align:middle;"> DEX Token Scanner</h2>
+                        <span class="dsx-powered">powered by DEXScreener</span>
+                        <span class="dsx-live-badge" id="dsxLiveBadge">● LIVE</span>
+                    </div>
+                    <!-- ── Summary stats ─────────────────────── -->
+                    <div class="dsx-stats-bar">
+                        <div class="dsx-stat-item"><span class="dsx-stat-label">24H VOL</span><span class="dsx-stat-val" id="dsxTotalVol">—</span></div>
+                        <div class="dsx-stat-sep"></div>
+                        <div class="dsx-stat-item"><span class="dsx-stat-label">24H TXNS</span><span class="dsx-stat-val" id="dsxTotalTxns">—</span></div>
+                        <div class="dsx-stat-sep"></div>
+                        <div class="dsx-stat-item"><span class="dsx-stat-label">PAIRS</span><span class="dsx-stat-val" id="dsxPairCount">—</span></div>
+                        <div class="dsx-stat-sep"></div>
+                        <div class="dsx-stat-item"><span class="dsx-stat-label">TOP GAINER 24H</span><span class="dsx-stat-val positive" id="dsxTopGainer">—</span></div>
+                    </div>
+                </div>
+
+                <!-- ── Chain tabs ────────────────────────────── -->
+                <div class="dsx-chain-tabs" id="dsxChainTabs">
+                    <button class="dsx-chain-btn active" data-chain="all">🌐 All Chains</button>
+                    <button class="dsx-chain-btn" data-chain="solana">◎ Solana</button>
+                    <button class="dsx-chain-btn" data-chain="base">🔵 Base</button>
+                    <button class="dsx-chain-btn" data-chain="bsc">🔶 BSC</button>
+                    <button class="dsx-chain-btn" data-chain="ethereum">⟠ Ethereum</button>
+                    <button class="dsx-chain-btn" data-chain="polygon">🟣 Polygon</button>
+                    <button class="dsx-chain-btn" data-chain="arbitrum">🔵 Arbitrum</button>
+                </div>
+
+                <!-- ── Filter bar ────────────────────────────── -->
+                <div class="dsx-filter-bar">
+                    <div class="dsx-filter-left">
+                        <!-- Time range -->
+                        <div class="dsx-filter-group" id="dsxTimeGroup">
+                            <button class="dsx-tf-chip active" data-time="24h">⏱ Last 24h ▾</button>
+                            <div class="dsx-time-dropdown" id="dsxTimeDropdown" style="display:none">
+                                <button data-time="5m">Last 5 min</button>
+                                <button data-time="1h">Last 1h</button>
+                                <button data-time="6h">Last 6h</button>
+                                <button data-time="24h">Last 24h</button>
+                            </div>
+                        </div>
+                        <!-- Quick filters -->
+                        <button class="dsx-qf-chip" id="dsxGainersBtn" onclick="dexScanner.toggleQuick('gainers',this)">↑ Gainers</button>
+                        <button class="dsx-qf-chip" id="dsxLosersBtn"  onclick="dexScanner.toggleQuick('losers',this)">↓ Losers</button>
+                        <!-- Active filter chips -->
+                        <div class="dsx-active-chips" id="dsxActiveChips"></div>
+                    </div>
+                    <div class="dsx-filter-right">
+                        <!-- Search -->
+                        <div class="dsx-search-wrap">
+                            <span class="dsx-search-icon">🔍</span>
+                            <input type="text" id="dsxSearch" class="dsx-search-input" placeholder="Search token, pair...">
+                        </div>
+                        <!-- Customize Filters button -->
+                        <button class="dsx-customize-btn" onclick="dexScanner.openFilterModal()">
+                            ☰ Filters <span class="dsx-filter-count" id="dsxFilterCount" style="display:none">0</span>
+                        </button>
+                        <!-- Refresh -->
+                        <button class="dsx-refresh-chip" onclick="dexScanner.load(true)" title="Refresh">↻</button>
+                    </div>
+                </div>
+
+                <!-- ── Table ─────────────────────────────────── -->
+                <div class="dsx-table-wrap">
+                    <table class="dsx-table" id="dsxTable">
+                        <thead>
+                            <tr>
+                                <th class="dsx-th-num">#</th>
+                                <th class="dsx-th-token">TOKEN</th>
+                                <th class="dsx-th-price sortable" data-col="price">PRICE</th>
+                                <th class="dsx-th-age sortable" data-col="age">AGE</th>
+                                <th class="dsx-th-txns sortable" data-col="txns">TXNS</th>
+                                <th class="dsx-th-vol sortable" data-col="vol">VOLUME</th>
+                                <th class="dsx-th-makers sortable" data-col="makers">MAKERS</th>
+                                <th class="dsx-th-pct sortable" data-col="5m">5M</th>
+                                <th class="dsx-th-pct sortable" data-col="1h">1H</th>
+                                <th class="dsx-th-pct sortable" data-col="6h">6H</th>
+                                <th class="dsx-th-pct dsx-sort-active sortable" data-col="24h">24H ↓</th>
+                                <th class="dsx-th-liq sortable" data-col="liq">LIQUIDITY</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dsxTableBody">
+                            <tr><td colspan="12" class="dsx-loading-row"><span class="dsx-spinner"></span> Loading DEX pairs...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="dsx-table-footer">
+                    <span id="dsxRowCount">0 pairs</span>
+                    <span id="dsxLastUpdate"></span>
+                </div>
+
+            </section>
+
+            <!-- ── Customize Filters Modal ───────────────────── -->
+            <div class="dsx-modal-overlay" id="dsxModalOverlay" style="display:none" onclick="dexScanner.closeFilterModal()">
+                <div class="dsx-modal" onclick="event.stopPropagation()">
+                    <div class="dsx-modal-header">
+                        <span>☰ Customize Filters</span>
+                        <button class="dsx-modal-close" onclick="dexScanner.closeFilterModal()">✕</button>
+                    </div>
+                    <div class="dsx-modal-body">
+                        <div class="dsx-mf-header-row">
+                            <span></span><span class="dsx-mf-col-label">Min</span><span class="dsx-mf-col-label">Max</span>
+                        </div>
+                        <div class="dsx-mf-row">
+                            <label>Liquidity ($)</label>
+                            <input type="number" id="dsfMinLiq"   class="dsx-mf-input" placeholder="e.g. 50000">
+                            <input type="number" id="dsfMaxLiq"   class="dsx-mf-input" placeholder="no limit">
+                        </div>
+                        <div class="dsx-mf-row">
+                            <label>Market Cap ($)</label>
+                            <input type="number" id="dsfMinMcap"  class="dsx-mf-input" placeholder="e.g. 200000">
+                            <input type="number" id="dsfMaxMcap"  class="dsx-mf-input" placeholder="e.g. 1000000">
+                        </div>
+                        <div class="dsx-mf-row">
+                            <label>FDV ($)</label>
+                            <input type="number" id="dsfMinFdv"   class="dsx-mf-input" placeholder="Min">
+                            <input type="number" id="dsfMaxFdv"   class="dsx-mf-input" placeholder="Max">
+                        </div>
+                        <div class="dsx-mf-row">
+                            <label>Pair Age (hours)</label>
+                            <input type="number" id="dsfMinAge"   class="dsx-mf-input" placeholder="e.g. 1">
+                            <input type="number" id="dsfMaxAge"   class="dsx-mf-input" placeholder="e.g. 72">
+                        </div>
+                        <div class="dsx-mf-row">
+                            <label>24H Txns</label>
+                            <input type="number" id="dsfMinTxns"  class="dsx-mf-input" placeholder="e.g. 300">
+                            <input type="number" id="dsfMaxTxns"  class="dsx-mf-input" placeholder="e.g. 100000">
+                        </div>
+                        <div class="dsx-mf-row">
+                            <label>24H Volume ($)</label>
+                            <input type="number" id="dsfMinVol"   class="dsx-mf-input" placeholder="e.g. 100000">
+                            <input type="number" id="dsfMaxVol"   class="dsx-mf-input" placeholder="no limit">
+                        </div>
+                        <div class="dsx-mf-row">
+                            <label>24H Change (%)</label>
+                            <input type="number" id="dsfMinPct24" class="dsx-mf-input" placeholder="e.g. 10">
+                            <input type="number" id="dsfMaxPct24" class="dsx-mf-input" placeholder="e.g. 500">
+                        </div>
+                    </div>
+                    <div class="dsx-modal-footer">
+                        <button class="dsx-modal-reset"  onclick="dexScanner.resetModalFilters()">✕ Reset</button>
+                        <button class="dsx-modal-apply"  onclick="dexScanner.applyModalFilters()">✓ Apply</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ═══════════════════════════════════════════════════
+             DEX ANALYZER TAB  — DEXScreener-style live scanner
+             + deep analysis side panel + Web3 trading
+        ═══════════════════════════════════════════════════ -->
+        <div id="dex-analyzer" class="tab-content">
+            <div class="dxa-section">
+
+                <!-- ── Top bar: title + Web3 wallet button ─── -->
+                <div class="dxa-topbar">
+                    <div class="dxa-title-row">
+                        <h2>🔬 DEX Analyzer</h2>
+                        <span class="dxa-powered-badge">powered by DEXScreener</span>
+                        <span class="dxa-live-dot" id="dxaLiveDot">LIVE</span>
+                    </div>
+                    <!-- Web3 Wallet Connect -->
+                    <div class="w3-wallet-bar" id="w3WalletBar">
+                        <button class="w3-connect-btn" id="w3ConnectBtn" onclick="web3Trading.connect()">
+                            🦊 Connect Wallet
+                        </button>
+                        <div class="w3-wallet-info" id="w3WalletInfo" style="display:none">
+                            <span class="w3-addr" id="w3Addr">—</span>
+                            <span class="w3-balance" id="w3Balance">—</span>
+                            <span class="w3-net" id="w3Net">—</span>
+                            <button class="w3-disconnect-btn" onclick="web3Trading.disconnect()">✕</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ── Stats bar ─────────────────────────────── -->
+                <div class="dxa-stats-bar">
+                    <div class="dxa-stat-item"><span class="dxa-stat-label">24H VOL</span><span class="dxa-stat-val" id="dxaTotalVol">—</span></div>
+                    <div class="dxa-stat-sep"></div>
+                    <div class="dxa-stat-item"><span class="dxa-stat-label">24H TXNS</span><span class="dxa-stat-val" id="dxaTotalTxns">—</span></div>
+                    <div class="dxa-stat-sep"></div>
+                    <div class="dxa-stat-item"><span class="dxa-stat-label">PAIRS</span><span class="dxa-stat-val" id="dxaPairCount">—</span></div>
+                    <div class="dxa-stat-sep"></div>
+                    <div class="dxa-stat-item"><span class="dxa-stat-label">TOP GAINER 24H</span><span class="dxa-stat-val positive" id="dxaTopGainer">—</span></div>
+                </div>
+
+                <!-- ── Chain tabs ────────────────────────────── -->
+                <div class="dsx-chain-tabs" id="dxaChainTabs">
+                    <button class="dsx-chain-btn active" data-chain="all">🌐 All Chains</button>
+                    <button class="dsx-chain-btn" data-chain="solana">◎ Solana</button>
+                    <button class="dsx-chain-btn" data-chain="base">🔵 Base</button>
+                    <button class="dsx-chain-btn" data-chain="bsc">🔶 BSC</button>
+                    <button class="dsx-chain-btn" data-chain="ethereum">⟠ Ethereum</button>
+                    <button class="dsx-chain-btn" data-chain="polygon">🟣 Polygon</button>
+                    <button class="dsx-chain-btn" data-chain="arbitrum">🔷 Arbitrum</button>
+                </div>
+
+                <!-- ── Filter bar ────────────────────────────── -->
+                <div class="dsx-filter-bar">
+                    <div class="dsx-filter-left">
+                        <div class="dsx-filter-group" id="dxaTimeGroup">
+                            <button class="dsx-tf-chip active" id="dxaTimeTrigger" data-time="24h">⏱ Last 24h ▾</button>
+                            <div class="dsx-time-dropdown" id="dxaTimeDropdown" style="display:none">
+                                <button data-time="5m">Last 5 min</button>
+                                <button data-time="1h">Last 1h</button>
+                                <button data-time="6h">Last 6h</button>
+                                <button data-time="24h">Last 24h</button>
+                            </div>
+                        </div>
+                        <button class="dsx-qf-chip" id="dxaGainersBtn" onclick="dexAnalyzer.toggleQuick('gainers',this)">↑ Gainers</button>
+                        <button class="dsx-qf-chip" id="dxaLosersBtn"  onclick="dexAnalyzer.toggleQuick('losers',this)">↓ Losers</button>
+                        <div class="dsx-active-chips" id="dxaActiveChips"></div>
+                    </div>
+                    <div class="dsx-filter-right">
+                        <div class="dsx-search-wrap">
+                            <span class="dsx-search-icon">🔍</span>
+                            <input type="text" id="dxaSearch" class="dsx-search-input" placeholder="Search token, pair, address...">
+                        </div>
+                        <button class="dsx-customize-btn" onclick="dexAnalyzer.openFilterModal()">
+                            ☰ Filters <span class="dsx-filter-count" id="dxaFilterCount" style="display:none">0</span>
+                        </button>
+                        <button class="dsx-refresh-chip" onclick="dexAnalyzer.load(true)" title="Refresh">↻</button>
+                    </div>
+                </div>
+
+                <!-- ── Main table ─────────────────────────────── -->
+                <div class="dsx-table-wrap">
+                    <table class="dsx-table" id="dxaTable">
+                        <thead>
+                            <tr>
+                                <th class="dsx-th-num">#</th>
+                                <th class="dsx-th-token">TOKEN</th>
+                                <th class="dsx-th-price sortable" data-col="price">PRICE</th>
+                                <th class="dsx-th-age sortable" data-col="age">AGE</th>
+                                <th class="dsx-th-txns sortable" data-col="txns">TXNS</th>
+                                <th class="dsx-th-vol sortable" data-col="vol">VOLUME</th>
+                                <th class="dsx-th-makers sortable" data-col="makers">MAKERS</th>
+                                <th class="dsx-th-pct sortable" data-col="5m">5M</th>
+                                <th class="dsx-th-pct sortable" data-col="1h">1H</th>
+                                <th class="dsx-th-pct sortable" data-col="6h">6H</th>
+                                <th class="dsx-th-pct dsx-sort-active sortable" data-col="24h">24H ↓</th>
+                                <th class="dsx-th-liq sortable" data-col="liq">LIQUIDITY</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dxaTableBody">
+                            <tr><td colspan="12" class="dsx-loading-row"><span class="dsx-spinner"></span> Loading pairs...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="dsx-table-footer">
+                    <span id="dxaRowCount">0 pairs</span>
+                    <span id="dxaLastUpdate"></span>
+                </div>
+                <!-- Pagination -->
+                <div class="dxa-pagination" id="dxaPagination"></div>
+
+            </div>
+
+            <!-- ── Customize Filters Modal ───────────────────── -->
+            <div class="dsx-modal-overlay" id="dxaModalOverlay" style="display:none" onclick="dexAnalyzer.closeFilterModal()">
+                <div class="dsx-modal" onclick="event.stopPropagation()">
+                    <div class="dsx-modal-header">
+                        <span>☰ Customize Filters</span>
+                        <button class="dsx-modal-close" onclick="dexAnalyzer.closeFilterModal()">✕</button>
+                    </div>
+                    <div class="dsx-modal-body">
+                        <div class="dsx-mf-header-row">
+                            <span></span><span class="dsx-mf-col-label">Min</span><span class="dsx-mf-col-label">Max</span>
+                        </div>
+                        <div class="dsx-mf-row">
+                            <label>Min Liquidity ($)</label>
+                            <input type="number" id="dxafMinLiq"   class="dsx-mf-input" placeholder="e.g. 50000">
+                            <input type="number" id="dxafMaxLiq"   class="dsx-mf-input" placeholder="no limit">
+                        </div>
+                        <div class="dsx-mf-row">
+                            <label>Market Cap ($)</label>
+                            <input type="number" id="dxafMinMcap"  class="dsx-mf-input" placeholder="e.g. 100k">
+                            <input type="number" id="dxafMaxMcap"  class="dsx-mf-input" placeholder="no limit">
+                        </div>
+                        <div class="dsx-mf-row">
+                            <label>Pair Age (hours)</label>
+                            <input type="number" id="dxafMinAge"   class="dsx-mf-input" placeholder="e.g. 1">
+                            <input type="number" id="dxafMaxAge"   class="dsx-mf-input" placeholder="e.g. 720">
+                        </div>
+                        <div class="dsx-mf-row">
+                            <label>24H Txns</label>
+                            <input type="number" id="dxafMinTxns"  class="dsx-mf-input" placeholder="e.g. 300">
+                            <input type="number" id="dxafMaxTxns"  class="dsx-mf-input" placeholder="no limit">
+                        </div>
+                        <div class="dsx-mf-row">
+                            <label>24H Volume ($)</label>
+                            <input type="number" id="dxafMinVol"   class="dsx-mf-input" placeholder="e.g. 50000">
+                            <input type="number" id="dxafMaxVol"   class="dsx-mf-input" placeholder="no limit">
+                        </div>
+                        <div class="dsx-mf-row">
+                            <label>24H Change (%)</label>
+                            <input type="number" id="dxafMinPct24" class="dsx-mf-input" placeholder="e.g. 10">
+                            <input type="number" id="dxafMaxPct24" class="dsx-mf-input" placeholder="e.g. 500">
+                        </div>
+                    </div>
+                    <div class="dsx-modal-footer">
+                        <button class="dsx-modal-reset" onclick="dexAnalyzer.resetModalFilters()">✕ Reset</button>
+                        <button class="dsx-modal-apply" onclick="dexAnalyzer.applyModalFilters()">✓ Apply</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ══════════════════════════════════════════════════
+                 DEEP ANALYSIS SIDE PANEL  (slides in on row click)
+            ══════════════════════════════════════════════════ -->
+            <div class="dxa-panel-overlay" id="dxaPanelOverlay" onclick="dexAnalyzer.closePanel()"></div>
+            <div class="dxa-panel" id="dxaPanel">
+                <!-- ── Panel Header ── -->
+                <div class="dxa-panel-header">
+                    <span class="dxa-panel-title" id="dxaPanelTitle">🔬 Token Analysis</span>
+                    <div class="dxa-panel-actions">
+                        <button class="dxa-panel-close" onclick="dexAnalyzer.closePanel()">✕</button>
+                    </div>
+                </div>
+
+                <!-- ── Identity strip (always visible) ── -->
+                <div id="dxaIdentity" class="dxa-identity"></div>
+
+                <!-- ── Trade bar (always visible, shown immediately) ── -->
+                <div class="dxa-trade-bar" id="dxaTradeBar" style="display:none">
+                    <div class="dxa-trade-label">⚡ Quick Trade</div>
+                    <input type="number" id="dxaSwapAmt" class="dxa-swap-input" placeholder="Amount (ETH/BNB/SOL)" min="0" step="any">
+                    <button class="dxa-buy-btn" id="dxaBuyBtn" onclick="web3Trading.openSwap()" title="Buka di Uniswap / Jupiter / PancakeSwap">🚀 Trade on DEX ↗</button>
+                    <button class="dxa-swap-btn" id="dxaJupiterSwapBtn" onclick="dexAnalyzer.openJupiterSwap()" title="Swap token ini via Jupiter Terminal (Solana)" style="display:none">🪐 Swap via Jupiter</button>
+                    <a class="dxa-dexlink-btn" id="dxaDexLink" href="#" target="_blank" title="Lihat chart & liquiditas di DEXScreener">📊 DEXScreener ↗</a>
+                    <span class="dxa-trade-note" title="Transaksi dieksekusi di wallet kamu lewat DEX eksternal">🔑 via your wallet</span>
+                </div>
+
+                <!-- ── Tab switcher ── -->
+                <div class="dxa-inner-tabs">
+                    <button class="dxa-inner-tab active" data-dxtab="chart" onclick="dexAnalyzer.switchInnerTab('chart')">
+                        📈 Chart
+                    </button>
+                    <button class="dxa-inner-tab" data-dxtab="info" onclick="dexAnalyzer.switchInnerTab('info')">
+                        📋 Info & Analysis
+                    </button>
+                </div>
+
+                <!-- ══════════════════════════
+                     TAB: CHART
+                ══════════════════════════ -->
+                <div class="dxa-inner-panel active" id="dxaTabChart">
+                    <!-- TradingView widget container -->
+                    <div class="dxa-chart-wrap" id="dxaChartWrap">
+                        <div class="dxa-chart-loading" id="dxaChartLoading">
+                            <span class="g-spinner lg"></span>
+                            <span>Memuat chart…</span>
+                        </div>
+                        <!-- TradingView widget injected here by JS -->
+                        <div id="dxaTVWidget"></div>
+                    </div>
+
+                    <!-- Interval selector below chart -->
+                    <div class="dxa-chart-controls">
+                        <span class="dxa-chart-ctrl-label">Interval:</span>
+                        <div class="dxa-interval-btns" id="dxaIntervalBtns">
+                            <button class="dxa-iv-btn" data-iv="1"   onclick="dexAnalyzer.setChartInterval('1')">1m</button>
+                            <button class="dxa-iv-btn" data-iv="5"   onclick="dexAnalyzer.setChartInterval('5')">5m</button>
+                            <button class="dxa-iv-btn" data-iv="15"  onclick="dexAnalyzer.setChartInterval('15')">15m</button>
+                            <button class="dxa-iv-btn active" data-iv="60" onclick="dexAnalyzer.setChartInterval('60')">1H</button>
+                            <button class="dxa-iv-btn" data-iv="240" onclick="dexAnalyzer.setChartInterval('240')">4H</button>
+                            <button class="dxa-iv-btn" data-iv="D"   onclick="dexAnalyzer.setChartInterval('D')">1D</button>
+                            <button class="dxa-iv-btn" data-iv="W"   onclick="dexAnalyzer.setChartInterval('W')">1W</button>
+                        </div>
+                        <span class="dxa-chart-ctrl-label" style="margin-left:auto">Source:</span>
+                        <div class="dxa-chart-source-btns">
+                            <button class="dxa-src-btn active" data-src="dexscreener" onclick="dexAnalyzer.setChartSource('dexscreener')">DEXScreener</button>
+                            <button class="dxa-src-btn" data-src="tradingview" onclick="dexAnalyzer.setChartSource('tradingview')">TradingView</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ══════════════════════════
+                     TAB: INFO & ANALYSIS
+                ══════════════════════════ -->
+                <div class="dxa-inner-panel" id="dxaTabInfo">
+                    <div class="dxa-panel-body" id="dxaPanelBody">
+
+                        <!-- Score bar -->
+                        <div id="dxaScoreBar" class="dxa-score-wrap"></div>
+
+                        <!-- 4 cards -->
+                        <div class="dxa-cards-grid">
+                            <div class="dxa-card" id="dxaLiqCard">
+                                <h4>💧 Liquidity</h4>
+                                <div id="dxaLiqBody">—</div>
+                            </div>
+                            <div class="dxa-card" id="dxaHolderCard">
+                                <h4>👥 Holder Distribution</h4>
+                                <div id="dxaHolderBody">—</div>
+                            </div>
+                            <div class="dxa-card" id="dxaContractCard">
+                                <h4>📋 Contract Safety</h4>
+                                <div id="dxaContractBody">—</div>
+                            </div>
+                            <div class="dxa-card" id="dxaLpCard">
+                                <h4>🔒 LP Lock</h4>
+                                <div id="dxaLpBody">—</div>
+                            </div>
+                        </div>
+
+                        <!-- Recommendation -->
+                        <div class="dxa-recommendation" id="dxaRecommendation"></div>
+
+                        <!-- Pairs table -->
+                        <div class="dxa-pairs-wrap">
+                            <h4>📊 Semua Trading Pairs</h4>
+                            <div style="overflow-x:auto">
+                                <table class="dxa-pairs-table">
+                                    <thead><tr><th>DEX</th><th>PAIR</th><th>PRICE</th><th>LIQ</th><th>VOL 24H</th><th>TXNS</th><th>24H%</th><th>AGE</th><th>BOOST</th></tr></thead>
+                                    <tbody id="dxaPairsBody"><tr><td colspan="9" style="text-align:center;color:#64748b;padding:12px">—</td></tr></tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                    </div>
+                </div><!-- /dxaTabInfo -->
+
+            </div><!-- /dxa-panel -->
+
+            <!-- ══════════════════════════════════════════════════
+                 WEB3 SWAP MODAL
+            ══════════════════════════════════════════════════ -->
+            <div class="dsx-modal-overlay" id="w3SwapOverlay" style="display:none" onclick="web3Trading.closeSwap()">
+                <div class="dsx-modal w3-swap-modal" onclick="event.stopPropagation()">
+                    <div class="dsx-modal-header">
+                        <span>⚡ Buy Token</span>
+                        <button class="dsx-modal-close" onclick="web3Trading.closeSwap()">✕</button>
+                    </div>
+                    <div class="w3-swap-body">
+                        <div class="w3-token-info" id="w3SwapTokenInfo">—</div>
+                        <div class="w3-swap-row">
+                            <label>Jumlah yang dibeli</label>
+                            <div class="w3-input-wrap">
+                                <input type="number" id="w3SwapAmount" class="w3-swap-input" placeholder="0.0" min="0" step="any">
+                                <span class="w3-swap-denom" id="w3SwapDenom">ETH</span>
+                            </div>
+                        </div>
+                        <div class="w3-quote-box" id="w3QuoteBox">
+                            <span class="dsx-spinner" style="display:none" id="w3QuoteSpinner"></span>
+                            <span id="w3QuoteText">Masukkan jumlah untuk melihat estimasi</span>
+                        </div>
+                        <div class="w3-swap-actions">
+                            <button class="w3-open-dex-btn" id="w3OpenDexBtn" onclick="web3Trading.openOnDex()">🔗 Buka di Uniswap / Jupiter</button>
+                            <p class="w3-note">⚠️ Transaksi dieksekusi di wallet kamu (MetaMask/Phantom). Web ini tidak menyimpan private key.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+
+        <!-- Smart Money Tracker Tab -->
+        <div id="smart-money" class="tab-content">
+            <section class="smart-money-section">
+                <div class="smart-money-header">
+                    <h2><img src="images/ic_universe.svg" alt="" style="width: 28px; height: 28px; vertical-align: middle;"> Smart Money Tracker</h2>
+                    <div class="sm-controls">
+                        <button id="refreshSmartMoneyBtn" class="btn-primary"><img src="images/ic_automation.svg" alt="" style="width: 16px; height: 16px; vertical-align: middle;"> Refresh</button>
+                        <button id="addSmartWalletBtn" class="btn-secondary">+ Add Wallet</button>
+                    </div>
+                </div>
+
+                <!-- Smart Money Stats -->
+                <div class="sm-stats-grid">
+                    <div class="sm-stat-card">
+                        <div class="stat-icon">🐋</div>
+                        <div class="stat-info">
+                            <div class="stat-label">Tracked Wallets</div>
+                            <div class="stat-value" id="trackedWalletsCount">0</div>
+                        </div>
+                    </div>
+                    <div class="sm-stat-card">
+                        <div class="stat-icon">💰</div>
+                        <div class="stat-info">
+                            <div class="stat-label">Total Portfolio</div>
+                            <div class="stat-value" id="smTotalPortfolio">$0</div>
+                        </div>
+                    </div>
+                    <div class="sm-stat-card">
+                        <div class="stat-icon">📈</div>
+                        <div class="stat-info">
+                            <div class="stat-label">24h P&L</div>
+                            <div class="stat-value" id="sm24hPnL">$0</div>
+                        </div>
+                    </div>
+                    <div class="sm-stat-card">
+                        <div class="stat-icon">🎯</div>
+                        <div class="stat-info">
+                            <div class="stat-label">Win Rate</div>
+                            <div class="stat-value" id="smWinRate">0%</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Top Smart Money Wallets -->
+                <div class="top-smart-wallets">
+                    <h3>🌟 Top Performing Wallets</h3>
+                    <div id="topSmartWalletsList" class="smart-wallets-list">
+                        <div class="empty-state">
+                            <img src="images/ic_universe.svg" alt="" style="width: 64px; height: 64px; opacity: 0.3;">
+                            <p>Add smart money wallets to track their trading activity</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Smart Money Trades -->
+                <div class="sm-recent-trades">
+                    <h3>⚡ Recent Smart Money Trades</h3>
+                    <div id="followedTradesList" class="followed-trades-list">
+                        <div class="empty-state">
+                            <img src="images/ic_dashboard_1.svg" alt="" style="width: 64px; height: 64px; opacity: 0.3;">
+                            <p>Follow smart money wallets to see their trades here</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Trading History Tab -->
+        <div id="history" class="tab-content">
+            <section class="trading-history-section">
+                <div class="history-header">
+                    <h2>My Trading History</h2>
+                    <button id="addTradeBtn" class="btn-primary"><img src="images/ic_stars.svg" alt="" style="width: 16px; height: 16px; vertical-align: middle;"> Add Trade</button>
+                </div>
+
+                <!-- Trading Stats -->
+                <div class="trading-stats-grid">
+                    <div class="trading-stat-card">
+                        <div class="stat-label">Total Trades</div>
+                        <div class="stat-value" id="totalTrades">0</div>
+                    </div>
+                    <div class="trading-stat-card">
+                        <div class="stat-label">Win Rate</div>
+                        <div class="stat-value" id="winRate">0%</div>
+                    </div>
+                    <div class="trading-stat-card">
+                        <div class="stat-label">Total P&L</div>
+                        <div class="stat-value" id="totalPnL">$0</div>
+                    </div>
+                    <div class="trading-stat-card">
+                        <div class="stat-label">Avg Holding Time</div>
+                        <div class="stat-value" id="avgHoldingTime">0 days</div>
+                    </div>
+                </div>
+
+                <!-- Trade Filters -->
+                <div class="trade-filters">
+                    <button class="trade-filter-btn active" data-filter="all">All Trades</button>
+                    <button class="trade-filter-btn" data-filter="winning">Winning</button>
+                    <button class="trade-filter-btn" data-filter="losing">Losing</button>
+                    <button class="trade-filter-btn" data-filter="open">Open</button>
+                </div>
+
+                <!-- Trade History Table -->
+                <div class="table-container">
+                    <table id="tradeHistoryTable">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Asset</th>
+                                <th>Type</th>
+                                <th>Entry</th>
+                                <th>Exit</th>
+                                <th>Qty</th>
+                                <th>P&L</th>
+                                <th>P&L %</th>
+                                <th>Duration</th>
+                                <th>Notes</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tradeHistoryTableBody">
+                            <tr>
+                                <td colspan="11" class="loading">No trades yet. Click "Add Trade" to start tracking.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+
+        <!-- API Keys Modal -->
+        <div id="apiKeysModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>⚙️ API Key Configuration</h2>
+                    <span class="close-modal" onclick="closeApiKeysModal()">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <p style="color: #a0a8c0; margin-bottom: 20px;">
+                        <img src="images/ic_automation.svg" alt="" style="width: 20px; height: 20px; vertical-align: middle;">
+                        Setup FREE API keys to enable advanced wallet tracking features. All recommended APIs have free tiers with generous limits.
+                    </p>
+                    
+                    <div class="form-group">
+                        <label>Etherscan API Key (Ethereum) <a href="https://etherscan.io/apis" target="_blank">(Get FREE Key)</a></label>
+                        <input type="text" id="etherscanApiKey" placeholder="Your Etherscan API Key">
+                        <small style="color: #a0a8c0; font-size: 0.85em;">✅ Register gratis di Etherscan - Unlimited FREE calls</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>BscScan API Key (Binance Smart Chain) <a href="https://bscscan.com/apis" target="_blank">(Get FREE Key)</a></label>
+                        <input type="text" id="bscscanApiKey" placeholder="Your BscScan API Key">
+                        <small style="color: #a0a8c0; font-size: 0.85em;">✅ Register gratis di BscScan - Unlimited FREE calls</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Helius API Key (Solana) <a href="https://www.helius.dev/" target="_blank">(Get FREE Key)</a></label>
+                        <input type="text" id="heliusApiKey" placeholder="Your Helius API Key">
+                        <small style="color: #00ff88; font-size: 0.85em;">🚀 100,000 FREE credits/month - Recommended!</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Blockchain.com API Key (Bitcoin) <a href="https://www.blockchain.com/api" target="_blank">(Get FREE Key)</a></label>
+                        <input type="text" id="blockchainApiKey" placeholder="Your Blockchain.com API Key">
+                        <small style="color: #a0a8c0; font-size: 0.85em;">✅ FREE untuk Bitcoin address monitoring</small>
+                    </div>
+                    
+                    <div class="api-note">
+                        <img src="images/ic_universe.svg" alt="" style="width: 20px; height: 20px; vertical-align: middle;">
+                        <strong>Privacy Notice:</strong> API keys are stored locally in your browser. We never transmit your keys to any server.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-secondary" onclick="closeApiKeysModal()">Cancel</button>
+                    <button class="btn-primary" onclick="saveApiKeys()">Save API Keys</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ╔══════════════════════════════════════════════════════╗
+         ║              OKX TRADING PANEL                      ║
+         ╚══════════════════════════════════════════════════════╝ -->
+    <div id="okx" class="tab-content">
+        <div class="okx-wrap">
+
+            <!-- Header bar -->
+            <div class="okx-header">
+                <div class="okx-title">🟠 OKX Trading</div>
+                <div id="okxProxyStatus" class="okx-proxy-status">
+                    <span class="g-spinner sm"></span> Menghubungkan…
+                </div>
+                <button id="okxRefreshBtn" class="okx-btn-ghost" onclick="okxTrading.refresh()">🔄 Refresh</button>
+            </div>
+
+            <!-- Main grid: kiri = balance + order form, kanan = orders + history -->
+            <div class="okx-grid">
+
+                <!-- ── Kolom kiri ── -->
+                <div class="okx-col">
+
+                    <!-- Balance card -->
+                    <div class="okx-card">
+                        <div class="okx-card-title">
+                            💰 Balance
+                            <span class="okx-total-eq" id="okxTotalEq">$0.00</span>
+                        </div>
+                        <div class="okx-table-wrap">
+                            <table class="okx-table">
+                                <thead><tr>
+                                    <th>Aset</th><th>Available</th><th>Frozen</th><th>≈ USD</th>
+                                </tr></thead>
+                                <tbody id="okxBalanceBody">
+                                    <tr><td colspan="4" style="text-align:center;color:#475569;padding:16px">
+                                        <span class="g-spinner sm"></span> Memuat balance…
+                                    </td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Place order card -->
+                    <div class="okx-card">
+                        <div class="okx-card-title">⚡ Place Order</div>
+                        <div class="okx-form">
+                            <div class="okx-form-row">
+                                <label>Pair (instId)</label>
+                                <input id="okxInstId" class="okx-input" type="text" placeholder="BTC-USDT" />
+                            </div>
+                            <div class="okx-form-row okx-form-row-2">
+                                <div>
+                                    <label>Side</label>
+                                    <select id="okxSide" class="okx-select">
+                                        <option value="buy">🟢 BUY</option>
+                                        <option value="sell">🔴 SELL</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label>Order Type</label>
+                                    <select id="okxOrdType" class="okx-select" onchange="okxTrading.onOrdTypeChange()">
+                                        <option value="market">Market</option>
+                                        <option value="limit">Limit</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="okx-form-row" id="okxPxRow" style="display:none">
+                                <label>Harga (Limit)</label>
+                                <input id="okxPx" class="okx-input" type="number" placeholder="Harga limit" step="any" />
+                            </div>
+                            <div class="okx-form-row">
+                                <label>Size (USDT / koin)</label>
+                                <input id="okxSz" class="okx-input" type="number" placeholder="Jumlah" step="any" />
+                            </div>
+                            <div class="okx-form-note">
+                                ⚠️ Order dikirim langsung ke OKX melalui proxy lokal. Pastikan saldo cukup.
+                            </div>
+                            <button id="okxPlaceOrderBtn" class="okx-buy-btn" onclick="okxTrading.submitOrder()">
+                                ⚡ Kirim Order ke OKX
+                            </button>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- ── Kolom kanan ── -->
+                <div class="okx-col">
+
+                    <!-- Pending orders -->
+                    <div class="okx-card">
+                        <div class="okx-card-title">📋 Open Orders</div>
+                        <div class="okx-table-wrap">
+                            <table class="okx-table">
+                                <thead><tr>
+                                    <th>Pair</th><th>Side</th><th>Type</th><th>Harga</th><th>Size</th><th>Waktu</th><th></th>
+                                </tr></thead>
+                                <tbody id="okxOrdersBody">
+                                    <tr><td colspan="7" style="text-align:center;color:#475569;padding:16px">
+                                        <span class="g-spinner sm"></span> Memuat orders…
+                                    </td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Order history -->
+                    <div class="okx-card">
+                        <div class="okx-card-title">
+                            📜 Order History
+                            <button class="okx-btn-ghost okx-btn-sm" onclick="okxTrading.renderHistory()">↻ Load</button>
+                        </div>
+                        <div class="okx-table-wrap">
+                            <table class="okx-table">
+                                <thead><tr>
+                                    <th>Pair</th><th>Side</th><th>Type</th><th>Avg Price</th><th>Filled</th><th>PnL</th><th>Status</th><th>Tanggal</th>
+                                </tr></thead>
+                                <tbody id="okxHistoryBody">
+                                    <tr><td colspan="8" style="text-align:center;color:#475569;padding:16px">Klik "↻ Load" untuk muat history</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                </div>
+            </div><!-- /okx-grid -->
+        </div><!-- /okx-wrap -->
+    </div><!-- /#okx -->
+
+    <!-- ╔══════════════════════════════════════════════════════╗
+         ║              SOLANA SWAP PANEL                      ║
+         ╚══════════════════════════════════════════════════════╝ -->
+    <div id="solana-swap" class="tab-content">
+        <div class="swap-wrap">
+
+            <!-- Header -->
+            <div class="swap-header">
+                <div class="swap-header-left">
+                    <span class="swap-title">🪐 Solana Swap</span>
+                    <span class="swap-powered">powered by Jupiter</span>
+                </div>
+                <div class="swap-header-right">
+                    <span class="swap-wallet-note">Semua wallet Solana didukung — Jupiter, Phantom, Backpack, Solflare, dll</span>
+                </div>
+            </div>
+
+            <!-- Status Bar -->
+            <div id="swapStatus" class="swap-status swap-status-idle">Klik tab untuk memuat Jupiter swap widget…</div>
+
+            <!-- Quick Token Shortcuts -->
+            <div class="swap-quick-section">
+                <div class="swap-quick-label">⚡ Quick Swap ke:</div>
+                <div id="swapQuickTokens" class="swap-quick-list"></div>
+                <span id="swapTargetToken" class="swap-target-token"></span>
+            </div>
+
+            <!-- Jupiter Plugin Container — wallet connect ada di dalam widget ini -->
+            <div class="swap-terminal-wrap">
+                <div id="jupiterTerminalContainer" class="swap-terminal-inner"></div>
+            </div>
+
+            <!-- Info cards -->
+            <div class="swap-info-row">
+                <div class="swap-info-card">
+                    <div class="swap-info-icon">🔒</div>
+                    <div>
+                        <div class="swap-info-title">Non-Custodial</div>
+                        <div class="swap-info-desc">Private key tetap di wallet kamu. App ini tidak pernah menyentuh aset kamu.</div>
+                    </div>
+                </div>
+                <div class="swap-info-card">
+                    <div class="swap-info-icon">⚡</div>
+                    <div>
+                        <div class="swap-info-title">Best Route via Jupiter</div>
+                        <div class="swap-info-desc">Jupiter secara otomatis mencari rute swap terbaik dari 20+ DEX Solana.</div>
+                    </div>
+                </div>
+                <div class="swap-info-card">
+                    <div class="swap-info-icon">🔬</div>
+                    <div>
+                        <div class="swap-info-title">Integrasi DEX Analyzer</div>
+                        <div class="swap-info-desc">Klik tombol "Swap" di DEX Analyzer untuk langsung swap token yang sedang dianalisa.</div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div><!-- /#solana-swap -->
+
+    <!-- External Scripts -->
+    <script src="analysis-utils.js"></script>
+    <script src="app.js"></script>
+    <script src="advanced-analysis.js"></script>
+    <script src="liquidity-heatmap.js"></script>
+    <script src="ai-market-expert.js"></script>
+    <script src="market-movers.js"></script>
+    <script src="stock-analysis.js"></script>
+    <script src="idx-us-stocks.js"></script>
+    <script src="okx-trading.js"></script>
+    <script src="solana-swap.js"></script>
+    <script>
+        // Init OKX saat tab dibuka pertama kali
+        (function () {
+            let _okxInited = false;
+            document.addEventListener('tabchange', function (e) {
+                if (e.detail === 'okx' && !_okxInited) {
+                    _okxInited = true;
+                    okxTrading.init();
+                }
+            });
+        })();
+    </script>
+</body>
+</html>
