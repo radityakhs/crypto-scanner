@@ -6130,6 +6130,11 @@ const dexAnalyzer = (() => {
 
         _renderRecommendation(totalScore, best, price, liqScore, holderScore, contractScore, lpScore);
         _renderPairsTable(tokenPairs);
+
+        // ── Pass data to AI Hedge Fund Analyst ──
+        if (typeof hedgeFundAI !== 'undefined') {
+            hedgeFundAI.setContext(best, gp, liqScore, holderScore, contractScore, lpScore, tokenPairs);
+        }
     }
 
     function closePanel() {
@@ -6152,11 +6157,20 @@ const dexAnalyzer = (() => {
         document.querySelectorAll('.dxa-inner-tab').forEach(b => {
             b.classList.toggle('active', b.getAttribute('data-dxtab') === tab);
         });
+        const tabIdMap = { chart: 'dxaTabChart', info: 'dxaTabInfo', ai: 'dxaTabAi' };
         document.querySelectorAll('.dxa-inner-panel').forEach(p => {
-            p.classList.toggle('active', p.id === (tab === 'chart' ? 'dxaTabChart' : 'dxaTabInfo'));
+            p.classList.toggle('active', p.id === (tabIdMap[tab] || 'dxaTabInfo'));
         });
         // Render chart when switching to chart tab
         if (tab === 'chart' && currentPair) _renderChart();
+        // Restore API key from session when switching to AI tab
+        if (tab === 'ai') {
+            const keyEl = document.getElementById('hfaiKeyInput');
+            if (keyEl && !keyEl.value) {
+                const saved = sessionStorage.getItem('hf_gemini_key') || '';
+                if (saved) keyEl.value = saved;
+            }
+        }
     }
 
     // ── Chart rendering ────────────────────────────────────────

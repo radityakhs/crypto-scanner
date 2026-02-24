@@ -5653,3 +5653,513 @@ img[src*="ic_dev"],        img[src*="ic_code"] {
   white-space: nowrap;
 }
 .dxa-swap-btn:hover { opacity: 0.85; }
+
+/* ══════════════════════════════════════════════════════════
+   HEDGE FUND AI ANALYST — Panel Styles
+   ══════════════════════════════════════════════════════════ */
+
+/* ── Wrap & top bar ── */
+.hfai-panel-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+}
+.hfai-top-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: #0f172a;
+  border-bottom: 1px solid #1e293b;
+  flex-wrap: wrap;
+}
+.hfai-key-input {
+  flex: 1;
+  min-width: 200px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: #e2e8f0;
+  font-size: 0.82rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.hfai-key-input:focus { border-color: #6366f1; }
+.hfai-key-input::placeholder { color: #64748b; }
+.hfai-analyze-btn {
+  padding: 8px 18px;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.2s, transform 0.1s;
+}
+.hfai-analyze-btn:hover  { opacity: 0.9; transform: translateY(-1px); }
+.hfai-analyze-btn:active { transform: translateY(0); }
+.hfai-key-link-small {
+  font-size: 1.1rem;
+  text-decoration: none;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+.hfai-key-link-small:hover { opacity: 1; }
+
+/* ── Content area ── */
+.hfai-content {
+  padding: 16px;
+  overflow-y: auto;
+  max-height: calc(100vh - 260px);
+}
+
+/* ── Idle state ── */
+.hfai-idle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 48px 20px;
+  text-align: center;
+}
+.hfai-idle-icon  { font-size: 3rem; }
+.hfai-idle-title { font-size: 1.2rem; font-weight: 700; color: #e2e8f0; }
+.hfai-idle-sub   { font-size: 0.85rem; color: #64748b; }
+.hfai-key-row    { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: center; margin-top: 4px; }
+.hfai-key-link   { font-size: 0.8rem; color: #6366f1; text-decoration: none; }
+.hfai-key-link:hover { text-decoration: underline; }
+
+/* ── Loading ── */
+.hfai-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 48px 20px;
+}
+.hfai-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #1e293b;
+  border-top-color: #6366f1;
+  border-radius: 50%;
+  animation: hfaiSpin 0.8s linear infinite;
+}
+@keyframes hfaiSpin { to { transform: rotate(360deg); } }
+.hfai-loading-text  { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.hfai-loading-label { font-size: 1rem; color: #e2e8f0; font-weight: 600; }
+.hfai-loading-sub   { font-size: 0.8rem; color: #64748b; }
+
+/* ── Error ── */
+.hfai-error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #1f1316;
+  border: 1px solid #7f1d1d;
+  border-radius: 10px;
+  padding: 14px 16px;
+  color: #fca5a5;
+  font-size: 0.85rem;
+}
+.hfai-error-icon { font-size: 1.3rem; }
+
+/* ── Result container ── */
+.hfai-result { display: flex; flex-direction: column; gap: 14px; }
+
+/* ── Header: Verdict ── */
+.hfai-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.hfai-verdict {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 12px;
+  font-weight: 800;
+  font-size: 1rem;
+  letter-spacing: 0.04em;
+}
+.hfai-verdict-icon  { font-size: 1.4rem; }
+.hfai-verdict-buy-strong { background: #052e16; border: 2px solid #22c55e; color: #22c55e; }
+.hfai-verdict-buy        { background: #052e16; border: 2px solid #4ade80; color: #4ade80; }
+.hfai-verdict-hold       { background: #1c1607; border: 2px solid #fbbf24; color: #fbbf24; }
+.hfai-verdict-avoid      { background: #1c0a05; border: 2px solid #f97316; color: #f97316; }
+.hfai-verdict-avoid-strong { background: #1f0808; border: 2px solid #f87171; color: #f87171; }
+.hfai-verdict-unknown    { background: #0f172a; border: 2px solid #64748b; color: #94a3b8; }
+
+.hfai-header-meta { display: flex; flex-direction: column; gap: 5px; }
+.hfai-token-name  { font-size: 1.1rem; font-weight: 700; color: #e2e8f0; }
+.hfai-chain       { font-size: 0.75rem; color: #64748b; font-weight: 400; margin-left: 6px; }
+.hfai-risk-badge  {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+.hfai-risk-low    { background: #052e16; color: #4ade80; border: 1px solid #166534; }
+.hfai-risk-medium { background: #1c1607; color: #fbbf24; border: 1px solid #854d0e; }
+.hfai-risk-high   { background: #1f0808; color: #f87171; border: 1px solid #7f1d1d; }
+
+/* ── Confidence ── */
+.hfai-confidence-wrap {
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.hfai-conf-row   { display: flex; justify-content: space-between; align-items: center; }
+.hfai-conf-label { font-size: 0.78rem; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+.hfai-conf-val   { font-size: 1.1rem; font-weight: 800; color: #e2e8f0; }
+.hfai-summary    { font-size: 0.83rem; color: #94a3b8; line-height: 1.5; margin-top: 4px; }
+
+/* ── Progress bars ── */
+.hfai-bar-track {
+  width: 100%;
+  height: 6px;
+  background: #1e293b;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.hfai-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.6s ease;
+}
+
+/* ── Probability Grid ── */
+.hfai-prob-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+@media (min-width: 600px) { .hfai-prob-grid { grid-template-columns: repeat(4, 1fr); } }
+.hfai-prob-card {
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.hfai-prob-icon  { font-size: 1.3rem; }
+.hfai-prob-label { font-size: 0.72rem; color: #64748b; font-weight: 600; text-transform: uppercase; }
+.hfai-prob-val   { font-size: 1.05rem; font-weight: 800; color: #e2e8f0; }
+
+/* ── Signal Cards Grid ── */
+.hfai-signal-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+@media (max-width: 500px) { .hfai-signal-grid { grid-template-columns: 1fr; } }
+.hfai-signal-card {
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.hfai-sig-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+.hfai-sig-score  { font-size: 0.75rem; color: #94a3b8; background: #1e293b; padding: 2px 7px; border-radius: 10px; }
+.hfai-sig-assess { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.05em; }
+.hfai-sig-row    { display: flex; justify-content: space-between; font-size: 0.78rem; color: #64748b; }
+.hfai-sig-row strong { color: #e2e8f0; }
+.hfai-sig-notes  { font-size: 0.76rem; color: #94a3b8; line-height: 1.4; border-top: 1px solid #1e293b; padding-top: 6px; margin-top: 2px; }
+.hfai-flags      { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+.hfai-flag       {
+  font-size: 0.68rem;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: #1f0808;
+  border: 1px solid #7f1d1d;
+  color: #fca5a5;
+  font-weight: 600;
+}
+
+/* ── Price Action ── */
+.hfai-pa-wrap {
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 10px;
+  padding: 12px 16px;
+}
+.hfai-section-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 10px;
+}
+.hfai-pa-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+.hfai-pa-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 100px;
+}
+.hfai-pa-item span   { font-size: 0.72rem; color: #64748b; }
+.hfai-pa-item strong { font-size: 0.85rem; color: #e2e8f0; }
+
+/* ── Risks & Catalysts ── */
+.hfai-risks-catalysts { display: flex; gap: 10px; flex-wrap: wrap; }
+.hfai-list-card {
+  flex: 1;
+  min-width: 200px;
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 10px;
+  padding: 12px 16px;
+}
+.hfai-list-risks    { border-left: 3px solid #f87171; }
+.hfai-list-catalysts{ border-left: 3px solid #4ade80; }
+.hfai-list-card ul  { margin: 0; padding-left: 18px; }
+.hfai-list-card li  { font-size: 0.8rem; color: #cbd5e1; line-height: 1.6; }
+
+/* ── JSON toggle ── */
+.hfai-json-wrap { display: flex; flex-direction: column; gap: 6px; }
+.hfai-json-toggle {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  color: #94a3b8;
+  font-size: 0.78rem;
+  padding: 6px 12px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.2s;
+}
+.hfai-json-toggle:hover { background: #293548; }
+.hfai-json-pre {
+  display: none;
+  background: #050a14;
+  border: 1px solid #1e293b;
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 0.72rem;
+  color: #7dd3fc;
+  overflow-x: auto;
+  white-space: pre;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.hfai-json-pre.hfai-json-visible { display: block; }
+
+/* ── Disclaimer ── */
+.hfai-disclaimer {
+  font-size: 0.74rem;
+  color: #475569;
+  background: #0a1120;
+  border-radius: 8px;
+  padding: 10px 14px;
+  line-height: 1.5;
+  border: 1px solid #1e293b;
+}
+
+/* ══════════════════════════════════════════════════════════
+   HEDGE FUND AI v3 — Structural Classification & Capital Bias
+   ══════════════════════════════════════════════════════════ */
+
+/* ── Structural Classification Card ── */
+.hfai-struct-class-card {
+  border: 1.5px solid #1e293b;
+  border-radius: 14px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.hfai-struct-class-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.hfai-struct-class-icon {
+  font-size: 2rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.hfai-struct-class-info { flex: 1; }
+.hfai-struct-class-id {
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.hfai-struct-class-label {
+  font-size: 0.72rem;
+  color: #64748b;
+  margin-top: 2px;
+}
+.hfai-struct-class-conf {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.hfai-struct-class-desc {
+  font-size: 0.82rem;
+  color: #cbd5e1;
+  line-height: 1.55;
+  background: #0a1120;
+  border-radius: 8px;
+  padding: 10px 12px;
+  border-left: 3px solid currentColor;
+}
+.hfai-struct-class-reason {
+  font-size: 0.77rem;
+  color: #64748b;
+  font-style: italic;
+  padding: 0 4px;
+}
+
+/* ── Capital Positioning Bias ── */
+.hfai-capital-bias {
+  border: 1.5px solid #1e293b;
+  border-radius: 14px;
+  padding: 14px 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-start;
+}
+.hfai-capital-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.hfai-capital-icon  { font-size: 2rem; line-height: 1; }
+.hfai-capital-id    { font-size: 1rem; font-weight: 800; }
+.hfai-capital-label { font-size: 0.72rem; color: #64748b; margin-top: 2px; }
+.hfai-capital-desc  {
+  flex: 1;
+  min-width: 200px;
+  font-size: 0.82rem;
+  color: #cbd5e1;
+  line-height: 1.5;
+}
+.hfai-capital-reason {
+  width: 100%;
+  font-size: 0.77rem;
+  color: #64748b;
+  font-style: italic;
+  border-top: 1px solid #1e293b;
+  padding-top: 8px;
+}
+
+/* ── Phase sublabel ── */
+.hfai-phase-sublabel {
+  font-size: 0.68rem;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 2px;
+}
+
+/* ── 5-Prob Grid ── */
+.hfai-prob5-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+@media (min-width: 640px) { .hfai-prob5-grid { grid-template-columns: repeat(3, 1fr); } }
+@media (min-width: 900px) { .hfai-prob5-grid { grid-template-columns: repeat(5, 1fr); } }
+.hfai-prob5-card {
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 10px;
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  cursor: default;
+}
+.hfai-prob5-icon  { font-size: 1.4rem; }
+.hfai-prob5-label { font-size: 0.78rem; font-weight: 700; color: #e2e8f0; }
+.hfai-prob5-hint  { font-size: 0.68rem; color: #475569; line-height: 1.3; }
+.hfai-prob5-val   { font-size: 1.1rem; font-weight: 800; color: #e2e8f0; margin-top: 2px; }
+
+/* ── Relational Analysis ── */
+.hfai-relational-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.hfai-rel-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  align-items: flex-start;
+  padding: 11px 14px;
+  border-bottom: 1px solid #1e293b;
+}
+.hfai-rel-row:last-child { border-bottom: none; }
+.hfai-rel-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 180px;
+  flex: 0 0 180px;
+}
+.hfai-rel-icon  { font-size: 1.2rem; flex-shrink: 0; margin-top: 1px; }
+.hfai-rel-label { font-size: 0.82rem; font-weight: 700; color: #e2e8f0; }
+.hfai-rel-hint  { font-size: 0.7rem; color: #475569; line-height: 1.3; }
+.hfai-rel-insight {
+  flex: 1;
+  min-width: 150px;
+  font-size: 0.8rem;
+  color: #94a3b8;
+  line-height: 1.5;
+  padding-top: 2px;
+}
+
+/* ── Alpha hint text ── */
+.hfai-alpha-hint {
+  font-size: 0.72rem;
+  color: #475569;
+  margin-bottom: 2px;
+}
+
+/* ── Conf inline badge ── */
+.hfai-conf-inline {
+  font-size: 0.78rem;
+  color: #64748b;
+  background: #1e293b;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+.hfai-conf-inline strong { color: #e2e8f0; }
