@@ -598,49 +598,49 @@ async function fetchIntradayVolumeSpike(coinId) {
 // Static stock data — realistic sample data (IDX & US).
 // In production these would be fetched from a financial API.
 const IDX_STOCKS_DATA = [
-    { symbol:'BBCA',  name:'Bank Central Asia',       sector:'Banking',        price:9200,   change:1.32,  volume:42_500_000,  mktcap:'1.12T' },
-    { symbol:'BMRI',  name:'Bank Mandiri',             sector:'Banking',        price:5975,   change:2.10,  volume:38_200_000,  mktcap:'580B'  },
-    { symbol:'BBRI',  name:'Bank Rakyat Indonesia',    sector:'Banking',        price:4380,   change:-0.45, volume:61_000_000,  mktcap:'650B'  },
-    { symbol:'TLKM',  name:'Telkom Indonesia',         sector:'Infrastructure', price:3130,   change:-1.08, volume:29_400_000,  mktcap:'310B'  },
-    { symbol:'ASII',  name:'Astra International',      sector:'Consumer',       price:4890,   change:0.62,  volume:18_700_000,  mktcap:'198B'  },
-    { symbol:'ANTM',  name:'Aneka Tambang',             sector:'Mining',         price:1655,   change:3.44,  volume:84_000_000,  mktcap:'39B'   },
-    { symbol:'ADRO',  name:'Adaro Energy',              sector:'Mining',         price:2280,   change:2.78,  volume:55_300_000,  mktcap:'73B'   },
-    { symbol:'ITMG',  name:'Indo Tambangraya Megah',    sector:'Mining',         price:24_450, change:4.07,  volume:4_100_000,   mktcap:'27B'   },
-    { symbol:'UNVR',  name:'Unilever Indonesia',        sector:'Consumer',       price:2610,   change:-2.67, volume:12_800_000,  mktcap:'99B'   },
-    { symbol:'ICBP',  name:'Indofood CBP Sukses',       sector:'Consumer',       price:10_325, change:-0.24, volume:6_200_000,   mktcap:'121B'  },
-    { symbol:'BSDE',  name:'Bumi Serpong Damai',        sector:'Property',       price:1020,   change:1.99,  volume:22_100_000,  mktcap:'18B'   },
-    { symbol:'HEAL',  name:'Medikaloka Hermina',        sector:'Healthcare',     price:1565,   change:-1.57, volume:9_800_000,   mktcap:'9B'    },
-    { symbol:'GOTO',  name:'GoTo Gojek Tokopedia',      sector:'Technology',     price:64,     change:5.52,  volume:9_823_000_000, mktcap:'8B'  },
-    { symbol:'EMTK',  name:'Elang Mahkota Teknologi',   sector:'Technology',     price:435,    change:3.10,  volume:48_200_000,  mktcap:'12B'   },
-    { symbol:'JSMR',  name:'Jasa Marga',                sector:'Infrastructure', price:4130,   change:-0.84, volume:7_600_000,   mktcap:'30B'   },
-    { symbol:'PTPP',  name:'PP Persero',                sector:'Infrastructure', price:785,    change:-3.19, volume:14_900_000,  mktcap:'4B'    },
-    { symbol:'MIKA',  name:'Mitra Keluarga Karyasehat', sector:'Healthcare',     price:2420,   change:0.83,  volume:5_100_000,   mktcap:'29B'   },
-    { symbol:'CTRA',  name:'Ciputra Development',       sector:'Property',       price:1260,   change:2.44,  volume:19_300_000,  mktcap:'23B'   },
-    { symbol:'PWON',  name:'Pakuwon Jati',               sector:'Property',       price:540,    change:1.12,  volume:31_400_000,  mktcap:'26B'   },
-    { symbol:'INDF',  name:'Indofood Sukses Makmur',    sector:'Consumer',       price:6425,   change:-0.77, volume:8_900_000,   mktcap:'57B'   },
+    { symbol:'BBCA',  name:'Bank Central Asia',       sector:'Banking',        price:9200,   change:1.32,  volume:42_500_000,  mktcap:'1.12T', mktcapRaw:1120e9, pe:28.4, eps:324,   roe:22.1, der:5.8,  div:2.1,  w52h:10200, w52l:7800,  beta:0.72, currency:'IDR' },
+    { symbol:'BMRI',  name:'Bank Mandiri',             sector:'Banking',        price:5975,   change:2.10,  volume:38_200_000,  mktcap:'580B',  mktcapRaw:580e9,  pe:12.1, eps:494,   roe:18.6, der:6.2,  div:3.8,  w52h:6900,  w52l:4800,  beta:0.88, currency:'IDR' },
+    { symbol:'BBRI',  name:'Bank Rakyat Indonesia',    sector:'Banking',        price:4380,   change:-0.45, volume:61_000_000,  mktcap:'650B',  mktcapRaw:650e9,  pe:11.3, eps:388,   roe:17.2, der:6.5,  div:4.2,  w52h:5000,  w52l:3550,  beta:0.92, currency:'IDR' },
+    { symbol:'TLKM',  name:'Telkom Indonesia',         sector:'Infrastructure', price:3130,   change:-1.08, volume:29_400_000,  mktcap:'310B',  mktcapRaw:310e9,  pe:14.7, eps:213,   roe:14.3, der:0.9,  div:5.1,  w52h:3850,  w52l:2700,  beta:0.65, currency:'IDR' },
+    { symbol:'ASII',  name:'Astra International',      sector:'Consumer',       price:4890,   change:0.62,  volume:18_700_000,  mktcap:'198B',  mktcapRaw:198e9,  pe:9.8,  eps:499,   roe:12.4, der:0.7,  div:5.8,  w52h:5650,  w52l:4200,  beta:0.79, currency:'IDR' },
+    { symbol:'ANTM',  name:'Aneka Tambang',             sector:'Mining',         price:1655,   change:3.44,  volume:84_000_000,  mktcap:'39B',   mktcapRaw:39e9,   pe:21.4, eps:77,    roe:8.9,  der:0.4,  div:1.2,  w52h:2200,  w52l:1150,  beta:1.45, currency:'IDR' },
+    { symbol:'ADRO',  name:'Adaro Energy',              sector:'Mining',         price:2280,   change:2.78,  volume:55_300_000,  mktcap:'73B',   mktcapRaw:73e9,   pe:6.2,  eps:368,   roe:21.7, der:0.3,  div:8.4,  w52h:2900,  w52l:1750,  beta:1.22, currency:'IDR' },
+    { symbol:'ITMG',  name:'Indo Tambangraya Megah',    sector:'Mining',         price:24450,  change:4.07,  volume:4_100_000,   mktcap:'27B',   mktcapRaw:27e9,   pe:5.1,  eps:4794,  roe:39.2, der:0.1,  div:14.6, w52h:31000, w52l:18500, beta:1.31, currency:'IDR' },
+    { symbol:'UNVR',  name:'Unilever Indonesia',        sector:'Consumer',       price:2610,   change:-2.67, volume:12_800_000,  mktcap:'99B',   mktcapRaw:99e9,   pe:19.2, eps:136,   roe:68.4, der:2.1,  div:4.9,  w52h:4380,  w52l:2100,  beta:0.54, currency:'IDR' },
+    { symbol:'ICBP',  name:'Indofood CBP Sukses',       sector:'Consumer',       price:10325,  change:-0.24, volume:6_200_000,   mktcap:'121B',  mktcapRaw:121e9,  pe:18.6, eps:555,   roe:14.1, der:0.8,  div:2.8,  w52h:11400, w52l:8600,  beta:0.61, currency:'IDR' },
+    { symbol:'BSDE',  name:'Bumi Serpong Damai',        sector:'Property',       price:1020,   change:1.99,  volume:22_100_000,  mktcap:'18B',   mktcapRaw:18e9,   pe:7.4,  eps:138,   roe:6.2,  der:0.5,  div:1.5,  w52h:1350,  w52l:750,   beta:1.08, currency:'IDR' },
+    { symbol:'HEAL',  name:'Medikaloka Hermina',        sector:'Healthcare',     price:1565,   change:-1.57, volume:9_800_000,   mktcap:'9B',    mktcapRaw:9e9,    pe:16.8, eps:93,    roe:11.3, der:0.6,  div:0.8,  w52h:2100,  w52l:1200,  beta:0.88, currency:'IDR' },
+    { symbol:'GOTO',  name:'GoTo Gojek Tokopedia',      sector:'Technology',     price:64,     change:5.52,  volume:9_823_000_000,mktcap:'8B',   mktcapRaw:8e9,    pe:null, eps:-12,   roe:-18.4,der:0.3,  div:0,    w52h:120,   w52l:48,    beta:1.82, currency:'IDR' },
+    { symbol:'EMTK',  name:'Elang Mahkota Teknologi',   sector:'Technology',     price:435,    change:3.10,  volume:48_200_000,  mktcap:'12B',   mktcapRaw:12e9,   pe:22.1, eps:20,    roe:4.8,  der:0.2,  div:0.5,  w52h:580,   w52l:310,   beta:1.24, currency:'IDR' },
+    { symbol:'JSMR',  name:'Jasa Marga',                sector:'Infrastructure', price:4130,   change:-0.84, volume:7_600_000,   mktcap:'30B',   mktcapRaw:30e9,   pe:15.3, eps:270,   roe:7.4,  der:2.8,  div:3.2,  w52h:5100,  w52l:3600,  beta:0.73, currency:'IDR' },
+    { symbol:'PTPP',  name:'PP Persero',                sector:'Infrastructure', price:785,    change:-3.19, volume:14_900_000,  mktcap:'4B',    mktcapRaw:4e9,    pe:null, eps:-95,   roe:-8.1, der:3.4,  div:0,    w52h:1250,  w52l:620,   beta:1.41, currency:'IDR' },
+    { symbol:'MIKA',  name:'Mitra Keluarga Karyasehat', sector:'Healthcare',     price:2420,   change:0.83,  volume:5_100_000,   mktcap:'29B',   mktcapRaw:29e9,   pe:26.4, eps:92,    roe:18.7, der:0.1,  div:1.9,  w52h:3100,  w52l:2050,  beta:0.58, currency:'IDR' },
+    { symbol:'CTRA',  name:'Ciputra Development',       sector:'Property',       price:1260,   change:2.44,  volume:19_300_000,  mktcap:'23B',   mktcapRaw:23e9,   pe:9.1,  eps:138,   roe:7.8,  der:0.6,  div:1.4,  w52h:1650,  w52l:950,   beta:1.15, currency:'IDR' },
+    { symbol:'PWON',  name:'Pakuwon Jati',               sector:'Property',       price:540,    change:1.12,  volume:31_400_000,  mktcap:'26B',   mktcapRaw:26e9,   pe:8.3,  eps:65,    roe:9.1,  der:0.4,  div:1.8,  w52h:730,   w52l:420,   beta:0.98, currency:'IDR' },
+    { symbol:'INDF',  name:'Indofood Sukses Makmur',    sector:'Consumer',       price:6425,   change:-0.77, volume:8_900_000,   mktcap:'57B',   mktcapRaw:57e9,   pe:7.6,  eps:846,   roe:9.8,  der:0.7,  div:5.2,  w52h:7600,  w52l:5400,  beta:0.69, currency:'IDR' },
 ];
 
 const US_STOCKS_DATA = [
-    { symbol:'NVDA',  name:'NVIDIA Corp.',              sector:'Technology',  exchange:'NASDAQ', price:875.40,  change:4.82,  volume:42_300_000, mktcap:'2.15T' },
-    { symbol:'AAPL',  name:'Apple Inc.',                sector:'Technology',  exchange:'NASDAQ', price:228.50,  change:0.74,  volume:55_100_000, mktcap:'3.51T' },
-    { symbol:'MSFT',  name:'Microsoft Corp.',           sector:'Technology',  exchange:'NASDAQ', price:418.30,  change:1.23,  volume:22_400_000, mktcap:'3.11T' },
-    { symbol:'GOOGL', name:'Alphabet Inc.',             sector:'Technology',  exchange:'NASDAQ', price:192.75,  change:2.15,  volume:19_800_000, mktcap:'2.37T' },
-    { symbol:'AMZN',  name:'Amazon.com Inc.',           sector:'Consumer',    exchange:'NASDAQ', price:210.40,  change:1.88,  volume:31_600_000, mktcap:'2.21T' },
-    { symbol:'TSLA',  name:'Tesla Inc.',                sector:'Consumer',    exchange:'NASDAQ', price:248.60,  change:-3.41, volume:88_500_000, mktcap:'793B'  },
-    { symbol:'META',  name:'Meta Platforms Inc.',       sector:'Technology',  exchange:'NASDAQ', price:607.20,  change:2.67,  volume:14_200_000, mktcap:'1.54T' },
-    { symbol:'JPM',   name:'JPMorgan Chase & Co.',      sector:'Financials',  exchange:'NYSE',   price:228.10,  change:0.95,  volume:9_800_000,  mktcap:'655B'  },
-    { symbol:'JNJ',   name:'Johnson & Johnson',         sector:'Healthcare',  exchange:'NYSE',   price:158.70,  change:-0.33, volume:7_200_000,  mktcap:'382B'  },
-    { symbol:'XOM',   name:'ExxonMobil Corp.',          sector:'Energy',      exchange:'NYSE',   price:106.40,  change:1.14,  volume:16_300_000, mktcap:'458B'  },
-    { symbol:'UNH',   name:'UnitedHealth Group',        sector:'Healthcare',  exchange:'NYSE',   price:538.90,  change:-1.22, volume:4_100_000,  mktcap:'497B'  },
-    { symbol:'AMD',   name:'Advanced Micro Devices',    sector:'Technology',  exchange:'NASDAQ', price:178.50,  change:5.43,  volume:61_200_000, mktcap:'289B'  },
-    { symbol:'BA',    name:'Boeing Co.',                sector:'Industrials', exchange:'NYSE',   price:163.20,  change:-4.87, volume:12_800_000, mktcap:'102B'  },
-    { symbol:'BAC',   name:'Bank of America Corp.',     sector:'Financials',  exchange:'NYSE',   price:41.30,   change:1.76,  volume:38_900_000, mktcap:'324B'  },
-    { symbol:'CVX',   name:'Chevron Corp.',             sector:'Energy',      exchange:'NYSE',   price:152.80,  change:0.62,  volume:8_700_000,  mktcap:'279B'  },
-    { symbol:'COP',   name:'ConocoPhillips',            sector:'Energy',      exchange:'NYSE',   price:114.60,  change:2.38,  volume:9_100_000,  mktcap:'138B'  },
-    { symbol:'CAT',   name:'Caterpillar Inc.',          sector:'Industrials', exchange:'NYSE',   price:381.50,  change:-0.58, volume:3_200_000,  mktcap:'189B'  },
-    { symbol:'PFE',   name:'Pfizer Inc.',               sector:'Healthcare',  exchange:'NYSE',   price:27.40,   change:-2.19, volume:42_100_000, mktcap:'155B'  },
-    { symbol:'WMT',   name:'Walmart Inc.',              sector:'Consumer',    exchange:'NYSE',   price:96.30,   change:1.51,  volume:11_400_000, mktcap:'773B'  },
-    { symbol:'GE',    name:'GE Aerospace',              sector:'Industrials', exchange:'NYSE',   price:188.70,  change:3.12,  volume:8_600_000,  mktcap:'204B'  },
+    { symbol:'NVDA',  name:'NVIDIA Corp.',              sector:'Technology',  exchange:'NASDAQ', price:875.40,  change:4.82,  volume:42_300_000, mktcap:'2.15T', mktcapRaw:2150e9, pe:68.2, eps:12.84, roe:91.4, der:0.41, div:0.03, w52h:974.0,  w52l:410.0,  beta:1.92, currency:'USD' },
+    { symbol:'AAPL',  name:'Apple Inc.',                sector:'Technology',  exchange:'NASDAQ', price:228.50,  change:0.74,  volume:55_100_000, mktcap:'3.51T', mktcapRaw:3510e9, pe:31.4, eps:7.28,  roe:147.3,der:1.77, div:0.51, w52h:237.2,  w52l:164.1,  beta:1.21, currency:'USD' },
+    { symbol:'MSFT',  name:'Microsoft Corp.',           sector:'Technology',  exchange:'NASDAQ', price:418.30,  change:1.23,  volume:22_400_000, mktcap:'3.11T', mktcapRaw:3110e9, pe:36.1, eps:11.59, roe:43.1, der:0.31, div:0.68, w52h:468.4,  w52l:309.5,  beta:0.88, currency:'USD' },
+    { symbol:'GOOGL', name:'Alphabet Inc.',             sector:'Technology',  exchange:'NASDAQ', price:192.75,  change:2.15,  volume:19_800_000, mktcap:'2.37T', mktcapRaw:2370e9, pe:23.8, eps:8.09,  roe:30.2, der:0.11, div:0,    w52h:208.7,  w52l:120.2,  beta:1.04, currency:'USD' },
+    { symbol:'AMZN',  name:'Amazon.com Inc.',           sector:'Consumer',    exchange:'NASDAQ', price:210.40,  change:1.88,  volume:31_600_000, mktcap:'2.21T', mktcapRaw:2210e9, pe:44.2, eps:4.76,  roe:21.8, der:0.62, div:0,    w52h:230.0,  w52l:118.0,  beta:1.17, currency:'USD' },
+    { symbol:'TSLA',  name:'Tesla Inc.',                sector:'Consumer',    exchange:'NASDAQ', price:248.60,  change:-3.41, volume:88_500_000, mktcap:'793B',  mktcapRaw:793e9,  pe:82.4, eps:3.02,  roe:14.4, der:0.18, div:0,    w52h:414.5,  w52l:138.8,  beta:2.34, currency:'USD' },
+    { symbol:'META',  name:'Meta Platforms Inc.',       sector:'Technology',  exchange:'NASDAQ', price:607.20,  change:2.67,  volume:14_200_000, mktcap:'1.54T', mktcapRaw:1540e9, pe:27.1, eps:22.40, roe:37.8, der:0.29, div:0.40, w52h:740.9,  w52l:381.3,  beta:1.32, currency:'USD' },
+    { symbol:'JPM',   name:'JPMorgan Chase & Co.',      sector:'Financials',  exchange:'NYSE',   price:228.10,  change:0.95,  volume:9_800_000,  mktcap:'655B',  mktcapRaw:655e9,  pe:12.1, eps:18.85, roe:16.4, der:1.26, div:2.31, w52h:260.1,  w52l:183.6,  beta:1.13, currency:'USD' },
+    { symbol:'JNJ',   name:'Johnson & Johnson',         sector:'Healthcare',  exchange:'NYSE',   price:158.70,  change:-0.33, volume:7_200_000,  mktcap:'382B',  mktcapRaw:382e9,  pe:15.4, eps:10.30, roe:22.8, der:0.51, div:2.99, w52h:175.2,  w52l:144.0,  beta:0.57, currency:'USD' },
+    { symbol:'XOM',   name:'ExxonMobil Corp.',          sector:'Energy',      exchange:'NYSE',   price:106.40,  change:1.14,  volume:16_300_000, mktcap:'458B',  mktcapRaw:458e9,  pe:14.2, eps:7.49,  roe:15.8, der:0.20, div:3.68, w52h:123.7,  w52l:95.8,   beta:0.93, currency:'USD' },
+    { symbol:'UNH',   name:'UnitedHealth Group',        sector:'Healthcare',  exchange:'NYSE',   price:538.90,  change:-1.22, volume:4_100_000,  mktcap:'497B',  mktcapRaw:497e9,  pe:18.6, eps:28.98, roe:26.7, der:0.72, div:1.81, w52h:630.7,  w52l:425.0,  beta:0.61, currency:'USD' },
+    { symbol:'AMD',   name:'Advanced Micro Devices',    sector:'Technology',  exchange:'NASDAQ', price:178.50,  change:5.43,  volume:61_200_000, mktcap:'289B',  mktcapRaw:289e9,  pe:214.3,eps:0.83,  roe:2.4,  der:0.06, div:0,    w52h:226.0,  w52l:121.6,  beta:1.78, currency:'USD' },
+    { symbol:'BA',    name:'Boeing Co.',                sector:'Industrials', exchange:'NYSE',   price:163.20,  change:-4.87, volume:12_800_000, mktcap:'102B',  mktcapRaw:102e9,  pe:null, eps:-6.94, roe:null, der:null, div:0,    w52h:228.0,  w52l:159.7,  beta:1.44, currency:'USD' },
+    { symbol:'BAC',   name:'Bank of America Corp.',     sector:'Financials',  exchange:'NYSE',   price:41.30,   change:1.76,  volume:38_900_000, mktcap:'324B',  mktcapRaw:324e9,  pe:13.6, eps:3.04,  roe:9.8,  der:1.11, div:2.67, w52h:48.1,   w52l:26.9,   beta:1.38, currency:'USD' },
+    { symbol:'CVX',   name:'Chevron Corp.',             sector:'Energy',      exchange:'NYSE',   price:152.80,  change:0.62,  volume:8_700_000,  mktcap:'279B',  mktcapRaw:279e9,  pe:14.9, eps:10.25, roe:12.4, der:0.14, div:4.15, w52h:168.9,  w52l:134.8,  beta:0.88, currency:'USD' },
+    { symbol:'COP',   name:'ConocoPhillips',            sector:'Energy',      exchange:'NYSE',   price:114.60,  change:2.38,  volume:9_100_000,  mktcap:'138B',  mktcapRaw:138e9,  pe:12.2, eps:9.39,  roe:18.3, der:0.40, div:2.90, w52h:135.9,  w52l:98.1,   beta:0.94, currency:'USD' },
+    { symbol:'CAT',   name:'Caterpillar Inc.',          sector:'Industrials', exchange:'NYSE',   price:381.50,  change:-0.58, volume:3_200_000,  mktcap:'189B',  mktcapRaw:189e9,  pe:17.2, eps:22.18, roe:56.4, der:1.52, div:1.73, w52h:418.5,  w52l:278.3,  beta:1.02, currency:'USD' },
+    { symbol:'PFE',   name:'Pfizer Inc.',               sector:'Healthcare',  exchange:'NYSE',   price:27.40,   change:-2.19, volume:42_100_000, mktcap:'155B',  mktcapRaw:155e9,  pe:null, eps:-0.41, roe:-2.2, der:0.57, div:6.57, w52h:34.1,   w52l:25.2,   beta:0.56, currency:'USD' },
+    { symbol:'WMT',   name:'Walmart Inc.',              sector:'Consumer',    exchange:'NYSE',   price:96.30,   change:1.51,  volume:11_400_000, mktcap:'773B',  mktcapRaw:773e9,  pe:38.1, eps:2.53,  roe:22.1, der:0.64, div:1.30, w52h:105.3,  w52l:60.2,   beta:0.67, currency:'USD' },
+    { symbol:'GE',    name:'GE Aerospace',              sector:'Industrials', exchange:'NYSE',   price:188.70,  change:3.12,  volume:8_600_000,  mktcap:'204B',  mktcapRaw:204e9,  pe:42.8, eps:4.41,  roe:34.7, der:0.88, div:0.32, w52h:213.5,  w52l:112.9,  beta:1.18, currency:'USD' },
 ];
 
 // Watchlist storage
@@ -740,20 +740,31 @@ function renderStockMovers(market, type) {
                     <span class="sm-sector-tag" style="color:${sc};border-color:${sc}30;background:${sc}12">${s.sector}</span>
                 </div>
                 <div class="sm-name">${s.name}</div>
+                <div class="sm-fundamentals">
+                    ${s.pe ? `<span class="sm-fund-item">P/E <strong>${s.pe}×</strong></span>` : '<span class="sm-fund-item" style="color:#475569">P/E N/A</span>'}
+                    ${s.roe ? `<span class="sm-fund-item">ROE <strong style="color:${s.roe>20?'#4ade80':s.roe>10?'#fbbf24':'#f87171'}">${s.roe}%</strong></span>` : ''}
+                    ${s.div ? `<span class="sm-fund-item">DIV <strong style="color:#60a5fa">${s.div}%</strong></span>` : ''}
+                    ${s.beta ? `<span class="sm-fund-item">β <strong style="color:${s.beta>1.5?'#f87171':s.beta>1?'#fbbf24':'#94a3b8'}">${s.beta}</strong></span>` : ''}
+                </div>
             </div>
             <div class="sm-metrics">
                 <div class="sm-price">${priceStr}</div>
                 <div class="sm-change" style="color:${chColor};background:${chBg}">${chSign}${s.change.toFixed(2)}%</div>
+                ${s.w52h && s.w52l ? `<div class="sm-52w">52W: ${isCurrency?'Rp':'$'}${s.w52l.toLocaleString()} – ${isCurrency?'Rp':'$'}${s.w52h.toLocaleString()}</div>` : ''}
             </div>
             <div class="sm-extra">
                 <div class="sm-extra-item"><span class="sm-extra-lbl">Vol</span><span class="sm-extra-val">${volStr}</span></div>
                 <div class="sm-extra-item"><span class="sm-extra-lbl">MCap</span><span class="sm-extra-val">${s.mktcap}</span></div>
+                ${s.der != null ? `<div class="sm-extra-item"><span class="sm-extra-lbl">D/E</span><span class="sm-extra-val">${s.der}</span></div>` : ''}
             </div>
-            <button class="sm-wl-btn ${inWL ? 'sm-wl-btn--active' : ''}"
-                    onclick="toggleStockWatchlist('${market}','${s.symbol}',this)"
-                    title="${inWL ? 'Hapus dari watchlist' : 'Tambah ke watchlist'}">
-                ${inWL ? '★' : '☆'}
-            </button>
+            <div class="sm-actions">
+                <button class="sm-ai-btn" onclick="stockEquityAI.openPanel('${market}','${s.symbol}')" title="Analisis AI">🤖 AI</button>
+                <button class="sm-wl-btn ${inWL ? 'sm-wl-btn--active' : ''}"
+                        onclick="toggleStockWatchlist('${market}','${s.symbol}',this)"
+                        title="${inWL ? 'Hapus dari watchlist' : 'Tambah ke watchlist'}">
+                    ${inWL ? '★' : '☆'}
+                </button>
+            </div>
         </div>`;
     }).join('');
 }

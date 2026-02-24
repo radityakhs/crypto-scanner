@@ -6422,7 +6422,7 @@ img[src*="ic_dev"],        img[src*="ic_code"] {
 /* Stock Mover Card (sm-card) */
 .sm-card {
   display: grid;
-  grid-template-columns: 38px 46px 1fr 120px 100px 36px;
+  grid-template-columns: 38px 46px 1fr 130px 110px 80px;
   align-items: center;
   gap: 10px;
   background: rgba(255,255,255,0.03);
@@ -6584,13 +6584,470 @@ img[src*="ic_dev"],        img[src*="ic_code"] {
 .idx-header-section h2 { margin: 0 0 4px; font-size: 1.3rem; }
 .market-subtitle { margin: 0; font-size: 0.83rem; color: #64748b; }
 
+/* Fundamentals strip on card */
+.sm-fundamentals {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+.sm-fund-item {
+  font-size: 0.65rem;
+  color: #64748b;
+}
+.sm-fund-item strong { font-weight: 700; }
+.sm-52w {
+  font-size: 0.65rem;
+  color: #475569;
+  white-space: nowrap;
+  margin-top: 2px;
+}
+
+/* Actions column */
+.sm-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+.sm-ai-btn {
+  background: linear-gradient(135deg, rgba(99,102,241,0.25), rgba(167,139,250,0.2));
+  border: 1px solid rgba(99,102,241,0.4);
+  border-radius: 8px;
+  color: #a78bfa;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 4px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.18s;
+  width: 100%;
+}
+.sm-ai-btn:hover {
+  background: linear-gradient(135deg, rgba(99,102,241,0.4), rgba(167,139,250,0.35));
+  color: #c4b5fd;
+  box-shadow: 0 2px 8px rgba(99,102,241,0.3);
+}
+
 /* Responsive */
-@media (max-width: 768px) {
-  .sm-card { grid-template-columns: 30px 38px 1fr 90px 36px; }
+@media (max-width: 900px) {
+  .sm-card { grid-template-columns: 30px 38px 1fr 100px 60px; }
   .sm-extra { display: none; }
   .news-stats-grid { grid-template-columns: repeat(2, 1fr); }
 }
-@media (max-width: 480px) {
-  .sm-card { grid-template-columns: 28px 34px 1fr 80px 32px; }
+@media (max-width: 600px) {
+  .sm-card { grid-template-columns: 28px 34px 1fr 90px 50px; }
   .sm-name { max-width: 120px; }
+  .sm-fundamentals { display: none; }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   EQUITY AI PANEL — Institutional Research
+   ═══════════════════════════════════════════════════════════ */
+
+.eqai-panel {
+  background: rgba(15,23,42,0.8);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Header */
+.eqai-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+.eqai-header-left { display: flex; flex-direction: column; gap: 4px; }
+.eqai-ticker { font-size: 1.5rem; font-weight: 800; color: #f1f5f9; letter-spacing: 0.04em; }
+.eqai-company { font-size: 0.85rem; color: #94a3b8; }
+.eqai-meta { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+.eqai-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 6px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.eqai-badge--exchange {
+  background: rgba(99,102,241,0.15);
+  border: 1px solid rgba(99,102,241,0.3);
+  color: #a78bfa;
+}
+.eqai-badge--sector {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: #94a3b8;
+}
+.eqai-header-right { text-align: right; }
+.eqai-price { font-size: 1.4rem; font-weight: 800; color: #f1f5f9; }
+.eqai-change { font-size: 0.85rem; font-weight: 700; margin-top: 2px; }
+.eqai-mktcap { font-size: 0.75rem; color: #64748b; margin-top: 4px; }
+
+/* Fundamentals strip */
+.eqai-funds-strip {
+  display: flex;
+  gap: 0;
+  flex-wrap: wrap;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.eqai-fund-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 14px;
+  border-right: 1px solid rgba(255,255,255,0.06);
+  min-width: 70px;
+  flex: 1;
+}
+.eqai-fund-item--wide { flex: 2; min-width: 150px; }
+.eqai-fund-item:last-child { border-right: none; }
+.eqai-fund-lbl { font-size: 0.62rem; color: #475569; text-transform: uppercase; letter-spacing: 0.05em; }
+.eqai-fund-val { font-size: 0.85rem; font-weight: 700; color: #e2e8f0; }
+.eqai-52w-bar {
+  height: 4px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 2px;
+  margin-top: 4px;
+  width: 100%;
+}
+.eqai-52w-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4ade80, #fbbf24);
+  border-radius: 2px;
+  transition: width 0.5s ease;
+}
+
+/* Key input */
+.eqai-key-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.eqai-key-label { font-size: 0.78rem; color: #64748b; white-space: nowrap; }
+.eqai-key-input {
+  flex: 1;
+  min-width: 180px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  color: #e2e8f0;
+  padding: 6px 10px;
+  font-size: 0.82rem;
+  outline: none;
+  font-family: monospace;
+}
+.eqai-key-input:focus { border-color: rgba(99,102,241,0.5); }
+.eqai-key-link {
+  font-size: 0.75rem;
+  color: #60a5fa;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.eqai-key-link:hover { color: #93c5fd; text-decoration: underline; }
+
+/* Analyze button */
+.eqai-analyze-btn {
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  border: none;
+  border-radius: 10px;
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 700;
+  padding: 10px 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+  transition: opacity 0.18s, box-shadow 0.18s;
+  box-shadow: 0 4px 14px rgba(99,102,241,0.35);
+}
+.eqai-analyze-btn:hover:not(:disabled) {
+  opacity: 0.9;
+  box-shadow: 0 6px 20px rgba(99,102,241,0.5);
+}
+.eqai-analyze-btn--loading { opacity: 0.7; cursor: not-allowed; }
+
+/* Loading */
+.eqai-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 20px;
+  color: #94a3b8;
+  font-size: 0.85rem;
+}
+
+/* Placeholder */
+.eqai-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 28px 20px;
+  text-align: center;
+}
+.eqai-placeholder-icon { font-size: 2.5rem; opacity: 0.4; }
+.eqai-placeholder-text { font-size: 0.88rem; color: #94a3b8; }
+.eqai-placeholder-sub  { font-size: 0.75rem; color: #475569; max-width: 400px; }
+
+/* Verdict banner */
+.eqai-verdict-banner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border: 1px solid;
+  border-radius: 14px;
+  padding: 14px 18px;
+  flex-wrap: wrap;
+}
+.eqai-verdict-icon { font-size: 2rem; flex-shrink: 0; }
+.eqai-verdict-center { display: flex; flex-direction: column; gap: 3px; flex: 1; }
+.eqai-verdict-label { font-size: 1.1rem; font-weight: 800; letter-spacing: 0.04em; }
+.eqai-verdict-conf { font-size: 0.75rem; color: #64748b; }
+.eqai-verdict-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.eqai-cap-alloc { font-size: 0.82rem; font-weight: 700; }
+.eqai-risk-pill {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 10px;
+  border-radius: 20px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.risk-high   { background: rgba(248,113,113,0.15); color: #f87171; border: 1px solid rgba(248,113,113,0.3); }
+.risk-medium { background: rgba(251,191,36,0.15);  color: #fbbf24; border: 1px solid rgba(251,191,36,0.3); }
+.risk-low    { background: rgba(74,222,128,0.12);  color: #4ade80; border: 1px solid rgba(74,222,128,0.3); }
+
+/* Structural card */
+.eqai-struct-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid;
+  border-radius: 12px;
+  padding: 12px 16px;
+}
+.eqai-struct-icon { font-size: 1.6rem; flex-shrink: 0; }
+.eqai-struct-info { flex: 1; min-width: 0; }
+.eqai-struct-label { font-size: 0.88rem; font-weight: 700; margin-bottom: 3px; }
+.eqai-struct-reasoning { font-size: 0.76rem; color: #94a3b8; line-height: 1.5; }
+.eqai-struct-conf { font-size: 1rem; font-weight: 800; color: #64748b; flex-shrink: 0; }
+
+/* Main grid */
+.eqai-main-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 12px;
+}
+
+/* Section card */
+.eqai-section-card {
+  background: rgba(255,255,255,0.025);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 12px;
+  padding: 14px;
+}
+.eqai-section-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 12px;
+}
+
+/* Quality scores */
+.eqai-composite-ring {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+  margin-bottom: 12px;
+}
+.eqai-composite-val { font-size: 2rem; font-weight: 800; }
+.eqai-composite-lbl { font-size: 0.85rem; color: #64748b; }
+.eqai-score-row {
+  display: grid;
+  grid-template-columns: 120px 1fr 36px;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.eqai-score-lbl { font-size: 0.72rem; color: #94a3b8; }
+.eqai-score-bar-wrap {
+  height: 5px;
+  background: rgba(255,255,255,0.07);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.eqai-score-bar {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+.eqai-score-num { font-size: 0.72rem; font-weight: 700; text-align: right; }
+
+/* Valuation */
+.eqai-val-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.eqai-val-item { display: flex; flex-direction: column; gap: 3px; }
+.eqai-val-lbl { font-size: 0.65rem; color: #475569; text-transform: uppercase; letter-spacing: 0.04em; }
+.eqai-val-val { font-size: 0.8rem; font-weight: 600; color: #e2e8f0; text-transform: capitalize; }
+
+/* Momentum */
+.eqai-mom-list { display: flex; flex-direction: column; gap: 8px; }
+.eqai-mom-item { display: flex; justify-content: space-between; align-items: center; }
+.eqai-mom-lbl { font-size: 0.72rem; color: #64748b; }
+.eqai-mom-val { font-size: 0.75rem; font-weight: 700; color: #e2e8f0; text-transform: capitalize; }
+
+/* Price targets */
+.eqai-targets-row {
+  background: rgba(255,255,255,0.025);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 12px;
+  padding: 14px;
+}
+.eqai-targets-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+}
+.eqai-target-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px;
+  border-radius: 10px;
+  text-align: center;
+}
+.eqai-target--bear { background: rgba(248,113,113,0.08); border: 1px solid rgba(248,113,113,0.2); }
+.eqai-target--base { background: rgba(251,191,36,0.08);  border: 1px solid rgba(251,191,36,0.2); }
+.eqai-target--bull { background: rgba(74,222,128,0.08);  border: 1px solid rgba(74,222,128,0.2); }
+.eqai-target-lbl { font-size: 0.68rem; color: #64748b; }
+.eqai-target-val { font-size: 1rem; font-weight: 800; color: #e2e8f0; font-variant-numeric: tabular-nums; }
+.eqai-target-method { font-size: 0.7rem; color: #475569; margin-top: 8px; font-style: italic; }
+
+/* Probabilities */
+.eqai-prob-row {
+  display: grid;
+  grid-template-columns: 160px 1fr 46px;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.eqai-prob-lbl { font-size: 0.72rem; color: #94a3b8; }
+.eqai-prob-bar-wrap {
+  height: 6px;
+  background: rgba(255,255,255,0.07);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.eqai-prob-bar {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+.eqai-prob-num { font-size: 0.72rem; font-weight: 700; text-align: right; }
+
+/* Risks & Catalysts */
+.eqai-rc-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.eqai-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.eqai-list--risks li::before { content: '⚠️ '; font-size: 0.72rem; }
+.eqai-list--cats  li::before { content: '💡 '; font-size: 0.72rem; }
+.eqai-list li { font-size: 0.76rem; color: #94a3b8; line-height: 1.45; }
+
+/* Analyst summary */
+.eqai-summary-box {
+  background: rgba(99,102,241,0.07);
+  border: 1px solid rgba(99,102,241,0.2);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+.eqai-summary-title { font-size: 0.78rem; font-weight: 700; color: #a78bfa; margin-bottom: 8px; }
+.eqai-summary-body { font-size: 0.82rem; color: #cbd5e1; line-height: 1.65; }
+
+/* Capital reasoning */
+.eqai-cap-reason {
+  font-size: 0.78rem;
+  color: #94a3b8;
+  padding: 8px 12px;
+  background: rgba(255,255,255,0.03);
+  border-radius: 8px;
+  line-height: 1.5;
+}
+
+/* Error */
+.eqai-error {
+  padding: 12px 16px;
+  background: rgba(248,113,113,0.1);
+  border: 1px solid rgba(248,113,113,0.25);
+  border-radius: 10px;
+  color: #fca5a5;
+  font-size: 0.82rem;
+}
+.eqai-error a { color: #60a5fa; }
+
+/* Disclaimer */
+.eqai-disclaimer {
+  font-size: 0.7rem;
+  color: #475569;
+  line-height: 1.5;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255,255,255,0.05);
+}
+.eqai-disclaimer strong { color: #64748b; }
+
+/* Analysis section container */
+.idx-analysis-section,
+.us-analysis-section {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255,255,255,0.07);
+}
+.idx-analysis-section h3,
+.us-analysis-section h3 {
+  margin: 0 0 14px;
+  font-size: 1rem;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .eqai-main-grid     { grid-template-columns: 1fr; }
+  .eqai-rc-grid       { grid-template-columns: 1fr; }
+  .eqai-targets-grid  { grid-template-columns: 1fr; }
+  .eqai-funds-strip   { flex-direction: row; flex-wrap: wrap; }
+  .eqai-prob-row      { grid-template-columns: 130px 1fr 40px; }
+  .eqai-score-row     { grid-template-columns: 100px 1fr 32px; }
 }
