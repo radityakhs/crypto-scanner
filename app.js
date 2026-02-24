@@ -702,37 +702,54 @@ function renderStockMovers(market, type) {
     }
 
     const now = new Date();
-    if (timeEl) timeEl.textContent = `Diperbarui ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
+    if (timeEl) timeEl.textContent = `Update ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
 
     const isCurrency = market === 'idx';
+
+    // Sector color map
+    const sectorColor = {
+        Banking:'#60a5fa', Technology:'#a78bfa', Mining:'#fbbf24',
+        Consumer:'#34d399', Healthcare:'#f472b6', Infrastructure:'#38bdf8',
+        Property:'#fb923c', Financials:'#818cf8', Energy:'#facc15',
+        Industrials:'#4ade80',
+    };
+
     grid.innerHTML = data.map((s, i) => {
-        const pos   = s.change >= 0;
-        const chCls = pos ? 'mover-change positive' : 'mover-change negative';
-        const chSign= pos ? '+' : '';
+        const pos      = s.change >= 0;
+        const chSign   = pos ? '+' : '';
+        const chColor  = pos ? '#4ade80' : '#f87171';
+        const chBg     = pos ? 'rgba(74,222,128,0.1)' : 'rgba(248,113,113,0.1)';
         const priceStr = isCurrency
             ? `Rp ${s.price.toLocaleString('id-ID')}`
-            : `$${s.price.toLocaleString('en-US', {minimumFractionDigits:2,maximumFractionDigits:2})}`;
-        const volStr = formatLargeNumber(s.volume);
-        const inWL   = watchlist.includes(s.symbol);
+            : `$${s.price.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+        const volStr   = formatLargeNumber(s.volume);
+        const inWL     = watchlist.includes(s.symbol);
+        const sc       = sectorColor[s.sector] || '#94a3b8';
+        // Ticker initials for avatar
+        const initials = s.symbol.slice(0,2);
+        const rankColor = i === 0 ? '#fbbf24' : i === 1 ? '#94a3b8' : i === 2 ? '#fb923c' : '#475569';
 
         return `
-        <div class="mover-card ${pos ? 'mover-card--up' : 'mover-card--down'}">
-            <div class="mover-rank">${i+1}</div>
-            <div class="mover-info">
-                <div class="mover-symbol">
-                    ${s.symbol}
-                    <span class="mover-sector-tag">${s.sector}</span>
-                    ${s.exchange ? `<span class="mover-exchange-tag">${s.exchange}</span>` : ''}
+        <div class="sm-card ${pos ? 'sm-card--up' : 'sm-card--down'}">
+            <div class="sm-rank" style="color:${rankColor}">${i < 3 ? ['🥇','🥈','🥉'][i] : i+1}</div>
+            <div class="sm-avatar" style="background:${sc}20;border-color:${sc}40;color:${sc}">${initials}</div>
+            <div class="sm-info">
+                <div class="sm-symbol-row">
+                    <span class="sm-symbol">${s.symbol}</span>
+                    ${s.exchange ? `<span class="sm-exchange-badge">${s.exchange}</span>` : ''}
+                    <span class="sm-sector-tag" style="color:${sc};border-color:${sc}30;background:${sc}12">${s.sector}</span>
                 </div>
-                <div class="mover-name">${s.name}</div>
+                <div class="sm-name">${s.name}</div>
             </div>
-            <div class="mover-data">
-                <div class="mover-price">${priceStr}</div>
-                <div class="${chCls}">${chSign}${s.change.toFixed(2)}%</div>
-                <div class="mover-vol">Vol: ${volStr}</div>
-                <div class="mover-mcap">MCap: ${s.mktcap}</div>
+            <div class="sm-metrics">
+                <div class="sm-price">${priceStr}</div>
+                <div class="sm-change" style="color:${chColor};background:${chBg}">${chSign}${s.change.toFixed(2)}%</div>
             </div>
-            <button class="mover-wl-btn ${inWL ? 'in-watchlist' : ''}"
+            <div class="sm-extra">
+                <div class="sm-extra-item"><span class="sm-extra-lbl">Vol</span><span class="sm-extra-val">${volStr}</span></div>
+                <div class="sm-extra-item"><span class="sm-extra-lbl">MCap</span><span class="sm-extra-val">${s.mktcap}</span></div>
+            </div>
+            <button class="sm-wl-btn ${inWL ? 'sm-wl-btn--active' : ''}"
                     onclick="toggleStockWatchlist('${market}','${s.symbol}',this)"
                     title="${inWL ? 'Hapus dari watchlist' : 'Tambah ke watchlist'}">
                 ${inWL ? '★' : '☆'}
@@ -4161,50 +4178,146 @@ function addToPortfolio(coinId) {
 async function loadCryptoNews() {
     const newsList = document.getElementById('newsList');
     if (!newsList) return;
-    
+
     newsList.innerHTML = '<div class="news-loading"><span class="g-spinner"></span> Memuat berita kripto terbaru…</div>';
-    
-    // Mock news data
+
     setTimeout(() => {
+        const now = new Date();
+        const minsAgo = (m) => new Date(now - m * 60000).toISOString();
+
         const mockNews = [
             {
-                title: 'Bitcoin Reaches New All-Time High',
-                description: 'BTC surpasses previous records amid institutional adoption',
-                source: 'CoinDesk',
-                publishedAt: new Date().toISOString(),
-                sentiment: 'bullish'
+                title: 'Bitcoin Tembus $68K — Institutional Demand Terus Mengalir ke ETF',
+                description: 'BTC kembali menguji level resistance $68,000 didorong oleh pembelian besar ETF spot dari BlackRock dan Fidelity. Data on-chain menunjukkan whale accumulation meningkat 34% dalam 7 hari terakhir.',
+                source: 'CoinDesk', category: 'Bitcoin', sentiment: 'bullish',
+                publishedAt: minsAgo(12), readUrl: 'https://coindesk.com',
+                tags: ['BTC', 'ETF', 'Institutional']
             },
             {
-                title: 'Ethereum Upgrade Scheduled',
-                description: 'Next major network upgrade to improve scalability',
-                source: 'Cointelegraph',
-                publishedAt: new Date().toISOString(),
-                sentiment: 'bullish'
+                title: 'Ethereum L2 Activity Capai All-Time High — Base & Arbitrum Catat Rekor',
+                description: 'Transaksi harian di Layer 2 Ethereum melampaui 10 juta untuk pertama kalinya. Base (Coinbase) dan Arbitrum memimpin dengan kontribusi masing-masing 38% dan 31%.',
+                source: 'The Block', category: 'Ethereum', sentiment: 'bullish',
+                publishedAt: minsAgo(35), readUrl: 'https://theblock.co',
+                tags: ['ETH', 'Layer2', 'DeFi']
             },
             {
-                title: 'Regulatory Update: New Guidelines Released',
-                description: 'SEC announces clearer crypto trading guidelines',
-                source: 'Bloomberg Crypto',
-                publishedAt: new Date().toISOString(),
-                sentiment: 'neutral'
-            }
+                title: 'SEC Tunda Keputusan ETF Solana — Pasar Bereaksi Negatif',
+                description: 'SEC Amerika Serikat menunda pengambilan keputusan terkait ETF spot Solana untuk ketiga kalinya, memicu aksi jual ringan di SOL. Beberapa analis tetap bullish jangka menengah.',
+                source: 'Bloomberg Crypto', category: 'Regulation', sentiment: 'bearish',
+                publishedAt: minsAgo(58), readUrl: 'https://bloomberg.com/crypto',
+                tags: ['SOL', 'SEC', 'ETF']
+            },
+            {
+                title: 'DeFi TVL Kembali ke $100B — Yield Farming Season Mulai?',
+                description: 'Total Value Locked di protokol DeFi kembali menyentuh $100 miliar untuk pertama kalinya sejak 2022. Aave, Uniswap, dan MakerDAO menjadi kontributor terbesar kenaikan ini.',
+                source: 'DeFiLlama', category: 'DeFi', sentiment: 'bullish',
+                publishedAt: minsAgo(90), readUrl: 'https://defillama.com',
+                tags: ['DeFi', 'TVL', 'AAVE', 'UNI']
+            },
+            {
+                title: 'Tether Cetak $2B USDT Baru — Likuiditas Pasar Meningkat',
+                description: 'Tether mencetak 2 miliar USDT baru dalam 48 jam, menandakan permintaan likuiditas tinggi. Historis, pencetakan USDT masif sering mendahului rally altcoin.',
+                source: 'Cointelegraph', category: 'Stablecoin', sentiment: 'bullish',
+                publishedAt: minsAgo(140), readUrl: 'https://cointelegraph.com',
+                tags: ['USDT', 'Tether', 'Liquidity']
+            },
+            {
+                title: 'Regulasi MiCA Eropa Berlaku Penuh — Tantangan Bagi Exchange',
+                description: 'Regulasi MiCA (Markets in Crypto-Assets) Uni Eropa kini berlaku penuh. Beberapa exchange besar harus menyesuaikan operasi mereka atau menghadapi denda signifikan.',
+                source: 'Reuters', category: 'Regulation', sentiment: 'neutral',
+                publishedAt: minsAgo(210), readUrl: 'https://reuters.com',
+                tags: ['MiCA', 'EU', 'Regulation']
+            },
+            {
+                title: 'NVIDIA Umumkan Chip AI Baru — Sentimen Positif untuk Crypto Mining',
+                description: 'NVIDIA meluncurkan GPU generasi terbaru yang 40% lebih efisien untuk workload AI dan computational tasks. Beberapa analis melihat dampak positif jangka panjang untuk ekosistem kripto.',
+                source: 'TechCrunch', category: 'Macro', sentiment: 'bullish',
+                publishedAt: minsAgo(280), readUrl: 'https://techcrunch.com',
+                tags: ['NVDA', 'AI', 'Mining']
+            },
+            {
+                title: 'XRP Menang Sebagian di Pengadilan — Ripple Celebrations Berlanjut',
+                description: 'Hakim federal mengonfirmasi bahwa penjualan XRP ke ritel bukan securities. Ripple terus meraih kemenangan hukum meskipun kasus SEC belum selesai sepenuhnya.',
+                source: 'CryptoLaw', category: 'Altcoin', sentiment: 'bullish',
+                publishedAt: minsAgo(360), readUrl: 'https://cointelegraph.com',
+                tags: ['XRP', 'Ripple', 'SEC', 'Legal']
+            },
+            {
+                title: 'Bitcoin Dominance Turun ke 52% — Altcoin Season Signal?',
+                description: 'Bitcoin dominance turun dari 58% ke 52% dalam 2 minggu, mengindikasikan kemungkinan rotasi kapital ke altcoin. Sejarah menunjukkan ini sering mendahului altcoin rally besar.',
+                source: 'CoinMarketCap', category: 'Bitcoin', sentiment: 'neutral',
+                publishedAt: minsAgo(480), readUrl: 'https://coinmarketcap.com',
+                tags: ['BTC.D', 'Altseason', 'Dominance']
+            },
+            {
+                title: 'Hack Protokol DeFi — $45 Juta Dilarikan, Tim Sedang Investigasi',
+                description: 'Sebuah protokol DeFi anonim mengalami exploit flash loan dan kehilangan $45 juta. Hacker berhasil memanipulasi oracle harga. Tim sedang berkoordinasi dengan exchange untuk membekukan dana.',
+                source: 'Rekt News', category: 'Security', sentiment: 'bearish',
+                publishedAt: minsAgo(600), readUrl: 'https://rekt.news',
+                tags: ['Hack', 'DeFi', 'Security', 'FlashLoan']
+            },
         ];
-        
-        newsList.innerHTML = mockNews.map(article => `
-            <div class="news-article ${article.sentiment}">
-                <div class="news-header">
-                    <h4>${article.title}</h4>
-                    <span class="news-sentiment ${article.sentiment}">
-                        ${article.sentiment === 'bullish' ? '��' : article.sentiment === 'bearish' ? '📉' : '⚖️'}
-                    </span>
+
+        // Update stats
+        const bullCount = mockNews.filter(n => n.sentiment === 'bullish').length;
+        const bearCount = mockNews.filter(n => n.sentiment === 'bearish').length;
+        const sentScore = bullCount > bearCount ? 'Bullish 📈' : bearCount > bullCount ? 'Bearish 📉' : 'Neutral ⚖️';
+        const sentColor = bullCount > bearCount ? '#4ade80' : bearCount > bullCount ? '#f87171' : '#94a3b8';
+
+        const totalEl = document.getElementById('newsTotal');
+        const bullEl  = document.getElementById('newsBullish');
+        const bearEl  = document.getElementById('newsBearish');
+        const sentEl  = document.getElementById('sentimentScore');
+        if (totalEl) totalEl.textContent = mockNews.length;
+        if (bullEl)  bullEl.textContent  = bullCount;
+        if (bearEl)  bearEl.textContent  = bearCount;
+        if (sentEl)  { sentEl.textContent = sentScore; sentEl.style.color = sentColor; }
+
+        const timeAgo = (isoStr) => {
+            const diff = Math.floor((now - new Date(isoStr)) / 60000);
+            if (diff < 60)   return `${diff} menit lalu`;
+            if (diff < 1440) return `${Math.floor(diff/60)} jam lalu`;
+            return `${Math.floor(diff/1440)} hari lalu`;
+        };
+
+        const sentMeta = {
+            bullish: { label: '📈 Bullish', color: '#22c55e', bg: 'rgba(34,197,94,0.12)', border: '#22c55e' },
+            bearish: { label: '📉 Bearish', color: '#ef4444', bg: 'rgba(239,68,68,0.12)',  border: '#ef4444' },
+            neutral: { label: '⚖️ Neutral', color: '#94a3b8', bg: 'rgba(148,163,184,0.1)', border: '#94a3b8' },
+        };
+
+        const catColor = {
+            Bitcoin: '#f97316', Ethereum: '#8b5cf6', DeFi: '#22c55e', Regulation: '#f87171',
+            Altcoin: '#60a5fa', Stablecoin: '#fbbf24', Macro: '#a78bfa', Security: '#ef4444',
+        };
+
+        newsList.innerHTML = mockNews.map(article => {
+            const sm = sentMeta[article.sentiment];
+            const cc = catColor[article.category] || '#64748b';
+            const tags = (article.tags || []).map(t =>
+                `<span class="news-tag">#${t}</span>`
+            ).join('');
+            return `
+            <div class="news-card news-card--${article.sentiment}">
+                <div class="news-card-side" style="background:${sm.border}"></div>
+                <div class="news-card-body">
+                    <div class="news-card-top">
+                        <span class="news-cat-badge" style="color:${cc};border-color:${cc}22;background:${cc}14">${article.category}</span>
+                        <span class="news-sent-pill" style="color:${sm.color};background:${sm.bg};border:1px solid ${sm.border}30">${sm.label}</span>
+                        <span class="news-time-ago">🕐 ${timeAgo(article.publishedAt)}</span>
+                    </div>
+                    <div class="news-card-title">${article.title}</div>
+                    <div class="news-card-desc">${article.description}</div>
+                    <div class="news-card-footer">
+                        <div class="news-tags-row">${tags}</div>
+                        <div class="news-source-row">
+                            <span class="news-src-badge">📰 ${article.source}</span>
+                            <a class="news-read-link" href="${article.readUrl}" target="_blank" rel="noopener">Baca Selengkapnya →</a>
+                        </div>
+                    </div>
                 </div>
-                <p>${article.description}</p>
-                <div class="news-footer">
-                    <span class="news-source">${article.source}</span>
-                    <span class="news-time">${new Date(article.publishedAt).toLocaleString()}</span>
-                </div>
-            </div>
-        `).join('');
+            </div>`;
+        }).join('');
     }, 500);
 }
 
