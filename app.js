@@ -2051,6 +2051,58 @@ function getFuturesAnalysis(coin, marketChart = null) {
  */
 
 /**
+ * Hitung tanggal mulai & selesai masing-masing dari 8 fase bulan dalam siklus terdekat.
+ * Mengembalikan array 8 objek { start: Date, end: Date, daysUntil: number }
+ * diurutkan sesuai urutan standar: New Moon → Waning Crescent.
+ */
+function _getMoonPhaseDates() {
+    // Referensi New Moon yang diketahui (UTC) — 29 Jan 2025 12:36 UTC
+    const KNOWN_NEW_MOON = new Date('2025-01-29T12:36:00Z');
+    const LUNAR_CYCLE = 29.53059; // hari
+    const MS_PER_DAY  = 86400000;
+    const now = new Date();
+
+    const daysSince    = (now - KNOWN_NEW_MOON) / MS_PER_DAY;
+    const cyclesElapsed = Math.floor(daysSince / LUNAR_CYCLE);
+
+    // Offset awal setiap fase (dalam hari dari New Moon) berdasarkan astronomi:
+    // New Moon=0, Waxing Crescent≈1.85, First Quarter≈7.38, Waxing Gibbous≈11.07,
+    // Full Moon≈14.77, Waning Gibbous≈18.45, Last Quarter≈22.15, Waning Crescent≈25.84
+    const PHASE_OFFSETS = [0, 1.85, 7.38, 11.07, 14.77, 18.45, 22.15, 25.84];
+
+    // Hitung tanggal New Moon terdekat sebelum sekarang
+    const newMoonRecent = new Date(KNOWN_NEW_MOON.getTime() + cyclesElapsed * LUNAR_CYCLE * MS_PER_DAY);
+
+    const results = PHASE_OFFSETS.map((offset, i) => {
+        const nextOffset = i < 7 ? PHASE_OFFSETS[i + 1] : LUNAR_CYCLE;
+        const start = new Date(newMoonRecent.getTime() + offset * MS_PER_DAY);
+        const end   = new Date(newMoonRecent.getTime() + nextOffset * MS_PER_DAY - MS_PER_DAY);
+        const daysUntil = Math.ceil((start - now) / MS_PER_DAY);
+
+        // Jika fase ini sudah lewat di siklus ini, hitung di siklus berikutnya
+        const startNext = daysUntil < -Math.ceil(nextOffset - offset) + 1
+            ? new Date(newMoonRecent.getTime() + (offset + LUNAR_CYCLE) * MS_PER_DAY)
+            : start;
+        const endNext   = daysUntil < -Math.ceil(nextOffset - offset) + 1
+            ? new Date(newMoonRecent.getTime() + (nextOffset + LUNAR_CYCLE) * MS_PER_DAY - MS_PER_DAY)
+            : end;
+        const daysUntilFinal = Math.ceil((startNext - now) / MS_PER_DAY);
+
+        return { start: startNext, end: endNext, daysUntil: daysUntilFinal };
+    });
+
+    return results;
+}
+
+/**
+ * Format tanggal ke "24 Feb" atau "3 Mar" (bahasa Indonesia-friendly).
+ */
+function _fmtMoonDate(date) {
+    const MONTHS = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agt','Sep','Okt','Nov','Des'];
+    return `${date.getDate()} ${MONTHS[date.getMonth()]}`;
+}
+
+/**
  * Render panel Moon Phase — penjelasan lengkap + dampak ke crypto + faktor AI score.
  */
 function renderMoonPhasePanel(moonPhase, coin) {
@@ -2165,20 +2217,37 @@ function renderMoonPhasePanel(moonPhase, coin) {
             </div>
             <div class="moon-phase-table">
                 <div class="moon-phase-row moon-phase-row--header">
-                    <span>Fase</span><span>Bias</span><span>Pengaruh AI</span><span>Alasan</span>
+                    <span>Fase</span><span>Bias</span><span>Pengaruh AI</span><span>Tanggal</span><span>Countdown</span><span>Alasan</span>
                 </div>
-                ${phases.map((p, i) => {
-                    const isActive = i === moonPhase.phaseIndex;
-                    const wStr = p.aiWeight >= 0 ? `+${p.aiWeight}` : `${p.aiWeight}`;
-                    const wColor = p.aiWeight > 0 ? '#4ade80' : p.aiWeight < 0 ? '#f87171' : '#94a3b8';
-                    return `
-                    <div class="moon-phase-row ${isActive ? 'moon-phase-row--active' : ''}">
-                        <span>${p.icon} ${p.name}</span>
-                        <span style="color:${p.biasColor}">${p.bias}</span>
-                        <span style="color:${wColor};font-weight:700">${wStr} pts</span>
-                        <span style="color:#64748b;font-size:0.7rem">${p.cryptoImpact.split('—')[0].trim()}</span>
-                    </div>`;
-                }).join('')}
+                ${(() => {
+                    const phaseDates = _getMoonPhaseDates();
+                    return phases.map((p, i) => {
+                        const isActive = i === moonPhase.phaseIndex;
+                        const wStr = p.aiWeight >= 0 ? `+${p.aiWeight}` : `${p.aiWeight}`;
+                        const wColor = p.aiWeight > 0 ? '#4ade80' : p.aiWeight < 0 ? '#f87171' : '#94a3b8';
+                        const pd = phaseDates[i];
+                        const dateStr = `${_fmtMoonDate(pd.start)} – ${_fmtMoonDate(pd.end)}`;
+                        let countdownEl = '';
+                        if (isActive) {
+                            countdownEl = `<span class="moon-now-badge">Sekarang</span>`;
+                        } else if (pd.daysUntil <= 0) {
+                            countdownEl = `<span style="color:#94a3b8;font-size:0.7rem">Lewat</span>`;
+                        } else if (pd.daysUntil === 1) {
+                            countdownEl = `<span style="color:#fbbf24;font-size:0.7rem">Besok</span>`;
+                        } else {
+                            countdownEl = `<span style="color:#60a5fa;font-size:0.7rem">${pd.daysUntil} hari lagi</span>`;
+                        }
+                        return `
+                        <div class="moon-phase-row ${isActive ? 'moon-phase-row--active' : ''}">
+                            <span>${p.icon} ${p.name}</span>
+                            <span style="color:${p.biasColor}">${p.bias}</span>
+                            <span style="color:${wColor};font-weight:700">${wStr} pts</span>
+                            <span class="moon-date-range">${dateStr}</span>
+                            <span class="moon-countdown">${countdownEl}</span>
+                            <span style="color:#64748b;font-size:0.7rem">${p.cryptoImpact.split('—')[0].trim()}</span>
+                        </div>`;
+                    }).join('');
+                })()}
             </div>
         </div>
 

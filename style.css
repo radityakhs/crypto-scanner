@@ -3058,7 +3058,7 @@ img[src*="ic_dev"],        img[src*="ic_code"] {
 }
 .moon-phase-row {
   display: grid;
-  grid-template-columns: 160px 90px 70px 1fr;
+  grid-template-columns: 150px 80px 65px 110px 80px 1fr;
   gap: 8px;
   padding: 5px 8px;
   border-radius: 6px;
@@ -3076,6 +3076,26 @@ img[src*="ic_dev"],        img[src*="ic_code"] {
 .moon-phase-row--active {
   background: rgba(167,139,250,0.12);
   border: 1px solid rgba(167,139,250,0.2);
+}
+.moon-date-range {
+  color: #94a3b8;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.moon-countdown {
+  display: flex;
+  align-items: center;
+}
+.moon-now-badge {
+  background: linear-gradient(135deg, #6366f1, #a78bfa);
+  color: #fff;
+  font-size: 0.64rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 20px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
 }
 
 /* Disclaimer */
