@@ -1,175 +1,185 @@
 // ══════════════════════════════════════════════════════════════════════════════
-//  Stock Equity AI Analyst — Institutional Research Edition
+//  Stock Equity AI Analyst v2 — Institutional Research Edition
 //  Powered by Google Gemini · IDX + US Markets
-//  Quantitative Finance · Valuation · Market Microstructure · Macro
+//  Quantitative Finance · Valuation · Technical · Macro · Flow Analysis
 // ══════════════════════════════════════════════════════════════════════════════
 
 const stockEquityAI = (() => {
     'use strict';
 
-    // ── Gemini endpoint ────────────────────────────────────────────────────────
     const GEMINI_MODEL = 'gemini-2.0-flash';
     const GEMINI_URL   = (k) =>
         `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${k}`;
 
-    // ── System Prompt — Institutional Equity Research AI ──────────────────────
-    const SYSTEM_PROMPT = `You are an institutional-grade equity research AI trained in quantitative finance, macroeconomics, valuation modeling, and market microstructure analysis.
+    // ── System Prompt v2 ──────────────────────────────────────────────────────
+    const SYSTEM_PROMPT = `You are an institutional-grade equity research AI with expertise in quantitative finance, macroeconomics, valuation modeling, market microstructure, and capital allocation.
 
-Rules:
-- You do not hallucinate missing data.
-- You rely strictly on provided inputs.
-- If data is insufficient, state "insufficient_data".
-- You think probabilistically and structurally.
-- You provide numeric probabilities (0–100 only).
-- You output STRICT JSON only.
-- No markdown.
-- No explanations outside JSON.
-- Confidence score must reflect internal consistency of metrics.
-- You do not provide financial advice, only analytical output.
-- All narrative fields (summary, risks, catalysts) must be in simple Indonesian language.
+STRICT RULES:
+- Output STRICT JSON only. No markdown. No text outside JSON. No code blocks.
+- Use only provided data. Do not hallucinate missing metrics.
+- If a field is missing, use "insufficient_data" as the value.
+- All narrative fields MUST be in simple Indonesian (bahasa Indonesia), easy for a non-expert to understand.
+- Numeric scores: integers 0-100 only.
+- Probabilities: integers 0-100 only.
 
-Step 1 — Valuation Assessment:
-- PEG Ratio: if P/E and EPS growth are available, calculate PEG = P/E ÷ growth_rate
-- Price vs 52W range: calculate position percentile (0=52W low, 100=52W high)
-- Relative valuation: compare P/E vs sector average
-- Dividend attractiveness: dividend yield vs risk-free rate proxy (IDR: 6.5%, USD: 5.3%)
+=== ANALYTICAL FRAMEWORK ===
 
-Step 2 — Momentum & Technical:
-- 1-day change momentum: classify as strong/moderate/weak/negative
-- Volume vs average: abnormal volume = signal of institutional activity
-- Beta interpretation: high beta (>1.5) = volatile, low beta (<0.7) = defensive
+STEP 1 — Six-Dimension Business Evaluation (score each 0-100):
+1. Business Quality: ROE, ROA, net margin, competitive moat
+2. Earnings Sustainability: EPS growth trend, revenue growth, free cash flow growth
+3. Balance Sheet Strength: D/E ratio, interest coverage proxy, leverage risk
+4. Valuation Attractiveness: P/E vs industry, P/BV, PEG, EV/EBITDA, intrinsic value gap
+5. Technical Structure Strength: RSI, MACD, trend direction, relative strength vs index, volume change
+6. Macro Sensitivity: interest rate sensitivity, inflation exposure, GDP cycle dependency
 
-Step 3 — Quality Scoring (0-100):
-- Profitability Score: based on ROE, EPS positivity
-- Financial Health Score: based on D/E ratio
-- Valuation Score: based on P/E relative to sector norms
-- Momentum Score: based on price change + volume activity
-- Composite Quality Score: weighted average of above
+STEP 2 — Structural Classification (pick ONE):
+- high_quality_compounder: ROE>20%, consistent earnings growth, strong balance sheet, reasonable valuation
+- cyclical_opportunity: sector-driven upside, macro-aligned, earnings recovering
+- deep_value: significantly below intrinsic value, asset-backed, depressed sentiment
+- overvalued_growth: high growth priced in, stretched multiples (PEG>3 or P/E 40%+ above sector)
+- distribution_phase: institutional selling, weakening fundamentals, high downside risk
+- structurally_weak: loss-making or margin deterioration, high debt, negative earnings trend
 
-Step 4 — Structural Classification (pick ONE):
-A) value_play — undervalued vs fundamentals, margin of safety present
-B) growth_momentum — strong earnings growth + positive price action
-C) dividend_income — high yield, stable earnings, defensive characteristics
-D) turnaround_candidate — depressed price, recovery potential, elevated risk
-E) speculative_position — high beta, loss-making or volatile fundamentals
-F) overvalued_caution — stretched valuation vs peers, limited upside
+STEP 3 — Probabilities (0-100 integers):
+- upside_3_months: probability of price increase in 3 months
+- upside_12_months: probability of price increase in 12 months
+- downside_risk: probability of 15%+ drawdown from current price
+- earnings_deterioration_risk: probability of EPS declining next quarter
+- valuation_compression_risk: probability of multiple contraction in next 12 months
 
-Step 5 — Probability Estimates (0-100):
-- prob_outperform_3m: probability of outperforming sector index in 3 months
-- prob_outperform_12m: probability of outperforming in 12 months
-- prob_positive_return_3m: probability of positive return in 3 months
-- prob_drawdown_10pct: probability of 10%+ drawdown from current price
-- prob_dividend_cut: probability of dividend cut (if applicable)
+STEP 4 — Determine:
+- fair_value_status: "undervalued" | "fairly_valued" | "overvalued"
+- risk_level: "low" | "medium" | "high" | "extreme"
+- capital_allocation_bias: "aggressive_buy" | "moderate_buy" | "accumulate" | "hold" | "reduce" | "avoid"
 
-Step 6 — Capital Allocation Bias (pick ONE):
-- strong_buy: high conviction, significant upside, strong fundamentals
-- accumulate: good risk/reward, buy on dips, moderate conviction
-- hold: fairly valued, no new position trigger
-- reduce: stretched valuation or deteriorating fundamentals, trim
-- avoid: weak fundamentals, high downside risk
+STEP 5 — Three Core Scores (0-100):
+- intrinsic_conviction_score: overall confidence in fundamental value (higher = stronger conviction the stock has intrinsic worth)
+- risk_adjusted_alpha_score: expected return relative to risk taken (higher = better risk/reward)
+- confidence_score: internal consistency of available data (lower when key fields are missing)
 
-Output STRICT JSON only — no markdown, no text outside JSON:
+SCORING ADJUSTMENT RULES (apply internally before finalizing):
+- PENALIZE: if P/E > 30 AND rate_env = "rising" → reduce intrinsic_conviction_score by 8-15 points
+- PENALIZE: if fcf_growth is negative AND der > 1.5 → reduce intrinsic_conviction_score by 10-20 points, increase downside_risk by 10-20
+- BOOST risk_adjusted_alpha_score when ALL: roe > 20, rev_growth > 15, der < 1, rel_strength > 0
+- BOOST intrinsic_conviction_score when: peg < 1 AND composite quality > 65
+- REDUCE confidence_score by 5 for each critical missing field (pe, roe, eps_growth, rev_growth)
+- PENALIZE overvalued_growth: if pe_vs_sector_pct > 40% → flag valuation_compression_risk high
+
+STEP 6 — Price Targets (12 months, in local currency):
+- bull_case: optimistic scenario (sector re-rating + earnings beat)
+- base_case: DCF proxy / earnings growth × fair P/E or P/BV
+- bear_case: downside scenario (macro headwind + multiple compression)
+- methodology: brief method description
+
+OUTPUT FORMAT — Strict JSON only:
 {
   "ticker": "SYMBOL",
   "company": "Full Name",
   "market": "IDX|NYSE|NASDAQ",
   "sector": "...",
   "currency": "IDR|USD",
-  "timestamp": <unix seconds>,
   "analysis_date": "YYYY-MM-DD",
 
+  "dimension_scores": {
+    "business_quality": <0-100>,
+    "earnings_sustainability": <0-100>,
+    "balance_sheet_strength": <0-100>,
+    "valuation_attractiveness": <0-100>,
+    "technical_strength": <0-100>,
+    "macro_sensitivity": <0-100>,
+    "composite": <0-100>
+  },
+
   "valuation": {
-    "pe_ratio": <float or "insufficient_data">,
     "pe_assessment": "cheap|fair|expensive|extreme|n_a",
     "pe_vs_sector": "discount|inline|premium|extreme_premium",
-    "peg_ratio": <float or "insufficient_data">,
-    "price_vs_52w_percentile": <0-100>,
-    "div_yield_attractiveness": "high|moderate|low|none",
-    "intrinsic_value_bias": "undervalued|fairly_valued|overvalued|data_insufficient"
+    "peg_assessment": "attractive|fair|stretched|very_stretched|n_a",
+    "pbv_assessment": "deep_value|value|fair|expensive|n_a",
+    "ev_ebitda_assessment": "cheap|fair|expensive|n_a",
+    "intrinsic_value_bias": "significantly_undervalued|undervalued|fairly_valued|overvalued|significantly_overvalued",
+    "fair_value_status": "undervalued|fairly_valued|overvalued"
   },
 
-  "quality_scores": {
-    "profitability": <0-100 or "insufficient_data">,
-    "financial_health": <0-100 or "insufficient_data">,
-    "valuation_score": <0-100 or "insufficient_data">,
-    "momentum": <0-100 or "insufficient_data">,
-    "composite_quality": <0-100 or "insufficient_data">
+  "technical": {
+    "trend": "strong_uptrend|uptrend|sideways|downtrend|strong_downtrend",
+    "rsi_signal": "oversold|neutral|overbought",
+    "macd_signal": "bullish|neutral|bearish",
+    "volume_momentum": "surging|above_average|normal|below_average|declining",
+    "relative_strength_vs_index": "outperforming|inline|underperforming"
   },
 
-  "momentum_analysis": {
-    "price_trend_1d": "STRONG_UP|UP|FLAT|DOWN|STRONG_DOWN",
-    "volume_signal": "ABNORMAL_HIGH|ABOVE_AVERAGE|NORMAL|BELOW_AVERAGE",
-    "beta_category": "very_volatile|volatile|moderate|defensive|very_defensive",
-    "institutional_activity_signal": "accumulation|neutral|distribution",
-    "52w_position": "near_high|upper_half|middle|lower_half|near_low"
+  "flow_sentiment": {
+    "institutional_bias": "accumulation|neutral|distribution",
+    "insider_signal": "bullish|neutral|bearish",
+    "news_sentiment": "positive|neutral|negative",
+    "smart_money_direction": "buying|neutral|selling"
   },
 
-  "structural_classification": "value_play|growth_momentum|dividend_income|turnaround_candidate|speculative_position|overvalued_caution",
+  "structural_classification": "high_quality_compounder|cyclical_opportunity|deep_value|overvalued_growth|distribution_phase|structurally_weak",
   "structural_confidence": <0-100>,
-  "structural_reasoning": "<2 sentences max, factual, in Indonesian>",
+  "structural_reasoning": "<2 sentences max, factual, Indonesian>",
 
   "probabilities": {
-    "prob_outperform_3m": <0-100>,
-    "prob_outperform_12m": <0-100>,
-    "prob_positive_return_3m": <0-100>,
-    "prob_drawdown_10pct": <0-100>,
-    "prob_dividend_cut": <0-100 or "not_applicable">
+    "upside_3_months": <0-100>,
+    "upside_12_months": <0-100>,
+    "downside_risk": <0-100>,
+    "earnings_deterioration_risk": <0-100>,
+    "valuation_compression_risk": <0-100>
   },
 
-  "capital_allocation": "strong_buy|accumulate|hold|reduce|avoid",
-  "capital_reasoning": "<1 sentence in Indonesian>",
+  "capital_allocation_bias": "aggressive_buy|moderate_buy|accumulate|hold|reduce|avoid",
+  "capital_reasoning": "<1 sentence Indonesian>",
+
+  "scores": {
+    "intrinsic_conviction_score": <0-100>,
+    "risk_adjusted_alpha_score": <0-100>,
+    "confidence_score": <0-100>
+  },
+
+  "risk_level": "low|medium|high|extreme",
+  "return_potential": "high|moderate|low|negative",
 
   "price_targets": {
-    "bull_case": <float or "insufficient_data">,
-    "base_case": <float or "insufficient_data">,
-    "bear_case": <float or "insufficient_data">,
-    "methodology": "<brief method used, e.g. P/E rerating, DCF proxy>"
+    "bull_case": <number or "insufficient_data">,
+    "base_case": <number or "insufficient_data">,
+    "bear_case": <number or "insufficient_data">,
+    "methodology": "<brief method>"
   },
 
-  "overall_verdict": "STRONG_BUY|BUY|ACCUMULATE|HOLD|REDUCE|AVOID|INSUFFICIENT_DATA",
-  "verdict_confidence": <0-100>,
-  "risk_level": "HIGH|MEDIUM|LOW",
-  "return_potential": "HIGH|MODERATE|LOW|NEGATIVE",
+  "key_risks": ["<risk 1, Indonesian>", "<risk 2, Indonesian>", "<risk 3, Indonesian>"],
+  "key_catalysts": ["<catalyst 1, Indonesian>", "<catalyst 2, Indonesian>", "<catalyst 3, Indonesian>"],
 
-  "key_risks": ["<risk 1 in Indonesian>", "<risk 2 in Indonesian>", "<risk 3 in Indonesian>"],
-  "key_catalysts": ["<catalyst 1 in Indonesian>", "<catalyst 2 in Indonesian>", "<catalyst 3 in Indonesian>"],
-  "analyst_summary": "<3-4 kalimat dalam bahasa Indonesia yang mudah dipahami orang awam. Jelaskan kondisi fundamental, valuasi, dan outlook saham ini.>"
+  "plain_summary": "<4-5 kalimat ringkas dalam bahasa Indonesia yang mudah dipahami orang awam. Jelaskan: kondisi bisnis saham ini, apakah murah atau mahal, momentum teknikalnya, apa risikonya, dan rekomendasimu. Hindari jargon keuangan — anggap pembaca tidak punya latar belakang investasi.>"
 }`;
 
     // ── Sector P/E benchmarks ──────────────────────────────────────────────────
     const SECTOR_PE = {
-        // IDX
         Banking: 10, Infrastructure: 15, Consumer: 18, Mining: 8, Technology: 25,
-        Healthcare: 22, Property: 9, Financials: 12,
-        // US
-        Industrials: 20, Energy: 14,
+        Healthcare: 22, Property: 9, Financials: 14, Industrials: 20, Energy: 14,
     };
 
-    // ── State ──────────────────────────────────────────────────────────────────
     let _currentStock  = null;
     let _currentMarket = null;
     let _isLoading     = false;
 
-    // ── Build payload from stock record ───────────────────────────────────────
+    // ── Build payload ─────────────────────────────────────────────────────────
     function _buildPayload(stock, market) {
         const na = 'insufficient_data';
         const sectorPE = SECTOR_PE[stock.sector] ?? 18;
 
-        // 52W position percentile
-        const range = stock.w52h - stock.w52l;
-        const pct52w = range > 0 ? Math.round(((stock.price - stock.w52l) / range) * 100) : na;
+        const range = (stock.w52h ?? 0) - (stock.w52l ?? 0);
+        const pct52w = range > 0
+            ? Math.round(((stock.price - (stock.w52l ?? 0)) / range) * 100)
+            : na;
 
-        // Volume signal (rough heuristic — avg daily vol estimate)
-        // We don't have historical avg; use mktcap / price as proxy for float
-        const float_est = stock.mktcapRaw / stock.price;
-        const turnover_pct = float_est > 0 ? (stock.volume / float_est) * 100 : null;
-        let volume_signal = na;
-        if (turnover_pct !== null) {
-            if (turnover_pct > 5)       volume_signal = 'ABNORMAL_HIGH';
-            else if (turnover_pct > 2)  volume_signal = 'ABOVE_AVERAGE';
-            else if (turnover_pct > 0.5)volume_signal = 'NORMAL';
-            else                         volume_signal = 'BELOW_AVERAGE';
+        const float_est = stock.mktcapRaw && stock.price ? stock.mktcapRaw / stock.price : null;
+        let vol_signal = na;
+        if (float_est) {
+            const t = (stock.volume / float_est) * 100;
+            vol_signal = t > 5 ? 'ABNORMAL_HIGH' : t > 2 ? 'ABOVE_AVERAGE' : t > 0.5 ? 'NORMAL' : 'BELOW_AVERAGE';
         }
+
+        const g = (k) => stock[k] != null ? stock[k] : na;
 
         return {
             ticker:   stock.symbol,
@@ -177,116 +187,99 @@ Output STRICT JSON only — no markdown, no text outside JSON:
             market:   market === 'us' ? (stock.exchange || 'US') : 'IDX',
             sector:   stock.sector,
             currency: stock.currency || (market === 'us' ? 'USD' : 'IDR'),
-            price: {
-                current:     stock.price,
-                change_1d_pct: stock.change,
-                week52_high: stock.w52h  ?? na,
-                week52_low:  stock.w52l  ?? na,
-                pct_vs_52w_range: pct52w,
+            market_cap: stock.mktcap,
+
+            price_data: {
+                current:              stock.price,
+                change_1d_pct:        stock.change,
+                week52_high:          g('w52h'),
+                week52_low:           g('w52l'),
+                pct_vs_52w_range:     pct52w,
+                volume_today:         stock.volume,
+                volume_signal:        vol_signal,
             },
-            market_data: {
-                market_cap:         stock.mktcap,
-                market_cap_raw:     stock.mktcapRaw ?? na,
-                volume_today:       stock.volume,
-                exchange:           stock.exchange  ?? (market === 'idx' ? 'IDX' : na),
-                turnover_pct_float: turnover_pct !== null ? parseFloat(turnover_pct.toFixed(3)) : na,
-                volume_signal,
-            },
+
             fundamentals: {
-                pe_ratio:         stock.pe   ?? na,
-                eps_ttm:          stock.eps  ?? na,
-                roe_pct:          stock.roe  ?? na,
-                debt_equity:      stock.der  ?? na,
-                dividend_yield_pct: stock.div ?? na,
-                beta:             stock.beta  ?? na,
-                sector_avg_pe:    sectorPE,
-                pe_vs_sector_pct: stock.pe ? parseFloat(((stock.pe / sectorPE - 1) * 100).toFixed(1)) : na,
+                pe_ratio:             g('pe'),
+                eps_ttm:              g('eps'),
+                eps_growth_yoy_pct:   g('eps_growth'),
+                revenue_growth_yoy_pct: g('rev_growth'),
+                roe_pct:              g('roe'),
+                roa_pct:              g('roa'),
+                net_margin_pct:       g('net_margin'),
+                debt_equity:          g('der'),
+                free_cash_flow_growth_pct: g('fcf_growth'),
+                dividend_yield_pct:   g('div'),
+                beta:                 g('beta'),
+                pbv:                  g('pbv'),
+                peg_ratio:            g('peg'),
+                ev_ebitda:            g('ev_ebitda'),
+                sector_avg_pe:        sectorPE,
+                pe_vs_sector_pct:     stock.pe ? parseFloat(((stock.pe / sectorPE - 1) * 100).toFixed(1)) : na,
             },
-            context: {
-                analysis_date: new Date().toISOString().split('T')[0],
-                market_environment: market === 'idx'
-                    ? 'Indonesia Stock Exchange — emerging market, IDR denomination, domestic macro exposure'
-                    : 'US equity market — developed market, USD denomination, global macro exposure',
-                risk_free_rate_pct: market === 'idx' ? 6.5 : 5.3,
-                analyst_note: 'Use only provided data. Do not hallucinate missing financials.',
-            }
+
+            technical: {
+                rsi:                  g('rsi'),
+                macd_signal:          g('macd'),
+                trend_direction:      g('trend') || g('idx_trend'),
+                volume_change_30d_pct: g('vol_chg_30d'),
+                relative_strength_vs_index_pct: g('rel_strength'),
+            },
+
+            flow_sentiment: {
+                foreign_net_flow:     g('foreign_flow'),
+                institutional_ownership_pct: g('inst_own'),
+                insider_activity:     g('insider'),
+                news_sentiment_score: g('sentiment'),
+            },
+
+            macro_context: {
+                interest_rate_env:    g('rate_env'),
+                inflation_trend:      g('inflation'),
+                gdp_trend:            g('gdp_trend'),
+                index_trend:          g('idx_trend'),
+                risk_free_rate_pct:   market === 'idx' ? 6.5 : 5.3,
+                market_environment:   market === 'idx'
+                    ? 'Indonesia Stock Exchange — emerging market, IDR, domestic macro'
+                    : 'US equity market — developed, USD, global macro',
+            },
+
+            analyst_note: 'Use ONLY provided data. Apply all scoring rules. Penalize high PER in rising rate. Penalize weak FCF + high debt. Boost alpha when ROE>20, RevGrowth>15, DER<1, RelStrength>0. Output STRICT JSON only.',
         };
     }
 
     // ── Call Gemini ────────────────────────────────────────────────────────────
     async function _callGemini(apiKey, payload) {
-        const userMsg =
-            `Analyze this equity using ONLY the provided data. Output strict JSON only:\n\n`
-            + JSON.stringify(payload, null, 2);
-
         const body = {
             system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
-            contents: [{ role: 'user', parts: [{ text: userMsg }] }],
+            contents: [{
+                role: 'user',
+                parts: [{ text: 'Analyze this equity. Output strict JSON only:\n\n' + JSON.stringify(payload, null, 2) }]
+            }],
             generationConfig: {
-                temperature: 0.1,
-                topP: 0.8,
-                maxOutputTokens: 2500,
+                temperature:      0.1,
+                topP:             0.85,
+                maxOutputTokens:  3000,
                 responseMimeType: 'application/json',
             }
         };
-
         const resp = await fetch(GEMINI_URL(apiKey), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
         });
-
         if (!resp.ok) {
-            const err = await resp.json().catch(() => ({}));
-            throw new Error(err?.error?.message || `HTTP ${resp.status}`);
+            const e = await resp.json().catch(() => ({}));
+            throw new Error(e?.error?.message || `HTTP ${resp.status}`);
         }
-
-        const data    = await resp.json();
-        const raw     = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        const cleaned = raw.replace(/^```json?\s*/i, '').replace(/```\s*$/i, '').trim();
-        return JSON.parse(cleaned);
+        const data = await resp.json();
+        const raw  = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        const clean = raw.replace(/^```json?\s*/i,'').replace(/```\s*$/i,'').trim();
+        return JSON.parse(clean);
     }
 
-    // ── Public: open AI panel for a stock ─────────────────────────────────────
+    // ── Open Panel ────────────────────────────────────────────────────────────
     function openPanel(market, symbol) {
-        const allData = market === 'idx'
-            ? (typeof IDX_STOCKS_DATA !== 'undefined' ? IDX_STOCKS_DATA : [])
-            : (typeof US_STOCKS_DATA  !== 'undefined' ? US_STOCKS_DATA  : []);
-        const stock = allData.find(s => s.symbol === symbol);
-        if (!stock) return;
-
-        _currentStock  = stock;
-        _currentMarket = market;
-
-        // Show the analysis section
-        const sectionId   = market === 'idx' ? 'idxAnalysisSection' : 'usAnalysisSection';
-        const containerId = market === 'idx' ? 'idxAnalysisContainer' : 'usAnalysisContainer';
-        const section     = document.getElementById(sectionId);
-        const container   = document.getElementById(containerId);
-        if (!section || !container) return;
-
-        section.style.display = 'block';
-        container.innerHTML   = _renderPanel(stock, market, null, false);
-        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-
-    // ── Public: trigger analysis ───────────────────────────────────────────────
-    async function analyze(market, symbol) {
-        if (_isLoading) return;
-
-        const keyId   = market === 'idx' ? 'idxEquityAiKey' : 'usEquityAiKey';
-        const keyEl   = document.getElementById(keyId);
-        const apiKey  = keyEl ? keyEl.value.trim() : '';
-
-        // Also fall back to DEX Analyzer saved key
-        const savedKey = apiKey || sessionStorage.getItem('hf_gemini_key') || '';
-        if (!savedKey) {
-            _updateContainer(market, symbol,
-                `<div class="eqai-error">⚠️ Masukkan Gemini API Key. Gratis di: <a href="https://aistudio.google.com" target="_blank">aistudio.google.com</a></div>`);
-            return;
-        }
-        if (keyEl && savedKey) keyEl.value = savedKey;
-
         const allData = market === 'idx' ? IDX_STOCKS_DATA : US_STOCKS_DATA;
         const stock   = allData.find(s => s.symbol === symbol);
         if (!stock) return;
@@ -294,217 +287,223 @@ Output STRICT JSON only — no markdown, no text outside JSON:
         _currentStock  = stock;
         _currentMarket = market;
 
-        _isLoading = true;
+        const sectionId   = market === 'idx' ? 'idxAnalysisSection' : 'usAnalysisSection';
+        const containerId = market === 'idx' ? 'idxAnalysisContainer' : 'usAnalysisContainer';
+        const section   = document.getElementById(sectionId);
+        const container = document.getElementById(containerId);
+        if (!section || !container) return;
+
+        section.style.display = 'block';
+        container.innerHTML   = _renderPanel(stock, market, null, false);
+        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    // ── Analyze ───────────────────────────────────────────────────────────────
+    async function analyze(market, symbol) {
+        if (_isLoading) return;
+
+        const keyId  = market === 'idx' ? 'idxEquityAiKey' : 'usEquityAiKey';
+        const keyEl  = document.getElementById(keyId);
+        const rawKey = keyEl ? keyEl.value.trim() : '';
+        const apiKey = rawKey || sessionStorage.getItem('hf_gemini_key') || '';
+
+        if (!apiKey) {
+            const containerId = market === 'idx' ? 'idxAnalysisContainer' : 'usAnalysisContainer';
+            const c = document.getElementById(containerId);
+            if (c) c.insertAdjacentHTML('beforeend',
+                `<div class="eqai-error">⚠️ Masukkan Gemini API Key. Gratis di: <a href="https://aistudio.google.com" target="_blank">aistudio.google.com</a></div>`);
+            return;
+        }
+
+        const allData = market === 'idx' ? IDX_STOCKS_DATA : US_STOCKS_DATA;
+        const stock   = allData.find(s => s.symbol === symbol);
+        if (!stock) return;
+
+        _currentStock  = stock;
+        _currentMarket = market;
+        _isLoading     = true;
+
         const containerId = market === 'idx' ? 'idxAnalysisContainer' : 'usAnalysisContainer';
         const container   = document.getElementById(containerId);
-        if (container) {
-            container.innerHTML = _renderPanel(stock, market, null, true);
-        }
+        if (container) container.innerHTML = _renderPanel(stock, market, null, true);
 
         try {
             const payload = _buildPayload(stock, market);
-            const result  = await _callGemini(savedKey, payload);
-            sessionStorage.setItem('hf_gemini_key', savedKey);
-            if (container) {
-                container.innerHTML = _renderPanel(stock, market, result, false);
-            }
+            const result  = await _callGemini(apiKey, payload);
+            sessionStorage.setItem('hf_gemini_key', apiKey);
+            if (container) container.innerHTML = _renderPanel(stock, market, result, false);
         } catch (e) {
-            _updateContainer(market, symbol,
-                `<div class="eqai-error">❌ Gagal: ${e.message}</div>`);
+            const c = document.getElementById(containerId);
+            if (c) c.insertAdjacentHTML('beforeend',
+                `<div class="eqai-error">❌ Gagal: ${e.message}<br><small>Pastikan API key valid dan kuota tidak habis.</small></div>`);
         } finally {
             _isLoading = false;
         }
     }
 
-    function _updateContainer(market, symbol, html) {
-        const containerId = market === 'idx' ? 'idxAnalysisContainer' : 'usAnalysisContainer';
-        const container   = document.getElementById(containerId);
-        if (container) container.insertAdjacentHTML('beforeend', html);
-    }
-
-    // ── Render Panel ───────────────────────────────────────────────────────────
+    // ── Render Panel ──────────────────────────────────────────────────────────
     function _renderPanel(stock, market, result, loading) {
         const isCurrency = market === 'idx';
         const priceStr   = isCurrency
             ? `Rp ${stock.price.toLocaleString('id-ID')}`
             : `$${stock.price.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
-        const chColor    = stock.change >= 0 ? '#4ade80' : '#f87171';
-        const chSign     = stock.change >= 0 ? '+' : '';
-        const savedKey   = sessionStorage.getItem('hf_gemini_key') || '';
+        const chColor = stock.change >= 0 ? '#4ade80' : '#f87171';
+        const chSign  = stock.change >= 0 ? '+' : '';
+        const savedKey = sessionStorage.getItem('hf_gemini_key') || '';
+        const keyId    = market === 'idx' ? 'idxEquityAiKey' : 'usEquityAiKey';
 
-        // Key input area
-        const keyId = market === 'idx' ? 'idxEquityAiKey' : 'usEquityAiKey';
-        const keyInput = `
-        <div class="eqai-key-row">
-            <span class="eqai-key-label">🔑 Gemini API Key</span>
-            <input class="eqai-key-input" id="${keyId}" type="password"
-                   placeholder="AIza..." value="${savedKey}"
-                   onkeydown="if(event.key==='Enter')stockEquityAI.analyze('${market}','${stock.symbol}')">
-            <a class="eqai-key-link" href="https://aistudio.google.com" target="_blank" rel="noopener">Gratis →</a>
-        </div>`;
+        const pe   = stock.pe   != null ? `${stock.pe}×`  : 'N/A';
+        const roe  = stock.roe  != null ? `${stock.roe}%` : 'N/A';
+        const der  = stock.der  != null ? `${stock.der}`  : 'N/A';
+        const div  = stock.div  != null ? `${stock.div}%` : 'N/A';
+        const beta = stock.beta != null ? `${stock.beta}` : 'N/A';
+        const rsi  = stock.rsi  != null ? `RSI ${stock.rsi}` : '';
+        const trend = stock.idx_trend || stock.trend || '';
 
-        // Header
-        const header = `
-        <div class="eqai-header">
-            <div class="eqai-header-left">
-                <div class="eqai-ticker">${stock.symbol}</div>
-                <div class="eqai-company">${stock.name}</div>
-                <div class="eqai-meta">
-                    ${stock.exchange ? `<span class="eqai-badge eqai-badge--exchange">${stock.exchange}</span>` : '<span class="eqai-badge eqai-badge--exchange">IDX</span>'}
-                    <span class="eqai-badge eqai-badge--sector">${stock.sector}</span>
-                </div>
-            </div>
-            <div class="eqai-header-right">
-                <div class="eqai-price">${priceStr}</div>
-                <div class="eqai-change" style="color:${chColor}">${chSign}${stock.change.toFixed(2)}% (1D)</div>
-                <div class="eqai-mktcap">MCap: ${stock.mktcap}</div>
-            </div>
-        </div>`;
-
-        // Quick fundamentals strip
-        const pe    = stock.pe   != null ? `${stock.pe}×` : 'N/A';
-        const eps   = stock.eps  != null ? (isCurrency ? `Rp${stock.eps}` : `$${stock.eps}`) : 'N/A';
-        const roe   = stock.roe  != null ? `${stock.roe}%` : 'N/A';
-        const der   = stock.der  != null ? `${stock.der}` : 'N/A';
-        const div   = stock.div  != null ? `${stock.div}%` : 'N/A';
-        const beta  = stock.beta != null ? `${stock.beta}` : 'N/A';
-        const w52   = stock.w52h && stock.w52l
+        const w52range = stock.w52h && stock.w52l
             ? `${isCurrency?'Rp':'$'}${stock.w52l.toLocaleString()} – ${isCurrency?'Rp':'$'}${stock.w52h.toLocaleString()}`
             : 'N/A';
-        const range = stock.w52h && stock.w52l ? stock.w52h - stock.w52l : 0;
-        const pos52 = range > 0 ? ((stock.price - stock.w52l) / range * 100).toFixed(0) : 0;
+        const pos52 = stock.w52h && stock.w52l && stock.w52h > stock.w52l
+            ? Math.round(((stock.price - stock.w52l) / (stock.w52h - stock.w52l)) * 100) : 0;
 
-        const fundsStrip = `
-        <div class="eqai-funds-strip">
-            <div class="eqai-fund-item"><span class="eqai-fund-lbl">P/E</span><span class="eqai-fund-val">${pe}</span></div>
-            <div class="eqai-fund-item"><span class="eqai-fund-lbl">EPS</span><span class="eqai-fund-val">${eps}</span></div>
-            <div class="eqai-fund-item"><span class="eqai-fund-lbl">ROE</span><span class="eqai-fund-val" style="color:${stock.roe>20?'#4ade80':stock.roe>10?'#fbbf24':'#f87171'}">${roe}</span></div>
-            <div class="eqai-fund-item"><span class="eqai-fund-lbl">D/E</span><span class="eqai-fund-val">${der}</span></div>
-            <div class="eqai-fund-item"><span class="eqai-fund-lbl">Dividen</span><span class="eqai-fund-val" style="color:#60a5fa">${div}</span></div>
-            <div class="eqai-fund-item"><span class="eqai-fund-lbl">Beta</span><span class="eqai-fund-val">${beta}</span></div>
-            <div class="eqai-fund-item eqai-fund-item--wide">
-                <span class="eqai-fund-lbl">52W Range</span>
-                <span class="eqai-fund-val" style="font-size:0.7rem">${w52}</span>
-                <div class="eqai-52w-bar"><div class="eqai-52w-fill" style="width:${pos52}%"></div></div>
-            </div>
-        </div>`;
+        const roeColor = stock.roe > 20 ? '#4ade80' : stock.roe > 10 ? '#fbbf24' : '#f87171';
 
-        // Analyze button
-        const analyzeBtn = `
-        <button class="eqai-analyze-btn ${loading ? 'eqai-analyze-btn--loading' : ''}"
-                onclick="stockEquityAI.analyze('${market}','${stock.symbol}')"
-                ${loading ? 'disabled' : ''}>
-            ${loading
-                ? '<span class="g-spinner" style="width:14px;height:14px;border-width:2px"></span> Menganalisis…'
-                : '⚡ Analisis AI Sekarang'}
-        </button>`;
-
-        // Result rendering
         let resultHtml = '';
         if (loading) {
-            resultHtml = `
-            <div class="eqai-loading">
-                <span class="g-spinner"></span>
-                <span>Meminta analisis institutional-grade dari AI… (~5-10 detik)</span>
-            </div>`;
+            resultHtml = `<div class="eqai-loading"><span class="g-spinner"></span><span>Menganalisis institutional-grade… (~10 detik)</span></div>`;
         } else if (result) {
             resultHtml = _renderResult(result, stock, isCurrency);
         } else {
             resultHtml = `
             <div class="eqai-placeholder">
                 <div class="eqai-placeholder-icon">📊</div>
-                <div class="eqai-placeholder-text">Klik <strong>Analisis AI</strong> untuk mendapatkan riset ekuitas institutional-grade dari Gemini AI.</div>
-                <div class="eqai-placeholder-sub">Analisis mencakup: valuasi, kualitas fundamental, momentum, probabilitas return, risiko & katalis.</div>
+                <div class="eqai-placeholder-text">Klik <strong>⚡ Analisis AI</strong> untuk riset ekuitas institutional-grade.</div>
+                <div class="eqai-placeholder-sub">Mencakup: 6-dimensi evaluasi bisnis, valuasi multi-metrik, teknikal, flow institusi, probabilitas return, dan harga target.</div>
             </div>`;
         }
 
         return `
         <div class="eqai-panel">
-            ${header}
-            ${fundsStrip}
-            ${keyInput}
-            ${analyzeBtn}
-            <div class="eqai-result" id="eqaiResult_${market}_${stock.symbol}">
+            <div class="eqai-header">
+                <div class="eqai-header-left">
+                    <div class="eqai-ticker">${stock.symbol}</div>
+                    <div class="eqai-company">${stock.name}</div>
+                    <div class="eqai-meta">
+                        <span class="eqai-badge eqai-badge--exchange">${stock.exchange || 'IDX'}</span>
+                        <span class="eqai-badge eqai-badge--sector">${stock.sector}</span>
+                        ${trend ? `<span class="eqai-badge eqai-badge--trend" style="background:${trend.includes('up')?'rgba(74,222,128,0.12)':trend.includes('down')?'rgba(248,113,113,0.12)':'rgba(255,255,255,0.06)'};color:${trend.includes('up')?'#4ade80':trend.includes('down')?'#f87171':'#94a3b8'};border-color:transparent">${trend}</span>` : ''}
+                        ${rsi ? `<span class="eqai-badge eqai-badge--sector" style="color:${stock.rsi>70?'#f87171':stock.rsi<30?'#4ade80':'#94a3b8'}">${rsi}</span>` : ''}
+                    </div>
+                </div>
+                <div class="eqai-header-right">
+                    <div class="eqai-price">${priceStr}</div>
+                    <div class="eqai-change" style="color:${chColor}">${chSign}${stock.change.toFixed(2)}% (1D)</div>
+                    <div class="eqai-mktcap">MCap: ${stock.mktcap}</div>
+                </div>
+            </div>
+
+            <div class="eqai-funds-strip">
+                <div class="eqai-fund-item"><span class="eqai-fund-lbl">P/E</span><span class="eqai-fund-val">${pe}</span></div>
+                <div class="eqai-fund-item"><span class="eqai-fund-lbl">ROE</span><span class="eqai-fund-val" style="color:${roeColor}">${roe}</span></div>
+                <div class="eqai-fund-item"><span class="eqai-fund-lbl">D/E</span><span class="eqai-fund-val">${der}</span></div>
+                <div class="eqai-fund-item"><span class="eqai-fund-lbl">Dividen</span><span class="eqai-fund-val" style="color:#60a5fa">${div}</span></div>
+                <div class="eqai-fund-item"><span class="eqai-fund-lbl">Beta</span><span class="eqai-fund-val" style="color:${stock.beta>1.5?'#f87171':stock.beta>1?'#fbbf24':'#94a3b8'}">${beta}</span></div>
+                ${stock.pbv   != null ? `<div class="eqai-fund-item"><span class="eqai-fund-lbl">P/BV</span><span class="eqai-fund-val">${stock.pbv}×</span></div>` : ''}
+                ${stock.peg   != null ? `<div class="eqai-fund-item"><span class="eqai-fund-lbl">PEG</span><span class="eqai-fund-val" style="color:${stock.peg<1?'#4ade80':stock.peg<2?'#fbbf24':'#f87171'}">${stock.peg}</span></div>` : ''}
+                ${stock.net_margin != null ? `<div class="eqai-fund-item"><span class="eqai-fund-lbl">Margin</span><span class="eqai-fund-val">${stock.net_margin}%</span></div>` : ''}
+                <div class="eqai-fund-item eqai-fund-item--wide">
+                    <span class="eqai-fund-lbl">52W Range</span>
+                    <span class="eqai-fund-val" style="font-size:0.7rem">${w52range}</span>
+                    <div class="eqai-52w-bar"><div class="eqai-52w-fill" style="width:${pos52}%"></div></div>
+                </div>
+            </div>
+
+            <div class="eqai-key-row">
+                <span class="eqai-key-label">🔑 Gemini API Key</span>
+                <input class="eqai-key-input" id="${keyId}" type="password"
+                       placeholder="AIza…" value="${savedKey}"
+                       onkeydown="if(event.key==='Enter')stockEquityAI.analyze('${market}','${stock.symbol}')">
+                <a class="eqai-key-link" href="https://aistudio.google.com" target="_blank" rel="noopener">Gratis →</a>
+            </div>
+
+            <button class="eqai-analyze-btn ${loading ? 'eqai-analyze-btn--loading' : ''}"
+                    onclick="stockEquityAI.analyze('${market}','${stock.symbol}')"
+                    ${loading ? 'disabled' : ''}>
+                ${loading
+                    ? '<span class="g-spinner" style="width:14px;height:14px;border-width:2px"></span> Menganalisis…'
+                    : '⚡ Analisis AI Sekarang'}
+            </button>
+
+            <div id="eqaiResult_${market}_${stock.symbol}">
                 ${resultHtml}
             </div>
         </div>`;
     }
 
-    // ── Render AI Result ───────────────────────────────────────────────────────
+    // ── Render Result ─────────────────────────────────────────────────────────
     function _renderResult(r, stock, isCurrency) {
-        const na = (v) => v == null || v === 'insufficient_data' ? '—' : v;
-
-        // Verdict
-        const VERDICT_META = {
-            STRONG_BUY:        { color: '#4ade80', bg: 'rgba(74,222,128,0.12)', icon: '🚀', label: 'STRONG BUY' },
-            BUY:               { color: '#86efac', bg: 'rgba(134,239,172,0.1)',  icon: '📈', label: 'BUY' },
-            ACCUMULATE:        { color: '#34d399', bg: 'rgba(52,211,153,0.1)',   icon: '✅', label: 'ACCUMULATE' },
-            HOLD:              { color: '#fbbf24', bg: 'rgba(251,191,36,0.1)',   icon: '🔵', label: 'HOLD' },
-            REDUCE:            { color: '#fb923c', bg: 'rgba(251,146,60,0.1)',   icon: '⚠️', label: 'REDUCE' },
-            AVOID:             { color: '#f87171', bg: 'rgba(248,113,113,0.12)', icon: '🚫', label: 'AVOID' },
-            INSUFFICIENT_DATA: { color: '#94a3b8', bg: 'rgba(148,163,184,0.08)',icon: '❓', label: 'DATA KURANG' },
-        };
-        const vm = VERDICT_META[r.overall_verdict] || VERDICT_META.INSUFFICIENT_DATA;
-
-        // Capital allocation map
-        const CAP_META = {
-            strong_buy: { icon: '🔥', label: 'Masuk Besar', color: '#4ade80' },
-            accumulate: { icon: '✅', label: 'Akumulasi', color: '#34d399' },
-            hold:       { icon: '👁️', label: 'Tahan', color: '#fbbf24' },
-            reduce:     { icon: '🛡️', label: 'Kurangi', color: '#fb923c' },
-            avoid:      { icon: '🚫', label: 'Hindari', color: '#f87171' },
-        };
-        const capM = CAP_META[r.capital_allocation] || { icon: '—', label: r.capital_allocation, color: '#94a3b8' };
-
-        // Structural classification map
-        const STRUCT_META = {
-            value_play:          { icon: '💎', color: '#fbbf24', label: 'Value Play' },
-            growth_momentum:     { icon: '🚀', color: '#4ade80', label: 'Growth Momentum' },
-            dividend_income:     { icon: '💰', color: '#60a5fa', label: 'Dividend Income' },
-            turnaround_candidate:{ icon: '🔄', color: '#a78bfa', label: 'Turnaround' },
-            speculative_position:{ icon: '🎲', color: '#f97316', label: 'Spekulatif' },
-            overvalued_caution:  { icon: '⚠️', color: '#f87171', label: 'Overvalued' },
-        };
-        const stM = STRUCT_META[r.structural_classification] || { icon: '📊', color: '#94a3b8', label: r.structural_classification };
-
-        // Quality scores
-        const qs = r.quality_scores || {};
-        const scoreBar = (val, label, color) => {
-            const v = typeof val === 'number' ? val : 0;
-            const isNA = val === 'insufficient_data' || val == null;
-            return `
-            <div class="eqai-score-row">
-                <span class="eqai-score-lbl">${label}</span>
-                <div class="eqai-score-bar-wrap">
-                    <div class="eqai-score-bar" style="width:${isNA?0:v}%;background:${color}"></div>
-                </div>
-                <span class="eqai-score-num" style="color:${color}">${isNA?'—':v}</span>
-            </div>`;
-        };
-
-        const compositeColor = (v) => {
-            if (typeof v !== 'number') return '#94a3b8';
-            return v >= 75 ? '#4ade80' : v >= 55 ? '#fbbf24' : v >= 35 ? '#fb923c' : '#f87171';
-        };
-        const compQ = qs.composite_quality;
-        const compColor = compositeColor(compQ);
-
-        // Price targets
-        const pt = r.price_targets || {};
+        const na = (v) => (v == null || v === 'insufficient_data') ? '—' : v;
         const fmtPrice = (v) => {
-            if (v === 'insufficient_data' || v == null) return '—';
+            if (!v || v === 'insufficient_data') return '—';
             return isCurrency
                 ? `Rp ${Number(v).toLocaleString('id-ID')}`
                 : `$${Number(v).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
         };
 
-        // Probabilities
+        // ── Capital allocation meta ────────────────────────────────────────────
+        const CAP_META = {
+            aggressive_buy: { icon: '🚀', label: 'Masuk Agresif', color: '#4ade80' },
+            moderate_buy:   { icon: '📈', label: 'Beli Moderat',  color: '#86efac' },
+            accumulate:     { icon: '✅', label: 'Akumulasi',     color: '#34d399' },
+            hold:           { icon: '🔵', label: 'Tahan',         color: '#fbbf24' },
+            reduce:         { icon: '🛡️', label: 'Kurangi',       color: '#fb923c' },
+            avoid:          { icon: '🚫', label: 'Hindari',       color: '#f87171' },
+        };
+        const capM = CAP_META[r.capital_allocation_bias] || { icon: '—', label: r.capital_allocation_bias || '—', color: '#94a3b8' };
+
+        // ── Structural meta ────────────────────────────────────────────────────
+        const STRUCT_META = {
+            high_quality_compounder: { icon: '💎', color: '#4ade80', label: 'High Quality Compounder' },
+            cyclical_opportunity:    { icon: '🔄', color: '#fbbf24', label: 'Cyclical Opportunity' },
+            deep_value:              { icon: '🏷️', color: '#60a5fa', label: 'Deep Value' },
+            overvalued_growth:       { icon: '⚠️', color: '#f87171', label: 'Overvalued Growth' },
+            distribution_phase:      { icon: '📉', color: '#fb923c', label: 'Distribution Phase' },
+            structurally_weak:       { icon: '🔴', color: '#ef4444', label: 'Structurally Weak' },
+        };
+        const stM = STRUCT_META[r.structural_classification] || { icon: '📊', color: '#94a3b8', label: r.structural_classification || '—' };
+
+        // ── Risk level ─────────────────────────────────────────────────────────
+        const RISK_COLOR = { low: '#4ade80', medium: '#fbbf24', high: '#fb923c', extreme: '#f87171' };
+        const riskColor = RISK_COLOR[r.risk_level] || '#94a3b8';
+        const riskClass = `risk-${r.risk_level || 'medium'}`;
+
+        // ── Dimension scores ───────────────────────────────────────────────────
+        const ds = r.dimension_scores || {};
+        const dimBar = (val, label, color, icon) => {
+            const v = typeof val === 'number' ? val : 0;
+            const isNA = val === 'insufficient_data' || val == null;
+            const c = isNA ? '#475569' : color;
+            return `
+            <div class="eqai-score-row">
+                <span class="eqai-score-lbl">${icon} ${label}</span>
+                <div class="eqai-score-bar-wrap">
+                    <div class="eqai-score-bar" style="width:${isNA?0:v}%;background:${c}"></div>
+                </div>
+                <span class="eqai-score-num" style="color:${c}">${isNA?'—':v}</span>
+            </div>`;
+        };
+        const compV = ds.composite;
+        const compColor = typeof compV === 'number'
+            ? (compV >= 75 ? '#4ade80' : compV >= 55 ? '#fbbf24' : compV >= 35 ? '#fb923c' : '#f87171')
+            : '#94a3b8';
+
+        // ── Probability bars ───────────────────────────────────────────────────
         const pr = r.probabilities || {};
         const probBar = (val, label, danger) => {
             const v = typeof val === 'number' ? val : 0;
-            const isNA = val === 'insufficient_data' || val == null || val === 'not_applicable';
+            const isNA = val == null || val === 'insufficient_data';
             const barColor = danger
-                ? (v > 50 ? '#f87171' : v > 30 ? '#fb923c' : '#4ade80')
+                ? (v > 55 ? '#f87171' : v > 35 ? '#fb923c' : '#4ade80')
                 : (v > 65 ? '#4ade80' : v > 45 ? '#fbbf24' : '#f87171');
             return `
             <div class="eqai-prob-row">
@@ -516,89 +515,120 @@ Output STRICT JSON only — no markdown, no text outside JSON:
             </div>`;
         };
 
-        // Valuation
+        // ── Three core scores ─────────────────────────────────────────────────
+        const sc  = r.scores || {};
+        const scoreCircle = (val, label, color) => {
+            const v = typeof val === 'number' ? val : '—';
+            const c = typeof val === 'number'
+                ? (val >= 70 ? '#4ade80' : val >= 50 ? '#fbbf24' : '#f87171') : '#475569';
+            return `
+            <div class="eqai-score-circle" style="border-color:${c}20">
+                <div class="eqai-score-circle-val" style="color:${c}">${v}</div>
+                <div class="eqai-score-circle-lbl">${label}</div>
+            </div>`;
+        };
+
+        // ── Valuation ─────────────────────────────────────────────────────────
         const val = r.valuation || {};
         const IVB_COLOR = {
-            undervalued: '#4ade80', fairly_valued: '#fbbf24',
-            overvalued: '#f87171', data_insufficient: '#94a3b8',
+            significantly_undervalued: '#4ade80',
+            undervalued: '#86efac',
+            fairly_valued: '#fbbf24',
+            overvalued: '#fb923c',
+            significantly_overvalued: '#f87171',
         };
         const ivbColor = IVB_COLOR[val.intrinsic_value_bias] || '#94a3b8';
 
-        // Momentum
-        const mom = r.momentum_analysis || {};
+        // ── Technical ─────────────────────────────────────────────────────────
+        const tech = r.technical || {};
         const TREND_COLOR = {
-            STRONG_UP:'#4ade80', UP:'#86efac', FLAT:'#94a3b8',
-            DOWN:'#fca5a5', STRONG_DOWN:'#f87171',
+            strong_uptrend:'#4ade80', uptrend:'#86efac', sideways:'#94a3b8',
+            downtrend:'#fca5a5', strong_downtrend:'#f87171',
         };
-        const trendColor = TREND_COLOR[mom.price_trend_1d] || '#94a3b8';
+        const trendColor = TREND_COLOR[tech.trend] || '#94a3b8';
 
-        // Risk/Catalysts
+        // ── Flow & sentiment ──────────────────────────────────────────────────
+        const flow = r.flow_sentiment || {};
+
+        // ── Price targets ─────────────────────────────────────────────────────
+        const pt = r.price_targets || {};
+
+        // ── Lists ─────────────────────────────────────────────────────────────
         const risks = (r.key_risks || []).slice(0, 4);
         const cats  = (r.key_catalysts || []).slice(0, 4);
 
         return `
-        <!-- Verdict Banner -->
-        <div class="eqai-verdict-banner" style="background:${vm.bg};border-color:${vm.color}30">
-            <span class="eqai-verdict-icon">${vm.icon}</span>
+        <!-- ── Capital allocation + risk banner ─────────────────────────── -->
+        <div class="eqai-verdict-banner" style="background:rgba(99,102,241,0.07);border-color:rgba(99,102,241,0.2)">
+            <span class="eqai-verdict-icon">${capM.icon}</span>
             <div class="eqai-verdict-center">
-                <span class="eqai-verdict-label" style="color:${vm.color}">${vm.label}</span>
-                <span class="eqai-verdict-conf">Keyakinan ${na(r.verdict_confidence)}%</span>
+                <span class="eqai-verdict-label" style="color:${capM.color}">${capM.label}</span>
+                <span class="eqai-verdict-conf" style="color:#64748b">Return Potential: <b style="color:${r.return_potential==='high'?'#4ade80':r.return_potential==='negative'?'#f87171':'#fbbf24'}">${na(r.return_potential)}</b></span>
             </div>
             <div class="eqai-verdict-right">
-                <span class="eqai-cap-alloc" style="color:${capM.color}">${capM.icon} ${capM.label}</span>
-                <span class="eqai-risk-pill risk-${(r.risk_level||'').toLowerCase()}">${r.risk_level || '—'}</span>
+                <span class="eqai-cap-alloc" style="color:${capM.color}">${na(val.fair_value_status)?.replace(/_/g,' ')}</span>
+                <span class="eqai-risk-pill ${riskClass}">Risiko: ${r.risk_level || '—'}</span>
             </div>
         </div>
 
-        <!-- Structural Classification -->
-        <div class="eqai-struct-card" style="border-color:${stM.color}30;background:${stM.color}0a">
+        <!-- ── Structural classification ────────────────────────────────── -->
+        <div class="eqai-struct-card" style="border-color:${stM.color}30;background:${stM.color}08">
             <span class="eqai-struct-icon">${stM.icon}</span>
             <div class="eqai-struct-info">
                 <div class="eqai-struct-label" style="color:${stM.color}">${stM.label}</div>
                 <div class="eqai-struct-reasoning">${na(r.structural_reasoning)}</div>
             </div>
-            <span class="eqai-struct-conf">${na(r.structural_confidence)}%</span>
+            <span class="eqai-struct-conf" style="color:${stM.color}">${na(r.structural_confidence)}%</span>
         </div>
 
-        <!-- Main Grid: Quality + Valuation + Momentum -->
+        <!-- ── Three core scores ─────────────────────────────────────────── -->
+        <div class="eqai-scores-trio">
+            ${scoreCircle(sc.intrinsic_conviction_score, 'Conviction', '#a78bfa')}
+            ${scoreCircle(sc.risk_adjusted_alpha_score,  'Alpha Score', '#60a5fa')}
+            ${scoreCircle(sc.confidence_score,           'Confidence',  '#34d399')}
+        </div>
+
+        <!-- ── Main grid ──────────────────────────────────────────────────── -->
         <div class="eqai-main-grid">
 
-            <!-- Quality Scores -->
+            <!-- 6-Dimension Scores -->
             <div class="eqai-section-card">
-                <div class="eqai-section-title">📊 Quality Score</div>
+                <div class="eqai-section-title">📐 Evaluasi 6 Dimensi</div>
                 <div class="eqai-composite-ring">
-                    <span class="eqai-composite-val" style="color:${compColor}">${typeof compQ === 'number' ? compQ : '—'}</span>
-                    <span class="eqai-composite-lbl">/100</span>
+                    <span class="eqai-composite-val" style="color:${compColor}">${typeof compV==='number'?compV:'—'}</span>
+                    <span class="eqai-composite-lbl">/100 Composite</span>
                 </div>
-                ${scoreBar(qs.profitability,    '💹 Profitabilitas', '#4ade80')}
-                ${scoreBar(qs.financial_health, '🏦 Kesehatan Keuangan', '#60a5fa')}
-                ${scoreBar(qs.valuation_score,  '⚖️ Valuasi', '#fbbf24')}
-                ${scoreBar(qs.momentum,         '⚡ Momentum', '#a78bfa')}
+                ${dimBar(ds.business_quality,      'Kualitas Bisnis',    '#4ade80', '🏢')}
+                ${dimBar(ds.earnings_sustainability,'Keberlanjutan EPS',  '#86efac', '📈')}
+                ${dimBar(ds.balance_sheet_strength, 'Kesehatan Neraca',   '#60a5fa', '🏦')}
+                ${dimBar(ds.valuation_attractiveness,'Daya Tarik Valuasi','#fbbf24', '💰')}
+                ${dimBar(ds.technical_strength,     'Teknikal',           '#a78bfa', '📊')}
+                ${dimBar(ds.macro_sensitivity,      'Sensitivitas Makro', '#fb923c', '🌍')}
             </div>
 
             <!-- Valuation -->
             <div class="eqai-section-card">
-                <div class="eqai-section-title">💰 Valuasi</div>
+                <div class="eqai-section-title">💰 Valuasi Multi-Metrik</div>
                 <div class="eqai-val-grid">
                     <div class="eqai-val-item">
                         <span class="eqai-val-lbl">P/E Assessment</span>
-                        <span class="eqai-val-val">${na(val.pe_assessment)?.replace('_',' ')}</span>
+                        <span class="eqai-val-val">${na(val.pe_assessment)?.replace(/_/g,' ')}</span>
                     </div>
                     <div class="eqai-val-item">
-                        <span class="eqai-val-lbl">P/E vs Sektor</span>
+                        <span class="eqai-val-lbl">vs Sektor</span>
                         <span class="eqai-val-val">${na(val.pe_vs_sector)?.replace(/_/g,' ')}</span>
                     </div>
                     <div class="eqai-val-item">
-                        <span class="eqai-val-lbl">PEG Ratio</span>
-                        <span class="eqai-val-val">${na(val.peg_ratio)}</span>
+                        <span class="eqai-val-lbl">PEG</span>
+                        <span class="eqai-val-val">${na(val.peg_assessment)?.replace(/_/g,' ')}</span>
                     </div>
                     <div class="eqai-val-item">
-                        <span class="eqai-val-lbl">Posisi 52W</span>
-                        <span class="eqai-val-val">${na(val.price_vs_52w_percentile)}%</span>
+                        <span class="eqai-val-lbl">P/BV</span>
+                        <span class="eqai-val-val">${na(val.pbv_assessment)?.replace(/_/g,' ')}</span>
                     </div>
                     <div class="eqai-val-item">
-                        <span class="eqai-val-lbl">Yield Dividen</span>
-                        <span class="eqai-val-val">${na(val.div_yield_attractiveness)}</span>
+                        <span class="eqai-val-lbl">EV/EBITDA</span>
+                        <span class="eqai-val-val">${na(val.ev_ebitda_assessment)?.replace(/_/g,' ')}</span>
                     </div>
                     <div class="eqai-val-item">
                         <span class="eqai-val-lbl">Intrinsic Bias</span>
@@ -607,37 +637,49 @@ Output STRICT JSON only — no markdown, no text outside JSON:
                 </div>
             </div>
 
-            <!-- Momentum -->
+            <!-- Technical + Flow -->
             <div class="eqai-section-card">
-                <div class="eqai-section-title">⚡ Momentum</div>
+                <div class="eqai-section-title">⚡ Teknikal & Flow</div>
                 <div class="eqai-mom-list">
                     <div class="eqai-mom-item">
-                        <span class="eqai-mom-lbl">Tren 1D</span>
-                        <span class="eqai-mom-val" style="color:${trendColor}">${na(mom.price_trend_1d)?.replace(/_/g,' ')}</span>
+                        <span class="eqai-mom-lbl">Trend</span>
+                        <span class="eqai-mom-val" style="color:${trendColor}">${na(tech.trend)?.replace(/_/g,' ')}</span>
                     </div>
                     <div class="eqai-mom-item">
-                        <span class="eqai-mom-lbl">Volume Signal</span>
-                        <span class="eqai-mom-val">${na(mom.volume_signal)?.replace(/_/g,' ')}</span>
+                        <span class="eqai-mom-lbl">RSI</span>
+                        <span class="eqai-mom-val">${na(tech.rsi_signal)}</span>
                     </div>
                     <div class="eqai-mom-item">
-                        <span class="eqai-mom-lbl">Kategori Beta</span>
-                        <span class="eqai-mom-val">${na(mom.beta_category)?.replace(/_/g,' ')}</span>
+                        <span class="eqai-mom-lbl">MACD</span>
+                        <span class="eqai-mom-val" style="color:${tech.macd_signal==='bullish'?'#4ade80':tech.macd_signal==='bearish'?'#f87171':'#94a3b8'}">${na(tech.macd_signal)}</span>
                     </div>
                     <div class="eqai-mom-item">
-                        <span class="eqai-mom-lbl">Aktivitas Institusi</span>
-                        <span class="eqai-mom-val">${na(mom.institutional_activity_signal)}</span>
+                        <span class="eqai-mom-lbl">Volume Momentum</span>
+                        <span class="eqai-mom-val">${na(tech.volume_momentum)?.replace(/_/g,' ')}</span>
                     </div>
                     <div class="eqai-mom-item">
-                        <span class="eqai-mom-lbl">Posisi 52W</span>
-                        <span class="eqai-mom-val">${na(mom['52w_position'])?.replace(/_/g,' ')}</span>
+                        <span class="eqai-mom-lbl">Rel. Strength</span>
+                        <span class="eqai-mom-val" style="color:${tech.relative_strength_vs_index==='outperforming'?'#4ade80':tech.relative_strength_vs_index==='underperforming'?'#f87171':'#94a3b8'}">${na(tech.relative_strength_vs_index)?.replace(/_/g,' ')}</span>
+                    </div>
+                    <div class="eqai-mom-item" style="border-top:1px solid rgba(255,255,255,0.06);padding-top:8px;margin-top:4px">
+                        <span class="eqai-mom-lbl">Institusi</span>
+                        <span class="eqai-mom-val">${na(flow.institutional_bias)}</span>
+                    </div>
+                    <div class="eqai-mom-item">
+                        <span class="eqai-mom-lbl">Insider</span>
+                        <span class="eqai-mom-val" style="color:${flow.insider_signal==='bullish'?'#4ade80':flow.insider_signal==='bearish'?'#f87171':'#94a3b8'}">${na(flow.insider_signal)}</span>
+                    </div>
+                    <div class="eqai-mom-item">
+                        <span class="eqai-mom-lbl">Sentimen Berita</span>
+                        <span class="eqai-mom-val">${na(flow.news_sentiment)}</span>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Price Targets -->
+        <!-- ── Price Targets ──────────────────────────────────────────────── -->
         <div class="eqai-targets-row">
-            <div class="eqai-section-title" style="margin-bottom:10px">🎯 Price Target (12M)</div>
+            <div class="eqai-section-title" style="margin-bottom:10px">🎯 Price Target 12M — ${na(pt.methodology)}</div>
             <div class="eqai-targets-grid">
                 <div class="eqai-target-item eqai-target--bear">
                     <span class="eqai-target-lbl">🐻 Bear Case</span>
@@ -652,54 +694,52 @@ Output STRICT JSON only — no markdown, no text outside JSON:
                     <span class="eqai-target-val">${fmtPrice(pt.bull_case)}</span>
                 </div>
             </div>
-            ${pt.methodology ? `<div class="eqai-target-method">Metode: ${pt.methodology}</div>` : ''}
         </div>
 
-        <!-- Probabilities -->
-        <div class="eqai-section-card" style="margin-top:12px">
-            <div class="eqai-section-title">🎲 Probabilitas Return</div>
-            ${probBar(pr.prob_outperform_3m,     'Outperform Sektor 3M', false)}
-            ${probBar(pr.prob_outperform_12m,    'Outperform Sektor 12M', false)}
-            ${probBar(pr.prob_positive_return_3m,'Return Positif 3M', false)}
-            ${probBar(pr.prob_drawdown_10pct,    'Risiko Drawdown 10%+', true)}
-            ${probBar(pr.prob_dividend_cut,      'Risiko Potong Dividen', true)}
+        <!-- ── Probability bars ───────────────────────────────────────────── -->
+        <div class="eqai-section-card">
+            <div class="eqai-section-title">🎲 Probabilitas Return & Risiko</div>
+            ${probBar(pr.upside_3_months,             '📈 Naik 3 Bulan',              false)}
+            ${probBar(pr.upside_12_months,            '📈 Naik 12 Bulan',             false)}
+            ${probBar(pr.downside_risk,               '📉 Risiko Turun 15%+',          true)}
+            ${probBar(pr.earnings_deterioration_risk, '⚠️ Risiko Penurunan EPS',       true)}
+            ${probBar(pr.valuation_compression_risk,  '💥 Risiko Kompresi Valuasi',    true)}
         </div>
 
-        <!-- Risks & Catalysts -->
+        <!-- ── Risks & Catalysts ─────────────────────────────────────────── -->
         <div class="eqai-rc-grid">
-            <div class="eqai-section-card eqai-risks">
+            <div class="eqai-section-card">
                 <div class="eqai-section-title">⚠️ Key Risks</div>
                 <ul class="eqai-list eqai-list--risks">
-                    ${risks.map(r => `<li>${r}</li>`).join('') || '<li style="color:#64748b">—</li>'}
+                    ${risks.map(r => `<li>${r}</li>`).join('') || '<li style="color:#475569">—</li>'}
                 </ul>
             </div>
-            <div class="eqai-section-card eqai-catalysts">
+            <div class="eqai-section-card">
                 <div class="eqai-section-title">💡 Key Catalysts</div>
                 <ul class="eqai-list eqai-list--cats">
-                    ${cats.map(c => `<li>${c}</li>`).join('') || '<li style="color:#64748b">—</li>'}
+                    ${cats.map(c => `<li>${c}</li>`).join('') || '<li style="color:#475569">—</li>'}
                 </ul>
             </div>
         </div>
 
-        <!-- Analyst Summary -->
+        <!-- ── Plain-language summary ────────────────────────────────────── -->
         <div class="eqai-summary-box">
-            <div class="eqai-summary-title">🏦 Analyst Summary</div>
-            <div class="eqai-summary-body">${na(r.analyst_summary)}</div>
+            <div class="eqai-summary-title">🗣️ Ringkasan untuk Investor Awam</div>
+            <div class="eqai-summary-body">${na(r.plain_summary)}</div>
         </div>
 
-        <!-- Capital reasoning -->
+        <!-- ── Capital reasoning ─────────────────────────────────────────── -->
         <div class="eqai-cap-reason">
             <span style="color:${capM.color};font-weight:700">${capM.icon} ${capM.label}</span>
             — ${na(r.capital_reasoning)}
         </div>
 
         <div class="eqai-disclaimer">
-            ⚠️ Analisis ini dihasilkan oleh AI berdasarkan data yang tersedia. <strong>Bukan rekomendasi investasi.</strong>
-            Selalu lakukan riset mandiri dan konsultasikan dengan advisor keuangan profesional.
+            ⚠️ <strong>Bukan rekomendasi investasi.</strong> Analisis ini dihasilkan AI berdasarkan data statis.
+            Selalu lakukan riset mandiri (due diligence) dan konsultasikan dengan advisor keuangan profesional sebelum mengambil keputusan investasi.
         </div>`;
     }
 
-    // ── Public API ─────────────────────────────────────────────────────────────
     return { openPanel, analyze };
 
 })();

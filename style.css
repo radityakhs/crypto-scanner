@@ -7025,6 +7025,40 @@ img[src*="ic_dev"],        img[src*="ic_code"] {
 }
 .eqai-disclaimer strong { color: #64748b; }
 
+/* Three core scores trio */
+.eqai-scores-trio {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+  padding: 4px 0;
+}
+.eqai-score-circle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 90px;
+  padding: 12px 8px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid;
+  border-radius: 12px;
+}
+.eqai-score-circle-val {
+  font-size: 1.6rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.eqai-score-circle-lbl {
+  font-size: 0.65rem;
+  color: #64748b;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 /* Analysis section container */
 .idx-analysis-section,
 .us-analysis-section {
