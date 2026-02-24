@@ -7059,6 +7059,60 @@ img[src*="ic_dev"],        img[src*="ic_code"] {
   letter-spacing: 0.04em;
 }
 
+/* ── Dimension reasoning ─────────────────────────────── */
+.eqai-dim-reason {
+  font-size: 0.7rem;
+  color: #64748b;
+  line-height: 1.4;
+  padding: 3px 0 6px 22px;
+  border-left: 2px solid rgba(255,255,255,0.05);
+  margin-left: 2px;
+  margin-bottom: 2px;
+}
+
+/* ── Score Adjustment Box ────────────────────────────── */
+.eqai-adj-box {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+.eqai-adj-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 10px;
+}
+.eqai-adj-list { display: flex; flex-direction: column; gap: 8px; }
+.eqai-adj-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border-left: 3px solid;
+}
+.eqai-adj--boost   { background: rgba(74,222,128,0.06); border-color: #4ade80; }
+.eqai-adj--penalty { background: rgba(248,113,113,0.06); border-color: #f87171; }
+.eqai-adj--warning { background: rgba(251,191,36,0.06);  border-color: #fbbf24; }
+.eqai-adj--info    { background: rgba(148,163,184,0.06); border-color: #94a3b8; }
+.eqai-adj-icon { font-size: 0.9rem; margin-top: 1px; flex-shrink: 0; }
+.eqai-adj-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #cbd5e1;
+  display: block;
+  margin-bottom: 2px;
+}
+.eqai-adj-text {
+  font-size: 0.72rem;
+  color: #94a3b8;
+  line-height: 1.45;
+}
+
 /* Analysis section container */
 .idx-analysis-section,
 .us-analysis-section {

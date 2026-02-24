@@ -146,6 +146,25 @@ OUTPUT FORMAT — Strict JSON only:
     "methodology": "<brief method>"
   },
 
+  "dimension_reasoning": {
+    "business_quality": "<1 kalimat: faktor utama yang mendorong skor ini — ROE/ROA/margin>",
+    "earnings_sustainability": "<1 kalimat: tren EPS/revenue/FCF yang menjadi dasar skor>",
+    "balance_sheet_strength": "<1 kalimat: kondisi D/E, leverage, dan risiko neraca>",
+    "valuation_attractiveness": "<1 kalimat: kenapa valuasi dianggap murah/mahal/wajar berdasarkan P/E, PBV, PEG, EV/EBITDA>",
+    "technical_strength": "<1 kalimat: kenapa bullish/neutral/bearish — sebutkan RSI, MACD, trend, rel_strength yang jadi dasar>",
+    "macro_sensitivity": "<1 kalimat: seberapa sensitif saham ini terhadap suku bunga/inflasi/GDP>"
+  },
+
+  "score_adjustments": {
+    "alpha_boosted": <true|false>,
+    "alpha_boost_reason": "<jika alpha di-boost karena ROE>20+RevGrowth>15+DER<1+RelStrength>0, jelaskan dalam 1 kalimat. Jika tidak, isi null>",
+    "conviction_penalized": <true|false>,
+    "conviction_penalty_reason": "<jika conviction dikurangi karena PER tinggi di rising rate ATAU FCF negatif+DER>1.5, jelaskan. Jika tidak, isi null>",
+    "valuation_premium_flag": <true|false>,
+    "valuation_premium_reason": "<jika valuasi premium >40% di atas industri, jelaskan dampaknya. Jika tidak, isi null>",
+    "missing_fields_penalty": "<daftar field kritis yang hilang dan berapa poin confidence dikurangi, atau null jika tidak ada>"
+  },
+
   "key_risks": ["<risk 1, Indonesian>", "<risk 2, Indonesian>", "<risk 3, Indonesian>"],
   "key_catalysts": ["<catalyst 1, Indonesian>", "<catalyst 2, Indonesian>", "<catalyst 3, Indonesian>"],
 
@@ -479,10 +498,13 @@ OUTPUT FORMAT — Strict JSON only:
 
         // ── Dimension scores ───────────────────────────────────────────────────
         const ds = r.dimension_scores || {};
-        const dimBar = (val, label, color, icon) => {
+        const dimBar = (val, label, color, icon, reasoning) => {
             const v = typeof val === 'number' ? val : 0;
             const isNA = val === 'insufficient_data' || val == null;
             const c = isNA ? '#475569' : color;
+            const reasonHtml = reasoning
+                ? `<div class="eqai-dim-reason">${reasoning}</div>`
+                : '';
             return `
             <div class="eqai-score-row">
                 <span class="eqai-score-lbl">${icon} ${label}</span>
@@ -490,12 +512,18 @@ OUTPUT FORMAT — Strict JSON only:
                     <div class="eqai-score-bar" style="width:${isNA?0:v}%;background:${c}"></div>
                 </div>
                 <span class="eqai-score-num" style="color:${c}">${isNA?'—':v}</span>
-            </div>`;
+            </div>${reasonHtml}`;
         };
         const compV = ds.composite;
         const compColor = typeof compV === 'number'
             ? (compV >= 75 ? '#4ade80' : compV >= 55 ? '#fbbf24' : compV >= 35 ? '#fb923c' : '#f87171')
             : '#94a3b8';
+
+        // ── Dimension reasoning ───────────────────────────────────────────────
+        const dr = r.dimension_reasoning || {};
+
+        // ── Score adjustments ─────────────────────────────────────────────────
+        const sa = r.score_adjustments || {};
 
         // ── Probability bars ───────────────────────────────────────────────────
         const pr = r.probabilities || {};
@@ -588,6 +616,34 @@ OUTPUT FORMAT — Strict JSON only:
             ${scoreCircle(sc.confidence_score,           'Confidence',  '#34d399')}
         </div>
 
+        <!-- ── Score Adjustment Reasons ─────────────────────────────────── -->
+        ${(sa.alpha_boost_reason || sa.conviction_penalty_reason || sa.valuation_premium_reason || sa.missing_fields_penalty) ? `
+        <div class="eqai-adj-box">
+            <div class="eqai-adj-title">🔧 Penjelasan Penyesuaian Skor</div>
+            <div class="eqai-adj-list">
+                ${sa.alpha_boosted && sa.alpha_boost_reason ? `
+                <div class="eqai-adj-item eqai-adj--boost">
+                    <span class="eqai-adj-icon">⬆️</span>
+                    <div><span class="eqai-adj-label">Alpha Score Di-Boost</span><div class="eqai-adj-text">${sa.alpha_boost_reason}</div></div>
+                </div>` : ''}
+                ${sa.conviction_penalized && sa.conviction_penalty_reason ? `
+                <div class="eqai-adj-item eqai-adj--penalty">
+                    <span class="eqai-adj-icon">⬇️</span>
+                    <div><span class="eqai-adj-label">Conviction Di-Penalti</span><div class="eqai-adj-text">${sa.conviction_penalty_reason}</div></div>
+                </div>` : ''}
+                ${sa.valuation_premium_flag && sa.valuation_premium_reason ? `
+                <div class="eqai-adj-item eqai-adj--warning">
+                    <span class="eqai-adj-icon">⚠️</span>
+                    <div><span class="eqai-adj-label">Valuasi Premium Berlebih</span><div class="eqai-adj-text">${sa.valuation_premium_reason}</div></div>
+                </div>` : ''}
+                ${sa.missing_fields_penalty ? `
+                <div class="eqai-adj-item eqai-adj--info">
+                    <span class="eqai-adj-icon">ℹ️</span>
+                    <div><span class="eqai-adj-label">Data Tidak Lengkap</span><div class="eqai-adj-text">${sa.missing_fields_penalty}</div></div>
+                </div>` : ''}
+            </div>
+        </div>` : ''}
+
         <!-- ── Main grid ──────────────────────────────────────────────────── -->
         <div class="eqai-main-grid">
 
@@ -598,12 +654,12 @@ OUTPUT FORMAT — Strict JSON only:
                     <span class="eqai-composite-val" style="color:${compColor}">${typeof compV==='number'?compV:'—'}</span>
                     <span class="eqai-composite-lbl">/100 Composite</span>
                 </div>
-                ${dimBar(ds.business_quality,      'Kualitas Bisnis',    '#4ade80', '🏢')}
-                ${dimBar(ds.earnings_sustainability,'Keberlanjutan EPS',  '#86efac', '📈')}
-                ${dimBar(ds.balance_sheet_strength, 'Kesehatan Neraca',   '#60a5fa', '🏦')}
-                ${dimBar(ds.valuation_attractiveness,'Daya Tarik Valuasi','#fbbf24', '💰')}
-                ${dimBar(ds.technical_strength,     'Teknikal',           '#a78bfa', '📊')}
-                ${dimBar(ds.macro_sensitivity,      'Sensitivitas Makro', '#fb923c', '🌍')}
+                ${dimBar(ds.business_quality,      'Kualitas Bisnis',    '#4ade80', '🏢', dr.business_quality)}
+                ${dimBar(ds.earnings_sustainability,'Keberlanjutan EPS',  '#86efac', '📈', dr.earnings_sustainability)}
+                ${dimBar(ds.balance_sheet_strength, 'Kesehatan Neraca',   '#60a5fa', '🏦', dr.balance_sheet_strength)}
+                ${dimBar(ds.valuation_attractiveness,'Daya Tarik Valuasi','#fbbf24', '💰', dr.valuation_attractiveness)}
+                ${dimBar(ds.technical_strength,     'Teknikal',           '#a78bfa', '📊', dr.technical_strength)}
+                ${dimBar(ds.macro_sensitivity,      'Sensitivitas Makro', '#fb923c', '🌍', dr.macro_sensitivity)}
             </div>
 
             <!-- Valuation -->
