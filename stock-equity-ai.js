@@ -168,7 +168,27 @@ OUTPUT FORMAT — Strict JSON only:
   "key_risks": ["<risk 1, Indonesian>", "<risk 2, Indonesian>", "<risk 3, Indonesian>"],
   "key_catalysts": ["<catalyst 1, Indonesian>", "<catalyst 2, Indonesian>", "<catalyst 3, Indonesian>"],
 
-  "plain_summary": "<4-5 kalimat ringkas dalam bahasa Indonesia yang mudah dipahami orang awam. Jelaskan: kondisi bisnis saham ini, apakah murah atau mahal, momentum teknikalnya, apa risikonya, dan rekomendasimu. Hindari jargon keuangan — anggap pembaca tidak punya latar belakang investasi.>"
+  "plain_summary": "<4-5 kalimat ringkas dalam bahasa Indonesia yang mudah dipahami orang awam. Jelaskan: kondisi bisnis saham ini, apakah murah atau mahal, momentum teknikalnya, apa risikonya, dan rekomendasimu. Hindari jargon keuangan — anggap pembaca tidak punya latar belakang investasi.>",
+
+  "daily_scenarios": [
+    {
+      "day": 1,
+      "date": "YYYY-MM-DD",
+      "day_name": "Senin",
+      "phase_name": "The Silent Accumulation",
+      "phase_name_id": "Akumulasi Senyap",
+      "direction": "bullish",
+      "direction_confidence": 68,
+      "narrative": "2-3 kalimat analisis mengapa saham ini akan bergerak seperti ini hari ini — sebutkan faktor spesifik: teknikal, fundamental, flow asing, sentimen pasar, momentum IDX/S&P500. Bahasa Indonesia.",
+      "price_target_main": 9500,
+      "price_target_high": 9800,
+      "price_target_low": 9100,
+      "critical_hours_wib": "09.00-10.30 WIB (Pre-Opening + Opening IDX)",
+      "critical_hours_reason": "Sesi pembukaan IDX biasanya menentukan arah harian — perhatikan gap dan volume awal.",
+      "watch_for": "1 kalimat tentang apa yang harus diperhatikan trader hari ini.",
+      "alternative_scenario": "Kondisi jika skenario utama gagal — sebutkan level invalidasi dan target alternatif."
+    }
+  ]
 }`;
 
     // ── Sector P/E benchmarks ──────────────────────────────────────────────────
@@ -712,7 +732,7 @@ OUTPUT FORMAT — Strict JSON only:
                     <div class="eqai-mom-item">
                         <span class="eqai-mom-lbl">Volume Momentum</span>
                         <span class="eqai-mom-val">${na(tech.volume_momentum)?.replace(/_/g,' ')}</span>
-                    </div>
+                    </div>  
                     <div class="eqai-mom-item">
                         <span class="eqai-mom-lbl">Rel. Strength</span>
                         <span class="eqai-mom-val" style="color:${tech.relative_strength_vs_index==='outperforming'?'#4ade80':tech.relative_strength_vs_index==='underperforming'?'#f87171':'#94a3b8'}">${na(tech.relative_strength_vs_index)?.replace(/_/g,' ')}</span>
@@ -783,6 +803,81 @@ OUTPUT FORMAT — Strict JSON only:
             <div class="eqai-summary-title">🗣️ Ringkasan untuk Investor Awam</div>
             <div class="eqai-summary-body">${na(r.plain_summary)}</div>
         </div>
+
+        <!-- ── Daily Scenarios ───────────────────────────────────────────── -->
+        ${(() => {
+            const scenes = r.daily_scenarios || [];
+            if (!scenes.length) return '';
+            const DIR_META = {
+                bullish:  { icon: '📈', color: '#4ade80', bg: 'rgba(74,222,128,0.06)',  border: 'rgba(74,222,128,0.25)'  },
+                sideways: { icon: '↔️',  color: '#fbbf24', bg: 'rgba(251,191,36,0.06)',  border: 'rgba(251,191,36,0.25)'  },
+                bearish:  { icon: '📉', color: '#f87171', bg: 'rgba(248,113,113,0.06)', border: 'rgba(248,113,113,0.25)' },
+                volatile: { icon: '⚡', color: '#a78bfa', bg: 'rgba(167,139,250,0.06)', border: 'rgba(167,139,250,0.25)' },
+            };
+            const fmtS = (v) => {
+                if (!v) return '—';
+                const n = Number(v);
+                if (isCurrency) return 'Rp ' + n.toLocaleString('id-ID');
+                return n >= 1000 ? '$' + n.toLocaleString('en-US', {maximumFractionDigits:0})
+                     : '$' + n.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:4});
+            };
+            return `
+            <div class="eqai-section-card eqai-scenarios-section">
+                <div class="eqai-section-title">📅 Skenario Harian 3–5 Hari ke Depan</div>
+                <div class="eqai-scenarios-list">
+                ${scenes.map(day => {
+                    const dm = DIR_META[day.direction] || DIR_META.sideways;
+                    return `
+                    <div class="eqai-day-card" style="border-left:3px solid ${dm.color};background:${dm.bg}">
+                        <div class="eqai-day-header">
+                            <div class="eqai-day-left">
+                                <div class="eqai-day-num">Hari ${na(day.day)}</div>
+                                <div class="eqai-day-date">${na(day.day_name)}, ${na(day.date)}</div>
+                            </div>
+                            <div class="eqai-day-phase">
+                                <div class="eqai-phase-name">"${na(day.phase_name)}"</div>
+                                <div class="eqai-phase-name-id" style="color:${dm.color}">${na(day.phase_name_id)}</div>
+                            </div>
+                            <div class="eqai-day-dir" style="color:${dm.color}">
+                                ${dm.icon} ${(na(day.direction).charAt(0).toUpperCase() + na(day.direction).slice(1))}
+                                <div class="eqai-day-conf">${na(day.direction_confidence)}%</div>
+                            </div>
+                        </div>
+                        <div class="eqai-day-narrative">${na(day.narrative)}</div>
+                        <div class="eqai-day-targets">
+                            <div class="eqai-target-item eqai-target--low">
+                                <span class="eqai-target-lbl">🐻 Low</span>
+                                <span class="eqai-target-val">${fmtS(day.price_target_low)}</span>
+                            </div>
+                            <div class="eqai-target-item eqai-target--main">
+                                <span class="eqai-target-lbl">🎯 Target</span>
+                                <span class="eqai-target-val">${fmtS(day.price_target_main)}</span>
+                            </div>
+                            <div class="eqai-target-item eqai-target--high">
+                                <span class="eqai-target-lbl">🐂 High</span>
+                                <span class="eqai-target-val">${fmtS(day.price_target_high)}</span>
+                            </div>
+                        </div>
+                        <div class="eqai-day-clock">
+                            <span>⏰</span>
+                            <div>
+                                <div class="eqai-clock-time" style="color:${dm.color}">${na(day.critical_hours_wib)}</div>
+                                <div class="eqai-clock-reason">${na(day.critical_hours_reason)}</div>
+                            </div>
+                        </div>
+                        <div class="eqai-day-watch">
+                            <span>👁️</span>
+                            <span><strong>Perhatikan:</strong> ${na(day.watch_for)}</span>
+                        </div>
+                        <div class="eqai-day-alt">
+                            <span>🔄</span>
+                            <div><span class="eqai-alt-label">Alternatif: </span><span class="eqai-alt-text">${na(day.alternative_scenario)}</span></div>
+                        </div>
+                    </div>`;
+                }).join('')}
+                </div>
+            </div>`;
+        })()}
 
         <!-- ── Capital reasoning ─────────────────────────────────────────── -->
         <div class="eqai-cap-reason">

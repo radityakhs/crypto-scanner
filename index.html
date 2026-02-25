@@ -769,13 +769,24 @@
             <!-- ── EXIT STRATEGY ─────────────────────────────────── -->
             <section class="exit-strategy-section">
                 <div class="exit-strategy-header">
-                    <h2><img src="images/ic_development.svg" alt="" style="width:20px;height:20px;vertical-align:middle"> Advanced Exit Strategy</h2>
-                    <p class="info-text">💡 Klik "Analyze" pada coin di tabel untuk melihat exit strategy</p>
+                    <h2><img src="images/ic_development.svg" alt="" style="width:20px;height:20px;vertical-align:middle"> AI Daily Narrative — Skenario 5 Hari</h2>
+                    <p class="info-text">💡 Masukkan Gemini API Key → klik "Analyze" pada coin → AI menyusun narasi harian 5 hari ke depan</p>
+                </div>
+                <!-- API Key row -->
+                <div class="ame-key-row">
+                    <input id="ameKeyInput" type="password" placeholder="🔑 Gemini API Key (AIza...)"
+                        oninput="if(this.value) sessionStorage.setItem('hf_gemini_key',this.value.trim())"
+                        autocomplete="off">
+                    <button class="ame-key-btn" onclick="
+                        const k=document.getElementById('ameKeyInput').value.trim()||sessionStorage.getItem('hf_gemini_key')||'';
+                        if(k) document.getElementById('ameKeyInput').value=k;
+                        alert(k ? '✅ API Key tersimpan. Klik Analyze pada coin.' : '⚠️ Masukkan API Key terlebih dahulu.');
+                    ">💾 Simpan Key</button>
                 </div>
                 <div id="exitStrategyContainer" class="exit-strategy-container">
                     <div class="no-analysis">
                         <img src="images/ic_development.svg" style="width:48px;height:48px;opacity:0.3">
-                        <p>Pilih coin dari tabel → klik Analyze → Exit Strategy</p>
+                        <p>Masukkan API Key → Pilih coin → klik Analyze → Narasi 5 Hari</p>
                     </div>
                 </div>
             </section>
@@ -2203,6 +2214,16 @@
                     _okxInited = true;
                     okxTrading.init();
                 }
+            });
+        })();
+
+        // Restore saved API key into input fields on page load
+        (function () {
+            const saved = sessionStorage.getItem('hf_gemini_key') || '';
+            if (!saved) return;
+            ['ameKeyInput', 'hfaiKeyInput', 'eqaiKeyInput'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el && !el.value) el.value = saved;
             });
         })();
     </script>
