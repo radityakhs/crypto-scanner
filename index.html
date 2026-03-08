@@ -23,18 +23,27 @@
             </div>
         </header>
 
+        <!-- ── MACRO BAR ─────────────────────────────────────────────── -->
+        <div id="macroBar" class="macro-bar">
+            <div class="mbar-inner mbar-loading">
+                <span style="font-size:0.75rem;color:#64748b">Memuat data makro…</span>
+            </div>
+        </div>
+
         <!-- Navigation Tabs -->
         <div class="tabs">
             <button class="tab-btn active" data-tab="scanner"><img src="images/ic_dashboard_1.svg" alt="" style="width: 20px; height: 20px; vertical-align: middle;"> 🪙 Crypto Scanner</button>
             <button class="tab-btn" data-tab="dex-analyzer"><img src="images/ic_build.png" alt="" style="width: 20px; height: 20px; vertical-align: middle; border-radius:4px;"> 🔬 DEX Analyzer</button>
             <button class="tab-btn" data-tab="idx-stocks"><img src="images/ic_db.svg" alt="" style="width: 20px; height: 20px; vertical-align: middle;"> 🇮🇩 IDX Stocks</button>
-            <button class="tab-btn" data-tab="us-stocks"><img src="images/ic_rules.svg" alt="" style="width: 20px; height: 20px; vertical-align: middle;"> �� US Stocks</button>
+            <button class="tab-btn" data-tab="us-stocks"><img src="images/ic_rules.svg" alt="" style="width: 20px; height: 20px; vertical-align: middle;"> 🇺🇸 US Stocks</button>
             <button class="tab-btn" data-tab="news"><img src="images/ic_planet.svg" alt="" style="width: 20px; height: 20px; vertical-align: middle;"> News</button>
             <button class="tab-btn" data-tab="token-scanner"><img src="images/ic_aurora.svg" alt="" style="width: 20px; height: 20px; vertical-align: middle;"> New Tokens</button>
             <button class="tab-btn" data-tab="smart-money"><img src="images/ic_universe.svg" alt="" style="width: 20px; height: 20px; vertical-align: middle;"> Smart Money</button>
             <button class="tab-btn" data-tab="wallet"><img src="images/ic_fingerprint.svg" alt="" style="width: 20px; height: 20px; vertical-align: middle;"> Wallet Tracker</button>
             <button class="tab-btn" data-tab="history"><img src="images/ic_stars.svg" alt="" style="width: 20px; height: 20px; vertical-align: middle;"> Trading History</button>
             <button class="tab-btn" data-tab="portfolio"><img src="images/ic_performance.svg" alt="" style="width: 20px; height: 20px; vertical-align: middle;"> Portfolio</button>
+            <button class="tab-btn" data-tab="pt-tracker">📊 P&amp;L Tracker</button>
+            <button class="tab-btn" data-tab="alerts">🔔 Alerts</button>
             <button class="tab-btn" data-tab="okx">🟠 OKX Trading</button>
             <button class="tab-btn" data-tab="solana-swap">🪐 Solana Swap</button>
         </div>
@@ -2006,11 +2015,54 @@
     </div>
 
     <!-- ╔══════════════════════════════════════════════════════╗
+         ║              P&L TRACKER TAB                        ║
+         ╚══════════════════════════════════════════════════════╝ -->
+    <div id="pt-tracker" class="tab-content">
+        <div class="pt-wrap">
+            <div class="pt-page-header">
+                <h2>📊 Real-time P&amp;L Tracker</h2>
+                <p class="info-text">Catat pembelian aset kamu. Harga Crypto diambil live dari CoinGecko, saham IDX/US dari data lokal.</p>
+            </div>
+            <!-- Add Holding Form -->
+            <div id="ptFormContainer"></div>
+            <!-- Portfolio Table -->
+            <div id="ptContainer">
+                <div class="pt-empty">
+                    <div class="pt-empty-icon">📂</div>
+                    <div class="pt-empty-title">Portfolio kosong</div>
+                    <div class="pt-empty-sub">Tambahkan holdings di form di atas.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ╔══════════════════════════════════════════════════════╗
+         ║              AI ALERTS TAB                          ║
+         ╚══════════════════════════════════════════════════════╝ -->
+    <div id="alerts" class="tab-content">
+        <div class="pt-wrap">
+            <div class="pt-page-header">
+                <h2>🔔 AI Alert System</h2>
+                <p class="info-text">Set kondisi harga, perubahan 24h, atau RSI. AI memantau tiap 60 detik dan mengirim notifikasi + suara.</p>
+            </div>
+            <!-- Add Alert Form -->
+            <div id="alertFormContainer"></div>
+            <!-- Active Alerts -->
+            <div id="alertsContainer">
+                <div class="pt-empty">
+                    <div class="pt-empty-icon">🔕</div>
+                    <div class="pt-empty-title">Belum ada alert</div>
+                    <div class="pt-empty-sub">Tambahkan alert di form di atas.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ╔══════════════════════════════════════════════════════╗
          ║              OKX TRADING PANEL                      ║
          ╚══════════════════════════════════════════════════════╝ -->
     <div id="okx" class="tab-content">
         <div class="okx-wrap">
-
             <!-- Header bar -->
             <div class="okx-header">
                 <div class="okx-title">🟠 OKX Trading</div>
@@ -2205,6 +2257,9 @@
     <script src="solana-swap.js"></script>
     <script src="hedge-fund-ai.js"></script>
     <script src="stock-equity-ai.js"></script>
+    <script src="macro-bar.js"></script>
+    <script src="pt-simple.js"></script>
+    <script src="ai-alerts.js"></script>
     <script>
         // Init OKX saat tab dibuka pertama kali
         (function () {
@@ -2213,6 +2268,22 @@
                 if (e.detail === 'okx' && !_okxInited) {
                     _okxInited = true;
                     okxTrading.init();
+                }
+            });
+        })();
+
+        // Init P&L Tracker + Alerts saat tab pertama kali dibuka
+        (function () {
+            let _ptInited    = false;
+            let _alertInited = false;
+            document.addEventListener('tabchange', function (e) {
+                if (e.detail === 'pt-tracker' && !_ptInited) {
+                    _ptInited = true;
+                    ptSimple.init();
+                }
+                if (e.detail === 'alerts' && !_alertInited) {
+                    _alertInited = true;
+                    aiAlerts.init();
                 }
             });
         })();

@@ -1443,58 +1443,106 @@ async function analyzeCoin(coinId) {
         const coin = cryptoData.find(c => c.id === coinId);
         if (!coin) return;
 
-        // Multi-step loading UI
+        // Show analysis section immediately
         const analysisSection = document.getElementById('analysisSection');
         if (analysisSection) {
             analysisSection.style.display = 'block';
             analysisSection.scrollIntoView({ behavior: 'smooth' });
         }
         const container = document.getElementById('analysisContainer');
-        if (container) {
-            container.innerHTML = `
-            <div class="analyze-steps">
-                <div class="analyze-step active" id="astep1"><span class="step-icon"><span class="g-spinner sm"></span></span> Mengambil data detail ${coin.name}…</div>
-                <div class="analyze-step" id="astep2"><span class="step-icon">⏳</span> Mengambil market chart 30 hari…</div>
-                <div class="analyze-step" id="astep3"><span class="step-icon">⏳</span> Menjalankan analisis teknikal…</div>
-                <div class="analyze-step" id="astep4"><span class="step-icon">⏳</span> Menghitung AI score…</div>
-            </div>`;
+        if (!container) return;
+
+        // ── Check cache first — instant render if fresh ────────────────────
+        const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+        const cachedDetail = cacheGet(`coin_detail_${coinId}`);
+        const cachedChart  = cacheGet(`coin_chart_${coinId}`);
+
+        if (cachedDetail && cachedChart) {
+            // Instant render from cache
+            const expertAnalysis = buildExpertAnalysis(coin, cachedChart);
+            displayCoinAnalysis(coin, cachedDetail, expertAnalysis, cachedChart);
+            renderSingleCoinAIScore(coin);
+            console.log(`⚡ ${coin.name} — rendered from cache`);
+            return;
         }
 
-        const _step = (id, done) => {
+        // ── Show compact loading skeleton ──────────────────────────────────
+        container.innerHTML = `
+        <div class="analyze-loading-wrap">
+            <div class="analyze-loading-coin">
+                <img src="${coin.image}" onerror="this.style.display='none'" width="36" height="36" style="border-radius:50%">
+                <div>
+                    <div class="analyze-loading-name">${coin.name} <span style="color:#64748b">${coin.symbol?.toUpperCase()}</span></div>
+                    <div class="analyze-loading-sub">Mengambil data & menghitung indikator…</div>
+                </div>
+                <span class="g-spinner" style="width:20px;height:20px;border-width:3px;margin-left:auto"></span>
+            </div>
+            <div class="analyze-progress-bar"><div class="analyze-progress-fill" id="analyzeProgressFill"></div></div>
+            <div class="analyze-steps-row">
+                <span class="astep-pill astep-loading" id="apill1">📡 Detail</span>
+                <span class="astep-pill" id="apill2">📈 Chart</span>
+                <span class="astep-pill" id="apill3">🔬 Teknikal</span>
+            </div>
+        </div>`;
+
+        const setProgress = (pct) => {
+            const el = document.getElementById('analyzeProgressFill');
+            if (el) el.style.width = pct + '%';
+        };
+        const setPill = (id, done) => {
             const el = document.getElementById(id);
             if (!el) return;
-            if (done) {
-                el.classList.remove('active'); el.classList.add('done');
-                el.querySelector('.step-icon').innerHTML = '';
-            } else {
-                el.classList.add('active');
-                el.querySelector('.step-icon').innerHTML = '<span class="g-spinner sm"></span>';
-            }
+            el.classList.remove('astep-loading');
+            el.classList.add(done ? 'astep-done' : 'astep-loading');
         };
 
-        // Step 1: Fetch detail
-        const response = await fetch(`${COINGECKO_API}/coins/${coinId}?localization=false&tickers=false&community_data=true&developer_data=true`);
-        const detailedData = await response.json();
-        _step('astep1', true); _step('astep2', false);
+        setProgress(5);
 
-        // Step 2: Fetch chart
-        const marketChart = await fetchMarketChart(coinId, 30);
-        _step('astep2', true); _step('astep3', false);
+        // ── Fetch detail + chart IN PARALLEL ──────────────────────────────
+        const detailUrl = `${COINGECKO_API}/coins/${coinId}?localization=false&tickers=false&community_data=false&developer_data=false`;
+        const chartUrl  = `${COINGECKO_API}/coins/${coinId}/market_chart?vs_currency=usd&days=30`;
 
-        // Step 3: Technical analysis
+        const [detailRes, chartRes] = await Promise.all([
+            fetchWithTimeout(detailUrl, 12000),
+            fetchWithTimeout(chartUrl,  12000),
+        ]);
+
+        setProgress(60);
+        setPill('apill1', true);
+        setPill('apill2', true);
+
+        const [detailedData, marketChart] = await Promise.all([
+            detailRes.json(),
+            chartRes.json(),
+        ]);
+
+        // Cache results
+        cacheSet(`coin_detail_${coinId}`, detailedData, CACHE_TTL);
+        cacheSet(`coin_chart_${coinId}`,  marketChart,  CACHE_TTL);
+
+        setProgress(80);
+        setPill('apill3', true);
+
+        // Technical analysis (sync, fast)
         const expertAnalysis = buildExpertAnalysis(coin, marketChart);
-        _step('astep3', true); _step('astep4', false);
 
-        // Step 4: Render + AI score
+        setProgress(100);
+
+        // Render
         displayCoinAnalysis(coin, detailedData, expertAnalysis, marketChart);
-        _step('astep4', true);
         renderSingleCoinAIScore(coin);
 
-        console.log(`🔍 Analyzing ${coin.name}`);
+        console.log(`🔍 ${coin.name} analyzed`);
 
     } catch (error) {
         console.error('Error analyzing coin:', error);
-        showError('Failed to load coin analysis');
+        const container = document.getElementById('analysisContainer');
+        if (container) {
+            container.innerHTML = `<div class="analyze-error">
+                <span>⚠️ Gagal memuat data — ${error.message || 'Coba lagi'}</span>
+                <button class="pt-btn pt-btn--ghost" onclick="analyzeCoin('${coinId}')">↻ Retry</button>
+            </div>`;
+        }
     }
 }
 
@@ -1733,8 +1781,11 @@ function displayCoinAnalysis(coin, detailedData, expertAnalysis, marketChart) {
     
     container.innerHTML = html;
     if (marketChart && marketChart.prices && marketChart.prices.length) {
-        renderExpertCharts(marketChart, expertAnalysis);
-        renderFibLegend(expertAnalysis?.fibonacciInsight);
+        // Use rAF so canvas elements are painted in the DOM before Chart.js reads dimensions
+        requestAnimationFrame(() => {
+            renderExpertCharts(marketChart, expertAnalysis);
+            renderFibLegend(expertAnalysis?.fibonacciInsight);
+        });
     }
 }
 
@@ -3090,6 +3141,12 @@ function renderExpertCharts(marketChart, expertAnalysis) {
     const priceCanvas = document.getElementById('expertPriceChart');
     const macdCanvas = document.getElementById('expertMacdChart');
     if (!priceCanvas || !macdCanvas) return;
+
+    // Ensure parent wrappers have explicit pixel height so Chart.js can read dimensions
+    const priceWrap = priceCanvas.closest('.chart-wrapper');
+    const macdWrap  = macdCanvas.closest('.chart-wrapper');
+    if (priceWrap && !priceCanvas.height) priceCanvas.height = priceWrap.clientHeight || 340;
+    if (macdWrap  && !macdCanvas.height)  macdCanvas.height  = macdWrap.clientHeight  || 200;
 
     const labels = marketChart.prices.map(point => new Date(point[0]).toLocaleDateString('id-ID', { month: 'short', day: 'numeric' }));
     const prices = marketChart.prices.map(point => point[1]);

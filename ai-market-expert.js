@@ -1,7 +1,8 @@
 // ══════════════════════════════════════════════════════════════════════════════
-//  AI Market Expert v2 — Daily Narrative Forecaster
+//  AI Market Expert v3 — Daily Narrative Forecaster + Scenario Chart
 //  Powered by Google Gemini · Crypto & Equity Markets
-//  Generates day-by-day scenario narratives like a professional market analyst
+//  Features: 5-day narratives, annotated chart (zones/TP/SL/patterns),
+//            3 scenario paths (Bull/Bear/Base) with % confidence
 // ══════════════════════════════════════════════════════════════════════════════
 
 const aiMarketExpert = (() => {
@@ -11,6 +12,8 @@ const aiMarketExpert = (() => {
     const GEMINI_URL   = (k) =>
         `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${k}`;
 
+    let _scenarioChart = null; // Chart.js instance for scenario chart
+
     // ── System Prompt ─────────────────────────────────────────────────────────
     const SYSTEM_PROMPT = `You are a professional crypto market analyst with expertise in price action, market cycles, liquidity dynamics, and behavioral finance. You write daily scenario narratives like a seasoned hedge fund macro trader — sharp, narrative-driven, specific.
 
@@ -19,21 +22,17 @@ STRICT RULES:
 - All narrative fields MUST be in Indonesian (bahasa Indonesia).
 - Be specific with price targets, time windows, and conditions.
 - Each day gets a creative "phase name" (Nama Fase) that captures the market psychology — like "The Great Deception", "Accumulation in Chaos", "The Final Flush", "Silent Bull", "Whale Awakening", etc.
-- Probabilities are integers 0-100.
+- Probabilities are integers 0-100. Bull + Bear + Base probabilities MUST sum to 100.
 - Price targets are numbers (not strings).
 - analysis_date is today's date. Days start from tomorrow.
+- chart_annotations must contain realistic price levels based on actual current_price.
 
 ANALYTICAL APPROACH:
 1. Read current price, 24h change, RSI, volume trend, market structure
 2. Identify the DOMINANT narrative: Are whales accumulating? Is retail FOMO-ing? Is there a liquidity grab incoming? Is there a macro catalyst?
-3. For each day, project the most probable price behavior with:
-   - A named phase (creative, evocative)
-   - Direction bias (bullish/sideways/bearish/volatile)
-   - Detailed narrative (2-3 sentences) explaining WHY this day will behave this way
-   - Price targets (key levels to watch)
-   - Critical time windows (jam krusial) — specific hours in WIB when key moves are most likely
-   - Alternative scenario (what invalidates this view)
-4. End with an overall weekly outlook and key levels to watch
+3. For each day, project the most probable price behavior
+4. Generate 3 price path scenarios (Bull/Bear/Base) with day-by-day projected prices
+5. Identify key chart levels: support zones, resistance zones, TP targets, SL, patterns
 
 OUTPUT FORMAT — Strict JSON only:
 {
@@ -46,6 +45,64 @@ OUTPUT FORMAT — Strict JSON only:
   "weekly_summary": "<2-3 kalimat ringkasan outlook mingguan dalam bahasa Indonesia>",
 
   "dominant_narrative": "<1 kalimat: apa yang sebenarnya terjadi di pasar sekarang — siapa yang mengontrol, apa yang mereka lakukan>",
+
+  "chart_annotations": {
+    "support_zones": [
+      { "price_low": <number>, "price_high": <number>, "label": "Support Zone $XX", "strength": "strong|medium|weak" }
+    ],
+    "resistance_zones": [
+      { "price_low": <number>, "price_high": <number>, "label": "Resistance Zone $XX", "strength": "strong|medium|weak" }
+    ],
+    "tp_levels": [
+      { "price": <number>, "label": "TP1", "note": "<kondisi untuk capai ini>" },
+      { "price": <number>, "label": "TP2", "note": "<kondisi untuk capai ini>" },
+      { "price": <number>, "label": "TP3", "note": "<kondisi untuk capai ini>" }
+    ],
+    "sl_level": { "price": <number>, "label": "Stop Loss", "note": "<kenapa level ini sebagai SL>" },
+    "pattern": {
+      "name": "<nama pola teknikal dalam bahasa Inggris, misal 'Bull Flag', 'Head & Shoulders', 'Double Bottom', 'Ascending Triangle', 'Bear Wedge'>",
+      "name_id": "<terjemahan bahasa Indonesia>",
+      "description": "<1 kalimat penjelasan pola dan implikasinya — bahasa Indonesia>",
+      "completion_price": <number atau null>,
+      "target_price": <number atau null>
+    },
+    "direction_arrow": {
+      "direction": "up|down|sideways",
+      "confidence": <0-100>,
+      "label": "<label singkat, misal 'Bull 68%'>"
+    }
+  },
+
+  "price_scenarios": {
+    "days": ["<date D+1>", "<date D+2>", "<date D+3>", "<date D+4>", "<date D+5>"],
+    "bull_case": {
+      "probability": <integer 0-100>,
+      "label": "Bull Case",
+      "color": "#4ade80",
+      "prices": [<d1_price>, <d2_price>, <d3_price>, <d4_price>, <d5_price>],
+      "final_target": <number>,
+      "catalyst": "<1 kalimat katalis yang memicu skenario ini — bahasa Indonesia>",
+      "invalidation": "<kondisi yang membatalkan skenario ini>"
+    },
+    "base_case": {
+      "probability": <integer 0-100>,
+      "label": "Base Case",
+      "color": "#fbbf24",
+      "prices": [<d1_price>, <d2_price>, <d3_price>, <d4_price>, <d5_price>],
+      "final_target": <number>,
+      "catalyst": "<1 kalimat katalis — bahasa Indonesia>",
+      "invalidation": "<kondisi invalidasi>"
+    },
+    "bear_case": {
+      "probability": <integer 0-100>,
+      "label": "Bear Case",
+      "color": "#f87171",
+      "prices": [<d1_price>, <d2_price>, <d3_price>, <d4_price>, <d5_price>],
+      "final_target": <number>,
+      "catalyst": "<1 kalimat katalis — bahasa Indonesia>",
+      "invalidation": "<kondisi invalidasi>"
+    }
+  },
 
   "key_levels": {
     "strong_support": [<price1>, <price2>],
@@ -60,18 +117,18 @@ OUTPUT FORMAT — Strict JSON only:
       "day": 1,
       "date": "YYYY-MM-DD",
       "day_name": "<nama hari dalam bahasa Indonesia, misal Senin>",
-      "phase_name": "<nama fase kreatif dalam bahasa Inggris, misal 'The Great Deception'>",
+      "phase_name": "<nama fase kreatif dalam bahasa Inggris>",
       "phase_name_id": "<terjemahan nama fase dalam bahasa Indonesia>",
       "direction": "bullish|sideways|bearish|volatile",
       "direction_confidence": <0-100>,
-      "narrative": "<2-3 kalimat analisis mengapa hari ini akan berperilaku seperti ini — sebut faktor spesifik: likuidasi posisi, akumulasi whale, reaktif terhadap news, dll. Bahasa Indonesia.>",
+      "narrative": "<2-3 kalimat analisis mengapa hari ini akan berperilaku seperti ini — bahasa Indonesia>",
       "price_target_main": <number>,
       "price_target_high": <number>,
       "price_target_low": <number>,
-      "critical_hours_wib": "<jam spesifik dalam WIB ketika gerakan besar paling mungkin terjadi, misal '20.00–23.00 WIB (Sesi New York)'>",
-      "critical_hours_reason": "<kenapa jam itu krusial — sesi trading apa, event apa>",
+      "critical_hours_wib": "<jam spesifik dalam WIB>",
+      "critical_hours_reason": "<kenapa jam itu krusial>",
       "watch_for": "<1 kalimat: apa yang harus diperhatikan trader hari ini>",
-      "alternative_scenario": "<jika skenario utama gagal, apa yang terjadi — sebutkan kondisi invalidasi dan target alternatif>"
+      "alternative_scenario": "<jika skenario utama gagal, apa yang terjadi>"
     }
   ],
 
@@ -152,18 +209,250 @@ OUTPUT FORMAT — Strict JSON only:
         return JSON.parse(clean);
     }
 
+    // ── Render Scenario Chart ─────────────────────────────────────────────────
+    function _destroyScenarioChart() {
+        if (_scenarioChart) { _scenarioChart.destroy(); _scenarioChart = null; }
+    }
+
+    function _renderScenarioChart(r, canvasId) {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas || typeof Chart === 'undefined') return;
+        _destroyScenarioChart();
+
+        const ps    = r.price_scenarios || {};
+        const ann   = r.chart_annotations || {};
+        const days  = ps.days || [];
+        const bull  = ps.bull_case || {};
+        const base  = ps.base_case || {};
+        const bear  = ps.bear_case || {};
+        const curr  = r.current_price || 0;
+
+        // Labels: Today + 5 days
+        const today = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+        const labels = [today, ...days.map(d => {
+            const dt = new Date(d);
+            return dt.toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' });
+        })];
+
+        // Each path starts from current price
+        const bullPrices = [curr, ...(bull.prices || [])];
+        const basePrices = [curr, ...(base.prices || [])];
+        const bearPrices = [curr, ...(bear.prices || [])];
+
+        // Build Chart.js annotations
+        const annotations = {};
+        let annIdx = 0;
+
+        // Support zones
+        (ann.support_zones || []).forEach((z, i) => {
+            annotations[`supZone${i}`] = {
+                type: 'box',
+                yMin: z.price_low, yMax: z.price_high,
+                backgroundColor: 'rgba(34,197,94,0.08)',
+                borderColor: 'rgba(34,197,94,0.4)',
+                borderWidth: 1,
+                label: {
+                    display: true,
+                    content: z.label || `Support`,
+                    color: '#4ade80',
+                    font: { size: 10, weight: 'bold' },
+                    position: { x: 'start', y: 'center' },
+                    padding: 2,
+                }
+            };
+        });
+
+        // Resistance zones
+        (ann.resistance_zones || []).forEach((z, i) => {
+            annotations[`resZone${i}`] = {
+                type: 'box',
+                yMin: z.price_low, yMax: z.price_high,
+                backgroundColor: 'rgba(239,68,68,0.08)',
+                borderColor: 'rgba(239,68,68,0.4)',
+                borderWidth: 1,
+                label: {
+                    display: true,
+                    content: z.label || `Resistance`,
+                    color: '#f87171',
+                    font: { size: 10, weight: 'bold' },
+                    position: { x: 'start', y: 'center' },
+                    padding: 2,
+                }
+            };
+        });
+
+        // TP levels
+        const TP_COLORS = ['#4ade80', '#86efac', '#bbf7d0'];
+        (ann.tp_levels || []).forEach((tp, i) => {
+            if (!tp.price) return;
+            annotations[`tp${i}`] = {
+                type: 'line',
+                yMin: tp.price, yMax: tp.price,
+                borderColor: TP_COLORS[i] || '#4ade80',
+                borderWidth: 1.5,
+                borderDash: [6, 3],
+                label: {
+                    display: true,
+                    content: `${tp.label || 'TP'}: $${Number(tp.price).toLocaleString('en-US', { maximumFractionDigits: 0 })}`,
+                    color: TP_COLORS[i] || '#4ade80',
+                    font: { size: 10, weight: 'bold' },
+                    position: 'end',
+                    backgroundColor: 'rgba(11,18,32,0.8)',
+                    padding: { x: 4, y: 2 },
+                }
+            };
+        });
+
+        // SL level
+        if (ann.sl_level?.price) {
+            annotations['sl'] = {
+                type: 'line',
+                yMin: ann.sl_level.price, yMax: ann.sl_level.price,
+                borderColor: '#ef4444',
+                borderWidth: 1.5,
+                borderDash: [4, 4],
+                label: {
+                    display: true,
+                    content: `SL: $${Number(ann.sl_level.price).toLocaleString('en-US', { maximumFractionDigits: 0 })}`,
+                    color: '#f87171',
+                    font: { size: 10, weight: 'bold' },
+                    position: 'end',
+                    backgroundColor: 'rgba(11,18,32,0.8)',
+                    padding: { x: 4, y: 2 },
+                }
+            };
+        }
+
+        // Current price line
+        annotations['currentPrice'] = {
+            type: 'line',
+            yMin: curr, yMax: curr,
+            borderColor: 'rgba(148,163,184,0.5)',
+            borderWidth: 1,
+            borderDash: [2, 4],
+            label: {
+                display: true,
+                content: `Now: $${Number(curr).toLocaleString('en-US', { maximumFractionDigits: 0 })}`,
+                color: '#94a3b8',
+                font: { size: 9 },
+                position: 'start',
+                backgroundColor: 'rgba(11,18,32,0.8)',
+                padding: { x: 4, y: 2 },
+            }
+        };
+
+        _scenarioChart = new Chart(canvas, {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [
+                    {
+                        label: `🐂 Bull Case (${bull.probability || 0}%)`,
+                        data: bullPrices,
+                        borderColor: '#4ade80',
+                        backgroundColor: 'rgba(74,222,128,0.05)',
+                        borderWidth: 2.5,
+                        pointRadius: [6, 4, 4, 4, 4, 4],
+                        pointBackgroundColor: '#4ade80',
+                        pointBorderColor: '#0b1220',
+                        pointBorderWidth: 2,
+                        tension: 0.35,
+                        fill: false,
+                    },
+                    {
+                        label: `⚖️ Base Case (${base.probability || 0}%)`,
+                        data: basePrices,
+                        borderColor: '#fbbf24',
+                        backgroundColor: 'rgba(251,191,36,0.05)',
+                        borderWidth: 2.5,
+                        pointRadius: [6, 4, 4, 4, 4, 4],
+                        pointBackgroundColor: '#fbbf24',
+                        pointBorderColor: '#0b1220',
+                        pointBorderWidth: 2,
+                        tension: 0.35,
+                        fill: false,
+                    },
+                    {
+                        label: `🐻 Bear Case (${bear.probability || 0}%)`,
+                        data: bearPrices,
+                        borderColor: '#f87171',
+                        backgroundColor: 'rgba(248,113,113,0.05)',
+                        borderWidth: 2.5,
+                        pointRadius: [6, 4, 4, 4, 4, 4],
+                        pointBackgroundColor: '#f87171',
+                        pointBorderColor: '#0b1220',
+                        pointBorderWidth: 2,
+                        tension: 0.35,
+                        fill: false,
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        labels: {
+                            color: '#94a3b8',
+                            font: { size: 11 },
+                            boxWidth: 20,
+                            padding: 12,
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(15,23,42,0.95)',
+                        borderColor: 'rgba(148,163,184,0.2)',
+                        borderWidth: 1,
+                        titleColor: '#e2e8f0',
+                        bodyColor: '#94a3b8',
+                        callbacks: {
+                            label: (ctx) => {
+                                const v = ctx.parsed.y;
+                                const fmt = v >= 1000
+                                    ? '$' + v.toLocaleString('en-US', { maximumFractionDigits: 0 })
+                                    : '$' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+                                const chg = curr > 0 ? ((v - curr) / curr * 100).toFixed(2) : 0;
+                                const sign = chg >= 0 ? '+' : '';
+                                return ` ${ctx.dataset.label?.split(' (')[0]}: ${fmt} (${sign}${chg}%)`;
+                            }
+                        }
+                    },
+                    annotation: { annotations }
+                },
+                scales: {
+                    x: {
+                        ticks: { color: '#64748b', font: { size: 10 } },
+                        grid: { color: 'rgba(148,163,184,0.06)' },
+                    },
+                    y: {
+                        ticks: {
+                            color: '#64748b',
+                            font: { size: 10 },
+                            callback: (v) => {
+                                if (v >= 1000) return '$' + (v/1000).toFixed(0) + 'K';
+                                return '$' + v.toFixed(2);
+                            }
+                        },
+                        grid: { color: 'rgba(148,163,184,0.06)' },
+                    }
+                }
+            }
+        });
+    }
+
     // ── Render result ─────────────────────────────────────────────────────────
     function _renderResult(r, containerId) {
         const container = document.getElementById(containerId);
         if (!container) return;
 
         const na = (v) => v != null ? v : '—';
-        const fmtPrice = (v, sym) => {
+        const fmtPrice = (v) => {
             if (!v) return '—';
-            const isUSD = sym !== 'IDR';
-            return isUSD
-                ? `$${Number(v).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
-                : `Rp ${Number(v).toLocaleString('id-ID')}`;
+            if (v >= 1000) return '$' + Number(v).toLocaleString('en-US', { maximumFractionDigits: 0 });
+            return '$' + Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
         };
 
         const BIAS_META = {
@@ -180,13 +469,24 @@ OUTPUT FORMAT — Strict JSON only:
             volatile: { icon: '⚡', color: '#a78bfa', bg: 'rgba(167,139,250,0.08)', border: 'rgba(167,139,250,0.25)' },
         };
 
-        const biasM = BIAS_META[r.weekly_bias] || BIAS_META.sideways;
+        const biasM     = BIAS_META[r.weekly_bias] || BIAS_META.sideways;
         const scenarios = r.daily_scenarios || [];
-        const kl = r.key_levels || {};
-        const tf = r.trading_framework || {};
+        const kl        = r.key_levels || {};
+        const tf        = r.trading_framework || {};
+        const ps        = r.price_scenarios || {};
+        const ann       = r.chart_annotations || {};
+        const bull      = ps.bull_case || {};
+        const base      = ps.base_case || {};
+        const bear      = ps.bear_case || {};
+        const pattern   = ann.pattern || {};
+        const arrow     = ann.direction_arrow || {};
 
-        const isCrypto = !r.asset?.match(/^[A-Z]{2,4}(\.B)?$/) || true;
-        const curr = r.asset?.includes('IDR') ? 'IDR' : 'USD';
+        // Direction arrow meta
+        const arrowMeta = arrow.direction === 'up'
+            ? { icon: '↗', color: '#4ade80', label: arrow.label || 'Bullish' }
+            : arrow.direction === 'down'
+                ? { icon: '↘', color: '#f87171', label: arrow.label || 'Bearish' }
+                : { icon: '→', color: '#fbbf24', label: arrow.label || 'Sideways' };
 
         container.innerHTML = `
         <div class="ame-panel">
@@ -199,7 +499,7 @@ OUTPUT FORMAT — Strict JSON only:
                     <div class="ame-date">📅 Analisis: ${na(r.analysis_date)}</div>
                 </div>
                 <div class="ame-header-right">
-                    <div class="ame-price">$${Number(r.current_price||0).toLocaleString('en-US',{maximumFractionDigits:0})}</div>
+                    <div class="ame-price">${fmtPrice(r.current_price)}</div>
                     <div class="ame-bias-badge" style="color:${biasM.color};background:${biasM.color}18;border:1px solid ${biasM.color}40">
                         ${biasM.icon} Outlook: <strong>${biasM.label}</strong>
                     </div>
@@ -216,6 +516,152 @@ OUTPUT FORMAT — Strict JSON only:
                 </div>
             </div>
 
+            <!-- ══════════════════════════════════════════════════════
+                 SCENARIO CHART SECTION
+                 ══════════════════════════════════════════════════ -->
+            <div class="ame-chart-section">
+                <div class="ame-chart-header">
+                    <div class="ame-chart-title">
+                        📈 ${na(r.asset)} — Proyeksi Harga 5 Hari
+                        ${pattern.name ? `<span class="ame-pattern-badge">🔷 ${pattern.name}</span>` : ''}
+                    </div>
+                    <div class="ame-chart-arrow" style="color:${arrowMeta.color};background:${arrowMeta.color}18;border:1px solid ${arrowMeta.color}40">
+                        <span class="ame-arrow-icon">${arrowMeta.icon}</span>
+                        <span class="ame-arrow-label">${arrowMeta.label}</span>
+                        <span class="ame-arrow-conf">${arrow.confidence || 0}%</span>
+                    </div>
+                </div>
+
+                <!-- Chart Canvas -->
+                <div class="ame-chart-wrap">
+                    <canvas id="ameScenarioChart" height="320"></canvas>
+                </div>
+
+                <!-- Chart Legend / Annotations info -->
+                <div class="ame-chart-legend">
+                    ${(ann.support_zones || []).map(z =>
+                        `<div class="ame-legend-item" style="border-left:3px solid #4ade80">
+                            <span class="ame-legend-dot" style="background:#4ade8033"></span>
+                            <span>${z.label || 'Support'}</span>
+                        </div>`
+                    ).join('')}
+                    ${(ann.resistance_zones || []).map(z =>
+                        `<div class="ame-legend-item" style="border-left:3px solid #f87171">
+                            <span class="ame-legend-dot" style="background:#f8717133"></span>
+                            <span>${z.label || 'Resistance'}</span>
+                        </div>`
+                    ).join('')}
+                    ${(ann.tp_levels || []).map((tp, i) =>
+                        `<div class="ame-legend-item" style="border-left:3px solid #4ade80">
+                            <span>🎯 ${tp.label}: ${fmtPrice(tp.price)}</span>
+                        </div>`
+                    ).join('')}
+                    ${ann.sl_level?.price ? `
+                    <div class="ame-legend-item" style="border-left:3px solid #ef4444">
+                        <span>🛑 Stop Loss: ${fmtPrice(ann.sl_level.price)}</span>
+                    </div>` : ''}
+                </div>
+
+                <!-- Pattern Box -->
+                ${pattern.name ? `
+                <div class="ame-pattern-box">
+                    <div class="ame-pattern-header">
+                        <span class="ame-pattern-icon">🔷</span>
+                        <span class="ame-pattern-name">${pattern.name}</span>
+                        <span class="ame-pattern-name-id">"${pattern.name_id}"</span>
+                        ${pattern.target_price ? `<span class="ame-pattern-target">→ Target: ${fmtPrice(pattern.target_price)}</span>` : ''}
+                    </div>
+                    <div class="ame-pattern-desc">${pattern.description || ''}</div>
+                </div>` : ''}
+            </div>
+
+            <!-- ══════════════════════════════════════════════════════
+                 3-SCENARIO CARDS (Bull / Base / Bear)
+                 ══════════════════════════════════════════════════ -->
+            <div class="ame-scenarios-3-grid">
+
+                <!-- Scenario A — Bull Case -->
+                <div class="ame-scenario-card ame-scenario-bull">
+                    <div class="ame-sc-header">
+                        <div class="ame-sc-label">📗 Skenario A — Bull Case</div>
+                        <div class="ame-sc-prob" style="background:#4ade8022;color:#4ade80;border:1px solid #4ade8040">
+                            ${bull.probability || 0}%
+                        </div>
+                    </div>
+                    <div class="ame-sc-target">🎯 Target: <strong>${fmtPrice(bull.final_target)}</strong></div>
+                    <div class="ame-sc-catalyst">
+                        <span class="ame-sc-catalyst-icon">⚡</span>
+                        <span>${bull.catalyst || '—'}</span>
+                    </div>
+                    <div class="ame-sc-invalidation">
+                        <span class="ame-sc-inv-icon">❌</span>
+                        <span class="ame-sc-inv-label">Invalidasi:</span>
+                        ${bull.invalidation || '—'}
+                    </div>
+                    <div class="ame-sc-path">
+                        ${(bull.prices || []).map((p, i) => `
+                        <div class="ame-sc-path-day">
+                            <span class="ame-sc-path-d">D+${i+1}</span>
+                            <span class="ame-sc-path-p" style="color:#4ade80">${fmtPrice(p)}</span>
+                        </div>`).join('')}
+                    </div>
+                </div>
+
+                <!-- Scenario B — Base Case -->
+                <div class="ame-scenario-card ame-scenario-base">
+                    <div class="ame-sc-header">
+                        <div class="ame-sc-label">📙 Skenario B — Base Case</div>
+                        <div class="ame-sc-prob" style="background:#fbbf2422;color:#fbbf24;border:1px solid #fbbf2440">
+                            ${base.probability || 0}%
+                        </div>
+                    </div>
+                    <div class="ame-sc-target">🎯 Target: <strong>${fmtPrice(base.final_target)}</strong></div>
+                    <div class="ame-sc-catalyst">
+                        <span class="ame-sc-catalyst-icon">⚡</span>
+                        <span>${base.catalyst || '—'}</span>
+                    </div>
+                    <div class="ame-sc-invalidation">
+                        <span class="ame-sc-inv-icon">❌</span>
+                        <span class="ame-sc-inv-label">Invalidasi:</span>
+                        ${base.invalidation || '—'}
+                    </div>
+                    <div class="ame-sc-path">
+                        ${(base.prices || []).map((p, i) => `
+                        <div class="ame-sc-path-day">
+                            <span class="ame-sc-path-d">D+${i+1}</span>
+                            <span class="ame-sc-path-p" style="color:#fbbf24">${fmtPrice(p)}</span>
+                        </div>`).join('')}
+                    </div>
+                </div>
+
+                <!-- Scenario C — Bear Case -->
+                <div class="ame-scenario-card ame-scenario-bear">
+                    <div class="ame-sc-header">
+                        <div class="ame-sc-label">📕 Skenario C — Bear Case</div>
+                        <div class="ame-sc-prob" style="background:#f8717122;color:#f87171;border:1px solid #f8717140">
+                            ${bear.probability || 0}%
+                        </div>
+                    </div>
+                    <div class="ame-sc-target">🎯 Target: <strong>${fmtPrice(bear.final_target)}</strong></div>
+                    <div class="ame-sc-catalyst">
+                        <span class="ame-sc-catalyst-icon">⚡</span>
+                        <span>${bear.catalyst || '—'}</span>
+                    </div>
+                    <div class="ame-sc-invalidation">
+                        <span class="ame-sc-inv-icon">❌</span>
+                        <span class="ame-sc-inv-label">Invalidasi:</span>
+                        ${bear.invalidation || '—'}
+                    </div>
+                    <div class="ame-sc-path">
+                        ${(bear.prices || []).map((p, i) => `
+                        <div class="ame-sc-path-day">
+                            <span class="ame-sc-path-d">D+${i+1}</span>
+                            <span class="ame-sc-path-p" style="color:#f87171">${fmtPrice(p)}</span>
+                        </div>`).join('')}
+                    </div>
+                </div>
+            </div>
+
             <!-- ── Weekly Summary ──────────────────────────────────── -->
             <div class="ame-weekly-summary">
                 <div class="ame-weekly-title">📊 Ringkasan Mingguan</div>
@@ -228,23 +674,23 @@ OUTPUT FORMAT — Strict JSON only:
                 <div class="ame-levels-grid">
                     <div class="ame-level-item ame-level--support">
                         <span class="ame-level-lbl">Support Kuat</span>
-                        <span class="ame-level-vals">${(kl.strong_support||[]).map(p=>fmtPrice(p,curr)).join(' · ')}</span>
+                        <span class="ame-level-vals">${(kl.strong_support||[]).map(fmtPrice).join(' · ')}</span>
                     </div>
                     <div class="ame-level-item ame-level--resistance">
                         <span class="ame-level-lbl">Resistance Kuat</span>
-                        <span class="ame-level-vals">${(kl.strong_resistance||[]).map(p=>fmtPrice(p,curr)).join(' · ')}</span>
+                        <span class="ame-level-vals">${(kl.strong_resistance||[]).map(fmtPrice).join(' · ')}</span>
                     </div>
                     <div class="ame-level-item ame-level--pivot">
                         <span class="ame-level-lbl">Pivot Kritis</span>
-                        <span class="ame-level-vals">${fmtPrice(kl.critical_pivot,curr)}</span>
+                        <span class="ame-level-vals">${fmtPrice(kl.critical_pivot)}</span>
                     </div>
                     <div class="ame-level-item ame-level--inv-bull">
                         <span class="ame-level-lbl">Invalidasi Bull</span>
-                        <span class="ame-level-vals">${fmtPrice(kl.invalidation_bull,curr)}</span>
+                        <span class="ame-level-vals">${fmtPrice(kl.invalidation_bull)}</span>
                     </div>
                     <div class="ame-level-item ame-level--inv-bear">
                         <span class="ame-level-lbl">Invalidasi Bear</span>
-                        <span class="ame-level-vals">${fmtPrice(kl.invalidation_bear,curr)}</span>
+                        <span class="ame-level-vals">${fmtPrice(kl.invalidation_bear)}</span>
                     </div>
                 </div>
             </div>
@@ -252,7 +698,7 @@ OUTPUT FORMAT — Strict JSON only:
             <!-- ── Daily Scenarios ─────────────────────────────────── -->
             <div class="ame-scenarios-title">📅 Skenario Harian (5 Hari ke Depan)</div>
             <div class="ame-scenarios-list">
-                ${scenarios.map((day, i) => {
+                ${scenarios.map((day) => {
                     const dm = DIR_META[day.direction] || DIR_META.sideways;
                     return `
                 <div class="ame-day-card" style="border-color:${dm.border};background:${dm.bg}">
@@ -276,15 +722,15 @@ OUTPUT FORMAT — Strict JSON only:
                     <div class="ame-day-targets">
                         <div class="ame-target-item ame-target--low">
                             <span class="ame-target-lbl">🐻 Low</span>
-                            <span class="ame-target-val">${fmtPrice(day.price_target_low,curr)}</span>
+                            <span class="ame-target-val">${fmtPrice(day.price_target_low)}</span>
                         </div>
                         <div class="ame-target-item ame-target--main">
                             <span class="ame-target-lbl">🎯 Target</span>
-                            <span class="ame-target-val">${fmtPrice(day.price_target_main,curr)}</span>
+                            <span class="ame-target-val">${fmtPrice(day.price_target_main)}</span>
                         </div>
                         <div class="ame-target-item ame-target--high">
                             <span class="ame-target-lbl">🐂 High</span>
-                            <span class="ame-target-val">${fmtPrice(day.price_target_high,curr)}</span>
+                            <span class="ame-target-val">${fmtPrice(day.price_target_high)}</span>
                         </div>
                     </div>
 
@@ -352,6 +798,9 @@ OUTPUT FORMAT — Strict JSON only:
                 Selalu lakukan riset mandiri dan kelola risiko sebelum mengambil keputusan trading.
             </div>
         </div>`;
+
+        // Draw scenario chart after DOM is painted
+        requestAnimationFrame(() => _renderScenarioChart(r, 'ameScenarioChart'));
     }
 
     // ── Public: analyze ───────────────────────────────────────────────────────
