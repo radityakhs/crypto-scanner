@@ -1764,6 +1764,9 @@ function displayCoinAnalysis(coin, detailedData, expertAnalysis, marketChart) {
                 </div>
             </div>
 
+            <!-- Quant Analysis Panel — injected after innerHTML set -->
+            <div class="analysis-section" id="quantAnalysisPanel" style="padding:0;border:none;background:none"></div>
+
             ${renderFuturesPanel(coin, marketChart)}
 
             ${renderIndicatorGuide(coin, expertAnalysis?.indicators)}
@@ -1780,6 +1783,13 @@ function displayCoinAnalysis(coin, detailedData, expertAnalysis, marketChart) {
     `;
     
     container.innerHTML = html;
+
+    // ── Quant Analysis ─────────────────────────────────────────────────────
+    if (window.quantAnalyst && marketChart) {
+        const quantResult = quantAnalyst.analyze(coin, marketChart);
+        quantAnalyst.renderPanel(quantResult, document.getElementById('quantAnalysisPanel'));
+    }
+
     if (marketChart && marketChart.prices && marketChart.prices.length) {
         // Use rAF so canvas elements are painted in the DOM before Chart.js reads dimensions
         requestAnimationFrame(() => {

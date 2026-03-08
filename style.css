@@ -8633,3 +8633,307 @@ img[src*="ic_dev"],        img[src*="ic_code"] {
   gap: 5px;
   flex-wrap: wrap;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   QUANT ANALYST v1
+   Market Structure · Liquidity · Volume Profile · Order Flow · Probability
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.qa-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px 0 4px;
+}
+
+/* ── Header ── */
+.qa-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  background: rgba(99,102,241,0.08);
+  border: 1px solid rgba(99,102,241,0.25);
+  border-radius: 12px;
+}
+.qa-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.qa-badge-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #a5b4fc;
+  letter-spacing: 0.04em;
+}
+.qa-badge-sub {
+  font-size: 0.7rem;
+  color: #64748b;
+}
+.qa-dir-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: 1px solid;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+.qa-dir-icon  { font-size: 1rem; }
+.qa-dir-bias  { font-weight: 800; letter-spacing: 0.05em; }
+.qa-dir-pct   { opacity: 0.85; }
+
+/* ── Directional Probability Strip ── */
+.qa-prob-strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: rgba(15,23,42,0.6);
+  border: 1px solid rgba(148,163,184,0.1);
+  border-radius: 10px;
+}
+.qa-prob-bull,
+.qa-prob-bear {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 90px;
+}
+.qa-prob-bear {
+  justify-content: flex-end;
+  min-width: 90px;
+}
+.qa-prob-label {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  white-space: nowrap;
+}
+.qa-prob-val {
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+.qa-prob-bar-main {
+  flex: 1;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(248,113,113,0.25);
+  overflow: hidden;
+  display: flex;
+}
+.qa-prob-bar-fill-bull {
+  height: 100%;
+  background: linear-gradient(90deg, #22c55e, #4ade80);
+  border-radius: 999px 0 0 999px;
+  transition: width 0.6s ease;
+}
+.qa-prob-bar-fill-bear {
+  height: 100%;
+  background: linear-gradient(90deg, #f87171, #ef4444);
+  border-radius: 0 999px 999px 0;
+  flex: 1;
+}
+
+/* ── 2-col grid ── */
+.qa-grid-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+@media (max-width: 640px) {
+  .qa-grid-2col { grid-template-columns: 1fr; }
+}
+
+/* ── Cards ── */
+.qa-card {
+  background: rgba(15,23,42,0.55);
+  border: 1px solid rgba(148,163,184,0.12);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.qa-card-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 2px;
+}
+
+/* ── Row ── */
+.qa-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.78rem;
+}
+.qa-lbl {
+  color: #64748b;
+  flex-shrink: 0;
+  max-width: 55%;
+}
+.qa-lbl.qa-hint {
+  font-size: 0.68rem;
+  color: #475569;
+  line-height: 1.4;
+  max-width: 100%;
+}
+.qa-val {
+  font-weight: 600;
+  color: #e2e8f0;
+  text-align: right;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* ── Pattern chips ── */
+.qa-pattern-row { display: flex; gap: 3px; flex-wrap: wrap; }
+.qa-pat-chip {
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.qa-pat-hh { background: rgba(74,222,128,0.15); color: #4ade80; }
+.qa-pat-hl { background: rgba(134,239,172,0.12); color: #86efac; }
+.qa-pat-lh { background: rgba(249,115,22,0.15);  color: #f97316; }
+.qa-pat-ll { background: rgba(248,113,113,0.15); color: #f87171; }
+
+/* ── Liquidity ── */
+.qa-liq-buy  { color: #4ade80 !important; }
+.qa-liq-sell { color: #f87171 !important; }
+.qa-poc      { color: #a5b4fc !important; font-weight: 700 !important; }
+
+/* ── Volume nodes ── */
+.qa-row-nodes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.75rem;
+}
+.qa-nodes-list {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+.qa-node-chip {
+  background: rgba(99,102,241,0.15);
+  border: 1px solid rgba(99,102,241,0.3);
+  border-radius: 5px;
+  padding: 2px 7px;
+  font-size: 0.7rem;
+  color: #c7d2fe;
+}
+.qa-node-chip small {
+  color: #64748b;
+  font-size: 0.65rem;
+}
+
+/* ── Progress bar (reused for scores) ── */
+.qa-bar-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0;
+}
+.qa-bar-track {
+  flex: 1;
+  height: 5px;
+  background: rgba(148,163,184,0.12);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.qa-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.5s ease;
+}
+.qa-bar-val {
+  font-size: 0.7rem;
+  font-weight: 700;
+  min-width: 30px;
+  text-align: right;
+}
+
+/* ── Trade Levels ── */
+.qa-trade-card {
+  background: rgba(15,23,42,0.55);
+  border: 1px solid rgba(148,163,184,0.12);
+  border-radius: 12px;
+  padding: 14px;
+}
+.qa-trade-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 10px;
+}
+@media (max-width: 640px) {
+  .qa-trade-grid { grid-template-columns: repeat(2, 1fr); }
+}
+.qa-trade-item {
+  background: rgba(30,41,59,0.7);
+  border-radius: 9px;
+  padding: 10px 12px;
+  border-left: 3px solid;
+}
+.qa-trade-entry { border-color: #6366f1; }
+.qa-trade-sl    { border-color: #f87171; }
+.qa-trade-tp1   { border-color: #4ade80; }
+.qa-trade-tp2   { border-color: #22c55e; }
+.qa-trade-tp3   { border-color: #16a34a; }
+.qa-trade-rr    { border-color: #fbbf24; }
+
+.qa-trade-lbl {
+  font-size: 0.68rem;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 3px;
+}
+.qa-trade-lbl small {
+  font-size: 0.6rem;
+  opacity: 0.7;
+}
+.qa-trade-val {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #e2e8f0;
+  word-break: break-all;
+}
+.qa-trade-hint {
+  font-size: 0.65rem;
+  color: #475569;
+  margin-top: 2px;
+  line-height: 1.3;
+}
+
+/* ── Error + Disclaimer ── */
+.qa-error {
+  padding: 12px 16px;
+  background: rgba(248,113,113,0.1);
+  border: 1px solid rgba(248,113,113,0.3);
+  border-radius: 8px;
+  color: #f87171;
+  font-size: 0.8rem;
+}
+.qa-disclaimer {
+  font-size: 0.68rem;
+  color: #475569;
+  padding: 8px 12px;
+  border-top: 1px solid rgba(148,163,184,0.08);
+  line-height: 1.5;
+}
