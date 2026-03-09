@@ -302,10 +302,6 @@
             </div>
 
           </div><!-- /pf-root -->
-
-          <!-- ⚡ SIGNAL TERMINAL — selalu visible di tab Portfolio -->
-          <div id="signalTerminalPanel" style="margin-top:1.5rem;padding:0 0.5rem;"></div>
-
         </div><!-- /portfolio -->
 
         <!-- ════════════════════════════════════════
@@ -532,6 +528,9 @@
               <button class="pf-btn-primary" onclick="portfolioTracker.confirmClosePos()">Close Position &amp; Record Trade</button>
             </div>
           </div>
+
+          <!-- ⚡ SIGNAL TERMINAL — selalu visible di tab Portfolio (tab default) -->
+          <div id="signalTerminalPanel" style="margin-top:1.5rem;min-height:400px;border:1px solid #22d3ee22;"></div>
 
         </div>
 
@@ -2296,14 +2295,25 @@
             });
         })();
 
-        // Init Signal Terminal otomatis saat halaman dimuat — langsung di scanner tab
+        // Init Signal Terminal — retry loop hingga SignalTerminal dan panel siap
         (function () {
-            function startSterm() {
-                const panel = document.getElementById('signalTerminalPanel');
-                if (panel && window.SignalTerminal) SignalTerminal.init(panel);
+            var _stermDone = false;
+            function tryInit() {
+                if (_stermDone) return;
+                var panel = document.getElementById('signalTerminalPanel');
+                if (panel && window.SignalTerminal) {
+                    _stermDone = true;
+                    SignalTerminal.init(panel);
+                    return;
+                }
+                setTimeout(tryInit, 100);
             }
-            // Tunggu semua script selesai load baru init
-            window.addEventListener('load', startSterm);
+            // Coba langsung, lalu tiap 100ms sampai berhasil
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', tryInit);
+            } else {
+                tryInit();
+            }
         })();
 
         // Restore saved API key into input fields on page load
