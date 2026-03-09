@@ -306,14 +306,3 @@ const SignalTerminal = (() => {
 
     return { init, destroy };
 })();
-
-// Auto-init langsung saat DOM siap — tidak perlu klik apapun
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function() {
-        var panel = document.getElementById('signalTerminalPanel');
-        if (panel) SignalTerminal.init(panel);
-    });
-} else {
-    var panel = document.getElementById('signalTerminalPanel');
-    if (panel) SignalTerminal.init(panel);
-}
