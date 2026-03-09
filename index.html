@@ -2345,7 +2345,22 @@
                     var loading = document.getElementById('stermLoading');
                     if (loading) loading.style.display = 'none';
                     var panel = document.getElementById('signalTerminalPanel');
-                    if (panel && window.SignalTerminal) SignalTerminal.init(panel);
+                    if (!panel) {
+                        document.getElementById('signal-terminal').innerHTML =
+                            '<p style="color:red;font-family:monospace;padding:2rem;">❌ ERROR: #signalTerminalPanel tidak ditemukan</p>';
+                        return;
+                    }
+                    if (!window.SignalTerminal) {
+                        panel.innerHTML =
+                            '<p style="color:#f87171;font-family:monospace;padding:2rem;">❌ ERROR: signal-terminal.js gagal load.<br>Coba hard refresh Cmd+Shift+R</p>';
+                        return;
+                    }
+                    try {
+                        SignalTerminal.init(panel);
+                    } catch(err) {
+                        panel.innerHTML =
+                            '<p style="color:#f87171;font-family:monospace;padding:2rem;">❌ ERROR init: ' + err.message + '</p>';
+                    }
                 }
             });
         })();
