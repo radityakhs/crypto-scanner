@@ -9112,3 +9112,389 @@ img[src*="ic_dev"],        img[src*="ic_code"] {
 .qa-mc-prob-label { font-size: 0.75rem; color: #94a3b8; }
 .qa-mc-prob-val   { font-size: 1.1rem; font-weight: 800; }
 .qa-mc-hint       { font-size: 0.62rem; color: #475569; margin-top: 6px; }
+
+/* ══════════════════════════════════════════════════════════════
+   SIGNAL TERMINAL UI — Hacker Terminal Style
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Wrapper section ── */
+.sterm-section {
+  margin: 24px 0;
+}
+.sterm-section-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #22d3ee;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sterm-section-title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(34,211,238,0.3), transparent);
+}
+
+/* ── Outer terminal frame ── */
+.sterm-outer {
+  background: #020810;
+  border: 1px solid rgba(34,211,238,0.25);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow:
+    0 0 0 1px rgba(34,211,238,0.05),
+    0 0 30px rgba(34,211,238,0.08),
+    0 0 60px rgba(34,211,238,0.04),
+    inset 0 0 40px rgba(0,0,0,0.6);
+  position: relative;
+}
+
+/* ── CRT scanline overlay ── */
+.sterm-outer::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,0.08) 2px,
+    rgba(0,0,0,0.08) 4px
+  );
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* ── Title bar ── */
+.sterm-titlebar {
+  background: rgba(34,211,238,0.06);
+  border-bottom: 1px solid rgba(34,211,238,0.15);
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.sterm-dots { display: flex; gap: 6px; }
+.sterm-dot  { width: 10px; height: 10px; border-radius: 50%; }
+.sterm-dot-r { background: #f87171; box-shadow: 0 0 4px #f87171; }
+.sterm-dot-y { background: #fbbf24; box-shadow: 0 0 4px #fbbf24; }
+.sterm-dot-g { background: #4ade80; box-shadow: 0 0 4px #4ade80; }
+.sterm-title-text {
+  font-family: 'Courier New', monospace;
+  font-size: 0.7rem;
+  color: rgba(34,211,238,0.6);
+  letter-spacing: 0.08em;
+  flex: 1;
+  text-align: center;
+}
+.sterm-status {
+  font-family: 'Courier New', monospace;
+  font-size: 0.65rem;
+  color: #4ade80;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.sterm-status-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: #4ade80;
+  box-shadow: 0 0 6px #4ade80;
+  animation: sterm-blink 1.2s ease-in-out infinite;
+}
+@keyframes sterm-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.2; }
+}
+
+/* ── Stats bar ── */
+.sterm-statsbar {
+  background: rgba(0,0,0,0.4);
+  border-bottom: 1px solid rgba(34,211,238,0.08);
+  padding: 6px 14px;
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.sterm-stat {
+  font-family: 'Courier New', monospace;
+  font-size: 0.62rem;
+  color: #475569;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.sterm-stat-val {
+  color: #22d3ee;
+  font-weight: 700;
+}
+.sterm-stat-long  { color: #4ade80; font-weight: 700; }
+.sterm-stat-short { color: #f87171; font-weight: 700; }
+
+/* ── Ticker tape ── */
+.sterm-ticker-wrap {
+  background: rgba(34,211,238,0.04);
+  border-bottom: 1px solid rgba(34,211,238,0.08);
+  overflow: hidden;
+  height: 24px;
+  position: relative;
+}
+.sterm-ticker {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  white-space: nowrap;
+  animation: sterm-scroll 30s linear infinite;
+  font-family: 'Courier New', monospace;
+  font-size: 0.62rem;
+  gap: 0;
+}
+.sterm-ticker-item {
+  padding: 0 16px;
+  border-right: 1px solid rgba(34,211,238,0.1);
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.sterm-ticker-sym  { color: #94a3b8; }
+.sterm-ticker-up   { color: #4ade80; }
+.sterm-ticker-down { color: #f87171; }
+.sterm-ticker-flat { color: #94a3b8; }
+@keyframes sterm-scroll {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+/* ── Feed area ── */
+.sterm-feed {
+  height: 420px;
+  overflow-y: auto;
+  padding: 10px 0;
+  scroll-behavior: smooth;
+  position: relative;
+  z-index: 1;
+}
+.sterm-feed::-webkit-scrollbar { width: 4px; }
+.sterm-feed::-webkit-scrollbar-track { background: transparent; }
+.sterm-feed::-webkit-scrollbar-thumb { background: rgba(34,211,238,0.2); border-radius: 2px; }
+
+/* ── Log lines ── */
+.sterm-line {
+  font-family: 'Courier New', monospace;
+  font-size: 0.7rem;
+  padding: 2px 14px;
+  line-height: 1.6;
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  animation: sterm-fadein 0.3s ease;
+}
+@keyframes sterm-fadein {
+  from { opacity: 0; transform: translateX(-6px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.sterm-line-ts   { color: #334155; flex-shrink: 0; font-size: 0.62rem; }
+.sterm-line-tag  { flex-shrink: 0; font-size: 0.65rem; padding: 1px 5px; border-radius: 3px; font-weight: 700; }
+.sterm-line-tag-info  { background: rgba(148,163,184,0.1); color: #64748b; }
+.sterm-line-tag-scan  { background: rgba(34,211,238,0.1); color: #22d3ee; }
+.sterm-line-tag-wait  { background: rgba(251,191,36,0.1); color: #fbbf24; }
+.sterm-line-tag-long  { background: rgba(74,222,128,0.15); color: #4ade80; box-shadow: 0 0 8px rgba(74,222,128,0.2); }
+.sterm-line-tag-short { background: rgba(248,113,113,0.15); color: #f87171; box-shadow: 0 0 8px rgba(248,113,113,0.2); }
+.sterm-line-tag-warn  { background: rgba(249,115,22,0.1); color: #f97316; }
+.sterm-line-msg  { color: #94a3b8; flex: 1; }
+.sterm-line-msg b { color: #e2e8f0; }
+
+/* ── Signal card (highlighted entry) ── */
+.sterm-signal-card {
+  margin: 6px 14px;
+  border-radius: 8px;
+  padding: 10px 14px;
+  position: relative;
+  overflow: hidden;
+  animation: sterm-fadein 0.4s ease;
+}
+.sterm-signal-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    90deg, transparent, transparent 3px,
+    rgba(255,255,255,0.01) 3px, rgba(255,255,255,0.01) 4px
+  );
+  pointer-events: none;
+}
+.sterm-card-long  {
+  background: rgba(74,222,128,0.05);
+  border: 1px solid rgba(74,222,128,0.25);
+  box-shadow: 0 0 20px rgba(74,222,128,0.08), inset 0 0 20px rgba(74,222,128,0.03);
+}
+.sterm-card-short {
+  background: rgba(248,113,113,0.05);
+  border: 1px solid rgba(248,113,113,0.25);
+  box-shadow: 0 0 20px rgba(248,113,113,0.08), inset 0 0 20px rgba(248,113,113,0.03);
+}
+.sterm-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.sterm-card-coin {
+  font-family: 'Courier New', monospace;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+.sterm-card-coin-long  { color: #4ade80; text-shadow: 0 0 10px rgba(74,222,128,0.5); }
+.sterm-card-coin-short { color: #f87171; text-shadow: 0 0 10px rgba(248,113,113,0.5); }
+.sterm-card-badge {
+  font-family: 'Courier New', monospace;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  padding: 2px 10px;
+  border-radius: 4px;
+}
+.sterm-card-badge-long  { background: rgba(74,222,128,0.2); color: #4ade80; border: 1px solid rgba(74,222,128,0.4); }
+.sterm-card-badge-short { background: rgba(248,113,113,0.2); color: #f87171; border: 1px solid rgba(248,113,113,0.4); }
+.sterm-card-levels {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin: 8px 0;
+  font-family: 'Courier New', monospace;
+  font-size: 0.65rem;
+}
+@media (max-width: 480px) { .sterm-card-levels { grid-template-columns: repeat(2, 1fr); } }
+.sterm-card-level {
+  background: rgba(0,0,0,0.3);
+  border-radius: 4px;
+  padding: 4px 7px;
+}
+.sterm-card-level-lbl { color: #475569; font-size: 0.58rem; margin-bottom: 1px; }
+.sterm-card-level-val { color: #e2e8f0; font-weight: 700; }
+.sterm-card-level-val.green { color: #4ade80; }
+.sterm-card-level-val.red   { color: #f87171; }
+.sterm-card-level-val.blue  { color: #60a5fa; }
+.sterm-card-footer {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-family: 'Courier New', monospace;
+  font-size: 0.62rem;
+  color: #475569;
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255,255,255,0.04);
+}
+.sterm-card-footer span { color: #64748b; }
+.sterm-card-footer b    { color: #94a3b8; }
+
+/* ── Input bar ── */
+.sterm-inputbar {
+  background: rgba(0,0,0,0.5);
+  border-top: 1px solid rgba(34,211,238,0.15);
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.72rem;
+  z-index: 2;
+  position: relative;
+}
+.sterm-prompt { color: #22d3ee; flex-shrink: 0; }
+.sterm-cmd-input {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #e2e8f0;
+  font-family: 'Courier New', monospace;
+  font-size: 0.72rem;
+  flex: 1;
+  caret-color: #22d3ee;
+}
+.sterm-cmd-input::placeholder { color: #1e3a4a; }
+.sterm-cursor {
+  width: 8px; height: 14px;
+  background: #22d3ee;
+  animation: sterm-cursor-blink 1s step-end infinite;
+  flex-shrink: 0;
+  display: none;
+}
+.sterm-cmd-input:focus + .sterm-cursor { display: block; }
+@keyframes sterm-cursor-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+.sterm-btn-clear {
+  background: rgba(248,113,113,0.1);
+  border: 1px solid rgba(248,113,113,0.2);
+  border-radius: 4px;
+  color: #f87171;
+  font-family: 'Courier New', monospace;
+  font-size: 0.62rem;
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.sterm-btn-clear:hover { background: rgba(248,113,113,0.2); border-color: rgba(248,113,113,0.4); }
+.sterm-btn-refresh {
+  background: rgba(34,211,238,0.08);
+  border: 1px solid rgba(34,211,238,0.2);
+  border-radius: 4px;
+  color: #22d3ee;
+  font-family: 'Courier New', monospace;
+  font-size: 0.62rem;
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.sterm-btn-refresh:hover { background: rgba(34,211,238,0.15); }
+
+/* ── Empty state ── */
+.sterm-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 10px;
+  color: #1e3a4a;
+  font-family: 'Courier New', monospace;
+  font-size: 0.75rem;
+}
+.sterm-empty-icon { font-size: 2rem; opacity: 0.3; }
+
+/* ── Matrix rain canvas header ── */
+.sterm-matrix-wrap {
+  position: relative;
+  height: 50px;
+  overflow: hidden;
+  border-bottom: 1px solid rgba(34,211,238,0.08);
+}
+.sterm-matrix-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.35;
+}
+.sterm-matrix-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Courier New', monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  color: rgba(34,211,238,0.7);
+  text-shadow: 0 0 10px rgba(34,211,238,0.5);
+  z-index: 2;
+}

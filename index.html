@@ -46,6 +46,7 @@
             <button class="tab-btn" data-tab="alerts">🔔 Alerts</button>
             <button class="tab-btn" data-tab="okx">🟠 OKX Trading</button>
             <button class="tab-btn" data-tab="solana-swap">🪐 Solana Swap</button>
+            <button class="tab-btn" data-tab="signal-terminal">⚡ Signal Terminal</button>
         </div>
 
         <!-- ╔══════════════════════════════════════════╗
@@ -2244,6 +2245,13 @@
         </div>
     </div><!-- /#solana-swap -->
 
+    <!-- ╔══════════════════════════════════════════════════════════════╗
+         ║          SIGNAL TERMINAL — Live Bot Feed                    ║
+         ╚══════════════════════════════════════════════════════════════╝ -->
+    <div id="signal-terminal" class="tab-content">
+        <div id="signalTerminalPanel"></div>
+    </div><!-- /#signal-terminal -->
+
     <!-- External Scripts -->
     <script src="analysis-utils.js"></script>
     <script src="app.js"></script>
@@ -2261,6 +2269,7 @@
     <script src="macro-bar.js"></script>
     <script src="pt-simple.js"></script>
     <script src="ai-alerts.js"></script>
+    <script src="signal-terminal.js"></script>
     <script>
         // Init OKX saat tab dibuka pertama kali
         (function () {
@@ -2285,6 +2294,18 @@
                 if (e.detail === 'alerts' && !_alertInited) {
                     _alertInited = true;
                     aiAlerts.init();
+                }
+            });
+        })();
+
+        // Init Signal Terminal saat tab dibuka pertama kali
+        (function () {
+            let _stermInited = false;
+            document.addEventListener('tabchange', function (e) {
+                if (e.detail === 'signal-terminal' && !_stermInited) {
+                    _stermInited = true;
+                    const panel = document.getElementById('signalTerminalPanel');
+                    if (panel && window.SignalTerminal) SignalTerminal.init(panel);
                 }
             });
         })();
