@@ -306,3 +306,6 @@ const SignalTerminal = (() => {
 
     return { init, destroy };
 })();
+
+// Expose ke window agar bisa dipanggil dari inline script
+window.SignalTerminal = SignalTerminal;
