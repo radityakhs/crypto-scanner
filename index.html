@@ -2289,7 +2289,136 @@
     <script src="macro-bar.js"></script>
     <script src="pt-simple.js"></script>
     <script src="ai-alerts.js"></script>
-    <script src="signal-terminal.js?v=2"></script>
+    <script>
+    // ── SIGNAL TERMINAL (inline — tidak bergantung file eksternal) ────────────
+    window.SignalTerminal = (function () {
+        'use strict';
+        var PROXY   = 'http://127.0.0.1:3001';
+        var POLL_MS = 15000;
+        var _el=null,_feedEl=null,_seenIds=new Set(),_allSignals=[],_pollTimer=null,_matrixAnim=null;
+        var _scanCount=0,_longCount=0,_shortCount=0,_booting=false;
+
+        function fmtPrice(v){if(v==null)return'—';if(v>1000)return'$'+v.toLocaleString('en-US',{maximumFractionDigits:2});if(v>1)return'$'+(+v).toFixed(4);return'$'+(+v).toFixed(6);}
+        function fmtTime(iso){if(!iso)return'—';return new Date(iso).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',second:'2-digit'});}
+        function fmtDate(iso){if(!iso)return'—';var d=new Date(iso);return d.toLocaleDateString('id-ID',{day:'2-digit',month:'short'})+' '+fmtTime(iso);}
+        function uid(s){return s.coinId+'_'+s.signal+'_'+s.timestamp;}
+
+        function startMatrixRain(canvas){
+            var ctx=canvas.getContext('2d'),chars='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789$#@%LONGSHORT'.split(''),fs=10,cols,drops;
+            function resize(){canvas.width=canvas.offsetWidth||800;canvas.height=canvas.offsetHeight||50;cols=Math.floor(canvas.width/fs);drops=Array(cols).fill(1);}
+            resize();window.addEventListener('resize',resize);
+            _matrixAnim=setInterval(function(){
+                ctx.fillStyle='rgba(2,8,16,0.05)';ctx.fillRect(0,0,canvas.width,canvas.height);
+                for(var i=0;i<drops.length;i++){ctx.fillStyle=i%5===0?'#4ade80':'#22d3ee';ctx.font=fs+'px Courier New';ctx.fillText(chars[Math.floor(Math.random()*chars.length)],i*fs,drops[i]*fs);if(drops[i]*fs>canvas.height&&Math.random()>0.975)drops[i]=0;drops[i]++;}
+            },50);
+        }
+
+        function buildTicker(signals){
+            var el=document.getElementById('stermTicker');if(!el||!signals.length)return;
+            var map={};signals.forEach(function(s){if(!map[s.coinSymbol]||new Date(s.timestamp)>new Date(map[s.coinSymbol].timestamp))map[s.coinSymbol]=s;});
+            var html=Object.values(map).slice(0,15).map(function(s){var cls=s.signal==='LONG'?'sterm-ticker-up':'sterm-ticker-down';var icon=s.signal==='LONG'?'▲':'▼';return'<span class="sterm-ticker-item"><span class="sterm-ticker-sym">'+s.coinSymbol.toUpperCase()+'</span><span class="'+cls+'">'+icon+' '+s.signal+'</span><span class="sterm-ticker-sym">'+fmtPrice(s.currentPrice)+'</span></span>';}).join('');
+            el.innerHTML=html+html;
+        }
+
+        function updateStats(){
+            var el=document.querySelector('.sterm-statsbar');if(!el)return;
+            el.innerHTML='<div class="sterm-stat">SCAN <span class="sterm-stat-val">#'+_scanCount+'</span></div><div class="sterm-stat">LONG <span class="sterm-stat-long">'+_longCount+'</span></div><div class="sterm-stat">SHORT <span class="sterm-stat-short">'+_shortCount+'</span></div><div class="sterm-stat">TOTAL <span class="sterm-stat-val">'+_allSignals.length+'</span></div><div class="sterm-stat">UPDATED <span class="sterm-stat-val">'+new Date().toLocaleTimeString('id-ID')+'</span></div>';
+        }
+
+        function appendLine(tag,tagClass,msg){
+            if(!_feedEl)return;
+            var div=document.createElement('div');div.className='sterm-line';
+            div.innerHTML='<span class="sterm-line-ts">'+new Date().toLocaleTimeString('id-ID')+'</span><span class="sterm-line-tag sterm-line-tag-'+tagClass+'">'+tag+'</span><span class="sterm-line-msg">'+msg+'</span>';
+            _feedEl.appendChild(div);_feedEl.scrollTop=_feedEl.scrollHeight;
+        }
+
+        function appendSignalCard(sig){
+            if(!_feedEl)return;
+            var isLong=sig.signal==='LONG',card=document.createElement('div');
+            card.className='sterm-signal-card sterm-card-'+(isLong?'long':'short');
+            var sub=(sig.subScores||[]).slice(0,3).map(function(s){return s.label.split(' ')[0]+':'+s.score;}).join(' · ');
+            card.innerHTML='<div class="sterm-card-header"><span class="sterm-card-coin sterm-card-coin-'+(isLong?'long':'short')+'">'+(isLong?'▲':'▼')+' '+sig.coinSymbol.toUpperCase()+' / '+sig.coinName+'</span><span class="sterm-card-badge sterm-card-badge-'+(isLong?'long':'short')+'">'+sig.signal+'</span></div>'
+                +'<div class="sterm-card-levels"><div class="sterm-card-level"><div class="sterm-card-level-lbl">HARGA</div><div class="sterm-card-level-val blue">'+fmtPrice(sig.currentPrice)+'</div></div><div class="sterm-card-level"><div class="sterm-card-level-lbl">ENTRY</div><div class="sterm-card-level-val">'+fmtPrice(sig.entryLow)+' — '+fmtPrice(sig.entryHigh)+'</div></div><div class="sterm-card-level"><div class="sterm-card-level-lbl">STOP LOSS</div><div class="sterm-card-level-val red">'+fmtPrice(sig.stopLoss)+'</div></div><div class="sterm-card-level"><div class="sterm-card-level-lbl">TP1</div><div class="sterm-card-level-val green">'+fmtPrice(sig.tp1)+'</div></div><div class="sterm-card-level"><div class="sterm-card-level-lbl">TP2</div><div class="sterm-card-level-val green">'+fmtPrice(sig.tp2)+'</div></div><div class="sterm-card-level"><div class="sterm-card-level-lbl">R:R</div><div class="sterm-card-level-val">1:'+sig.rr+'</div></div></div>'
+                +'<div class="sterm-card-footer"><span>📊 Bull <b>'+sig.bullish+'%</b> Bear <b>'+sig.bearish+'%</b> Conf <b>'+sig.confidence+'%</b></span><span>🐋 Whale: <b>'+(sig.whaleBias||'—')+'</b></span><span>📏 Vol: <b>'+(sig.volPhase||'—')+'</b></span><span>🎲 MC: <b>'+(sig.mcProbUp!=null?sig.mcProbUp:'—')+'%</b></span><span>🕐 <b>'+fmtDate(sig.timestamp)+'</b></span>'+(sub?'<span>🔍 '+sub+'</span>':'')+'</div>';
+            _feedEl.appendChild(card);_feedEl.scrollTop=_feedEl.scrollHeight;
+        }
+
+        async function poll(){
+            _scanCount++;updateStats();
+            appendLine('POLL','scan','Mengambil sinyal... (#'+_scanCount+')');
+            var signals=[];
+            try{
+                var r=await fetch(PROXY+'/api/signals',{signal:AbortSignal.timeout(4000)});
+                if(!r.ok)throw new Error('HTTP '+r.status);
+                signals=await r.json();appendLine('OK','scan','Proxy OK — '+signals.length+' sinyal');
+            }catch(e1){
+                try{
+                    var r2=await fetch('./signals.json?_='+Date.now(),{signal:AbortSignal.timeout(5000)});
+                    if(r2.ok){signals=await r2.json();appendLine('FILE','info','signals.json — '+signals.length+' sinyal');}
+                    else throw new Error('404');
+                }catch(e2){appendLine('ERR','warn','❌ signals.json tidak tersedia: '+e2.message);return;}
+            }
+            if(!Array.isArray(signals)){appendLine('ERR','warn','Format tidak valid');return;}
+            _allSignals=signals;
+            _longCount=signals.filter(function(s){return s.signal==='LONG';}).length;
+            _shortCount=signals.filter(function(s){return s.signal==='SHORT';}).length;
+            buildTicker(signals);
+            var newSigs=signals.filter(function(s){return!_seenIds.has(uid(s));});
+            if(!newSigs.length){appendLine('OK','scan','Tidak ada sinyal baru. Total: <b>'+signals.length+'</b>');}
+            else{
+                appendLine('NEW','scan','<b>'+newSigs.length+'</b> sinyal baru!');
+                newSigs.slice().reverse().forEach(function(sig){
+                    _seenIds.add(uid(sig));
+                    appendLine(sig.signal,sig.signal==='LONG'?'long':'short','<b>'+sig.coinSymbol.toUpperCase()+'</b> '+sig.coinName+' — '+fmtPrice(sig.currentPrice)+' | '+sig.signalReason);
+                    appendSignalCard(sig);
+                });
+            }
+            updateStats();
+        }
+
+        async function bootSequence(){
+            if(_booting)return;_booting=true;
+            var lines=[['INIT','info','Signal Terminal v2 online...'],['LOAD','info','10 engines aktif'],['CONN','info','Proxy: '+PROXY]];
+            for(var i=0;i<lines.length;i++){await new Promise(function(r){setTimeout(r,200);});appendLine(lines[i][0],lines[i][1],lines[i][2]);}
+            await poll();
+        }
+
+        function handleCommand(cmd){
+            var c=cmd.trim().toLowerCase();if(!c)return;
+            appendLine('$','info','<b style="color:#22d3ee">'+cmd+'</b>');
+            if(c==='help'){['clear — hapus feed','refresh — poll ulang','status — statistik','signals — semua sinyal','long — filter LONG','short — filter SHORT'].forEach(function(l){appendLine('','info',l);});}
+            else if(c==='clear'||c==='cls'){_feedEl.innerHTML='';_seenIds.clear();appendLine('OK','scan','Feed dibersihkan.');poll();}
+            else if(c==='refresh'){poll();}
+            else if(c==='status'){appendLine('STAT','scan','Scan:#'+_scanCount+' LONG:'+_longCount+' SHORT:'+_shortCount+' Total:'+_allSignals.length);}
+            else if(c==='signals'||c==='long'||c==='short'){var list=c==='long'?_allSignals.filter(function(s){return s.signal==='LONG';}):c==='short'?_allSignals.filter(function(s){return s.signal==='SHORT';}):_allSignals;if(!list.length){appendLine('','warn','Tidak ada sinyal.');return;}list.slice(0,10).forEach(function(s){appendLine(s.signal,s.signal==='LONG'?'long':'short','<b>'+s.coinSymbol.toUpperCase()+'</b> '+fmtPrice(s.currentPrice)+' — '+s.signalReason);});}
+            else{appendLine('ERR','warn','Tidak dikenal: '+cmd+'. Ketik help');}
+        }
+
+        function buildTerminalHTML(){
+            return '<div class="sterm-section"><div class="sterm-section-title">⚡ SIGNAL TERMINAL — Live Bot Feed</div>'
+                +'<div class="sterm-outer" id="stermOuter"><div class="sterm-matrix-wrap"><canvas class="sterm-matrix-canvas" id="stermMatrix"></canvas><div class="sterm-matrix-overlay">◆ SIGNAL_BOT v1 · QUANT_ANALYST v2 · 10 ENGINES ACTIVE ◆</div></div>'
+                +'<div class="sterm-titlebar"><div class="sterm-dots"><div class="sterm-dot sterm-dot-r"></div><div class="sterm-dot sterm-dot-y"></div><div class="sterm-dot sterm-dot-g"></div></div><div class="sterm-title-text">signal-terminal@crypto-scanner:~$</div><div class="sterm-status"><div class="sterm-status-dot"></div>LIVE</div></div>'
+                +'<div class="sterm-statsbar"></div><div class="sterm-ticker-wrap"><div class="sterm-ticker" id="stermTicker"></div></div><div class="sterm-feed" id="stermFeed"></div>'
+                +'<div class="sterm-inputbar"><span class="sterm-prompt">root@signal-bot:~$&nbsp;</span><input class="sterm-cmd-input" id="stermInput" type="text" placeholder="ketik \'help\'..." autocomplete="off" spellcheck="false"/><div class="sterm-cursor"></div><button class="sterm-btn-refresh" id="stermBtnRefresh">↻ REFRESH</button><button class="sterm-btn-clear" id="stermBtnClear">✕ CLEAR</button></div>'
+                +'</div></div>';
+        }
+
+        function init(targetEl){
+            if(!targetEl)return;
+            _el=targetEl;_el.innerHTML=buildTerminalHTML();
+            _feedEl=document.getElementById('stermFeed');
+            var canvas=document.getElementById('stermMatrix');if(canvas)startMatrixRain(canvas);
+            var input=document.getElementById('stermInput');if(input)input.addEventListener('keydown',function(e){if(e.key==='Enter'){handleCommand(input.value);input.value='';}});
+            var btnR=document.getElementById('stermBtnRefresh');if(btnR)btnR.addEventListener('click',poll);
+            var btnC=document.getElementById('stermBtnClear');if(btnC)btnC.addEventListener('click',function(){_feedEl.innerHTML='';_seenIds.clear();appendLine('OK','scan','Feed dibersihkan.');poll();});
+            bootSequence();
+            _pollTimer=setInterval(poll,POLL_MS);
+        }
+
+        function destroy(){if(_pollTimer)clearInterval(_pollTimer);if(_matrixAnim)clearInterval(_matrixAnim);}
+        return{init:init,destroy:destroy};
+    })();
+    </script>
     <script>
         // Init OKX saat tab dibuka pertama kali
         (function () {
