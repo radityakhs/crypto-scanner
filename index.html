@@ -1499,7 +1499,25 @@
 
         <!-- ⚡ SIGNAL TERMINAL TAB -->
         <div id="signal-terminal" class="tab-content">
-            <div id="signalTerminalPanel" style="min-height:600px;"></div>
+            <div id="signalTerminalPanel" style="min-height:600px;">
+                <!-- Loading placeholder — diganti saat JS init -->
+                <div id="stermLoading" style="
+                    display:flex; flex-direction:column; align-items:center; justify-content:center;
+                    min-height:500px; background:#020810; border:1px solid #22d3ee33;
+                    border-radius:12px; margin:1.5rem 0; gap:1.2rem;">
+                    <div style="font-size:2.5rem;">⚡</div>
+                    <div style="color:#22d3ee; font-family:'Courier New',monospace; font-size:1.1rem; letter-spacing:2px;">
+                        SIGNAL TERMINAL
+                    </div>
+                    <div style="width:220px; height:4px; background:#0f1923; border-radius:4px; overflow:hidden;">
+                        <div id="stermLoadBar" style="height:100%; width:0%; background:linear-gradient(90deg,#22d3ee,#4ade80);
+                            border-radius:4px; transition:width 0.3s ease;"></div>
+                    </div>
+                    <div id="stermLoadMsg" style="color:#4ade80; font-family:'Courier New',monospace; font-size:0.78rem; opacity:0.8;">
+                        Menginisialisasi...
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- ═══════════════════════════════════════════════════
@@ -2306,8 +2324,29 @@
             document.addEventListener('tabchange', function (e) {
                 if (e.detail !== 'signal-terminal' || _stermDone) return;
                 _stermDone = true;
-                var panel = document.getElementById('signalTerminalPanel');
-                if (panel && window.SignalTerminal) SignalTerminal.init(panel);
+
+                // Animasi loading bar 0 → 100% dalam ~800ms lalu init
+                var bar  = document.getElementById('stermLoadBar');
+                var msg  = document.getElementById('stermLoadMsg');
+                var msgs = ['Memuat modul...', 'Menghubungkan engine...', 'Mengambil sinyal...', 'Siap!'];
+                var pcts = [25, 55, 85, 100];
+                var i = 0;
+                function step() {
+                    if (!bar) { doInit(); return; }
+                    bar.style.width = pcts[i] + '%';
+                    if (msg) msg.textContent = msgs[i];
+                    i++;
+                    if (i < pcts.length) setTimeout(step, 200);
+                    else setTimeout(doInit, 150);
+                }
+                step();
+
+                function doInit() {
+                    var loading = document.getElementById('stermLoading');
+                    if (loading) loading.style.display = 'none';
+                    var panel = document.getElementById('signalTerminalPanel');
+                    if (panel && window.SignalTerminal) SignalTerminal.init(panel);
+                }
             });
         })();
 
