@@ -9498,3 +9498,126 @@ img[src*="ic_dev"],        img[src*="ic_code"] {
   text-shadow: 0 0 10px rgba(34,211,238,0.5);
   z-index: 2;
 }
+
+/* ════════════════════════════════════════════════════════════════════════
+   SIGNAL TERMINAL — Boot Loading Screen
+   Muncul di #signalTerminalPanel segera saat halaman dimuat,
+   sebelum user mengklik tab ⚡ Signal Terminal
+   ════════════════════════════════════════════════════════════════════════ */
+.sterm-boot-screen {
+  background: #020810;
+  border: 1px solid rgba(34,211,238,0.25);
+  border-radius: 10px;
+  padding: 2rem 1.5rem;
+  font-family: 'Courier New', monospace;
+  color: #94a3b8;
+  box-shadow: 0 0 40px rgba(34,211,238,0.08), inset 0 0 60px rgba(0,0,0,0.4);
+  position: relative;
+  overflow: hidden;
+}
+/* scanline overlay */
+.sterm-boot-screen::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,0.08) 2px,
+    rgba(0,0,0,0.08) 4px
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+.sterm-boot-inner {
+  position: relative;
+  z-index: 1;
+  max-width: 640px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+/* Logo / title */
+.sterm-boot-logo { text-align: center; }
+.sterm-boot-hex {
+  font-size: 3rem;
+  color: #22d3ee;
+  text-shadow: 0 0 30px rgba(34,211,238,0.6), 0 0 60px rgba(34,211,238,0.3);
+  animation: sterm-pulse 2s ease-in-out infinite;
+  line-height: 1;
+}
+@keyframes sterm-pulse {
+  0%, 100% { text-shadow: 0 0 20px rgba(34,211,238,0.5); }
+  50%       { text-shadow: 0 0 50px rgba(34,211,238,0.9), 0 0 80px rgba(34,211,238,0.4); }
+}
+.sterm-boot-brand {
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: 0.25em;
+  color: #e2e8f0;
+  margin-top: 0.5rem;
+  text-shadow: 0 0 20px rgba(34,211,238,0.4);
+}
+.sterm-boot-sub {
+  font-size: 0.72rem;
+  letter-spacing: 0.18em;
+  color: #22d3ee;
+  margin-top: 0.3rem;
+  opacity: 0.8;
+}
+
+/* Progress bar */
+.sterm-boot-bar-wrap {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(34,211,238,0.2);
+  border-radius: 4px;
+  height: 6px;
+  overflow: hidden;
+}
+.sterm-boot-bar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #0e7490, #22d3ee);
+  border-radius: 4px;
+  transition: width 0.35s ease;
+  box-shadow: 0 0 12px rgba(34,211,238,0.6);
+}
+
+/* Boot log lines */
+.sterm-boot-log {
+  max-height: 180px;
+  overflow-y: auto;
+  font-size: 0.72rem;
+  line-height: 1.7;
+  scrollbar-width: thin;
+  scrollbar-color: #22d3ee22 transparent;
+}
+.sterm-boot-log::-webkit-scrollbar       { width: 4px; }
+.sterm-boot-log::-webkit-scrollbar-track { background: transparent; }
+.sterm-boot-log::-webkit-scrollbar-thumb { background: rgba(34,211,238,0.3); border-radius: 2px; }
+.sterm-boot-log-line {
+  color: #475569;
+  animation: sterm-fadein 0.3s ease;
+}
+.sterm-boot-log-line:last-child { color: #94a3b8; }
+.sterm-boot-pct {
+  color: #22d3ee;
+  opacity: 0.7;
+  margin-right: 0.5rem;
+  font-size: 0.68rem;
+}
+
+/* Bottom hint */
+.sterm-boot-hint {
+  text-align: center;
+  font-size: 0.72rem;
+  color: #334155;
+  border-top: 1px solid rgba(34,211,238,0.1);
+  padding-top: 0.75rem;
+  animation: sterm-blink 2s step-end infinite;
+}
+.sterm-boot-hint b { color: #22d3ee; }
+
