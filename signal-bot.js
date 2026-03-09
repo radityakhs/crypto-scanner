@@ -23,14 +23,16 @@ const https = require('https');
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
 const CONFIG = {
     INTERVAL_MIN      : 15,          // polling interval (menit)
-    MIN_CONFIDENCE    : 20,          // minimum confidence untuk trigger sinyal
-    MIN_BULLISH       : 65,          // threshold bullish %
-    MIN_BEARISH       : 65,          // threshold bearish %
-    TOP_N_COINS       : 20,          // berapa coin yang di-scan
+    MIN_CONFIDENCE    : 15,          // minimum confidence (diturunkan agar lebih banyak sinyal)
+    MIN_BULLISH       : 60,          // threshold bullish % (diturunkan dari 65)
+    MIN_BEARISH       : 60,          // threshold bearish % (diturunkan dari 65)
+    TOP_N_COINS       : 200,         // scan top 200 coin by volume
+    MIN_VOLATILITY_PCT: 5,           // min 24h price change % (filter coin volatile)
+    MIN_VOLUME_USD    : 10_000_000,  // min volume 24h $10jt (filter likuiditas)
     VS_CURRENCY       : 'usd',
     DAYS              : 30,
     SIGNALS_FILE      : path.join(__dirname, 'signals.json'),
-    MAX_SIGNALS_STORED: 200,         // max entry di file JSON
+    MAX_SIGNALS_STORED: 500,         // naikkan dari 200 ke 500
     LOG_PREFIX        : '🤖 [SignalBot]',
 };
 
@@ -91,8 +93,24 @@ async function fetchWithRetry(url, retries = 3) {
 const CG_BASE = 'https://api.coingecko.com/api/v3';
 
 async function fetchTopCoins(n = CONFIG.TOP_N_COINS) {
-    const url = `${CG_BASE}/coins/markets?vs_currency=${CONFIG.VS_CURRENCY}&order=market_cap_desc&per_page=${n}&page=1&sparkline=false&price_change_percentage=24h`;
-    return fetchWithRetry(url);
+    // CoinGecko free max 250/page — ambil max 2 halaman, sort by volume (paling volatile)
+    const pages = Math.ceil(n / 250);
+    let allCoins = [];
+    for (let page = 1; page <= pages; page++) {
+        const perPage = Math.min(250, n - (page - 1) * 250);
+        const url = `${CG_BASE}/coins/markets?vs_currency=${CONFIG.VS_CURRENCY}&order=volume_desc&per_page=${perPage}&page=${page}&sparkline=false&price_change_percentage=24h`;
+        const coins = await fetchWithRetry(url);
+        if (!Array.isArray(coins)) break;
+        allCoins = allCoins.concat(coins);
+        if (page < pages) await sleep(1500); // hindari rate limit antar halaman
+    }
+    // Filter: min volume & min volatilitas 24h
+    const filtered = allCoins.filter(c =>
+        c.total_volume >= CONFIG.MIN_VOLUME_USD &&
+        Math.abs(c.price_change_percentage_24h || 0) >= CONFIG.MIN_VOLATILITY_PCT
+    );
+    log(`Fetch ${allCoins.length} coins → setelah filter volatilitas/volume: ${filtered.length} coins`);
+    return filtered;
 }
 
 async function fetchMarketChart(coinId) {
@@ -440,6 +458,9 @@ async function scanCoin(coin) {
             bearish        : dp.bearish,
             confidence     : dp.confidence,
             currentPrice   : result.currentPrice,
+            priceChange24h : coin.price_change_percentage_24h || 0,
+            volume24h      : coin.total_volume || 0,
+            volatilityScore: Math.round(Math.abs(coin.price_change_percentage_24h || 0) * 10) / 10,
             entryLow       : tl.entryLow,
             entryHigh      : tl.entryHigh,
             stopLoss       : tl.stopLoss,
@@ -468,7 +489,7 @@ async function scanCoin(coin) {
 
 // ─── MAIN SCAN LOOP ────────────────────────────────────────────────────────────
 async function runScan() {
-    log(`Memulai scan ${CONFIG.TOP_N_COINS} coin teratas...`);
+    log(`Memulai scan top ${CONFIG.TOP_N_COINS} coins (filter vol≥${CONFIG.MIN_VOLATILITY_PCT}%, volume≥$${(CONFIG.MIN_VOLUME_USD/1e6).toFixed(0)}M)...`);
     let coins;
     try {
         coins = await fetchTopCoins(CONFIG.TOP_N_COINS);
@@ -482,9 +503,12 @@ async function runScan() {
         return;
     }
 
+    // Sort by volatility desc — coin paling volatile duluan
+    coins.sort((a, b) => Math.abs(b.price_change_percentage_24h || 0) - Math.abs(a.price_change_percentage_24h || 0));
+
     let signalCount = 0;
     for (const coin of coins) {
-        process.stdout.write(`  → Scanning ${coin.symbol.toUpperCase().padEnd(8)}... `);
+        process.stdout.write(`  → Scanning ${coin.symbol.toUpperCase().padEnd(8)} (${(coin.price_change_percentage_24h||0).toFixed(1)}%)... `);
         const sig = await scanCoin(coin);
         if (sig) { signalCount++; process.stdout.write(`✅ ${sig.signal}\n`); }
         else      { process.stdout.write(`WAIT\n`); }
