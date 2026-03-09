@@ -1490,6 +1490,10 @@
                     </div>
                 </div>
             </div>
+
+            <!-- ⚡ SIGNAL TERMINAL — embedded in scanner tab -->
+            <div id="signalTerminalPanel" style="margin-top:1.5rem;"></div>
+
         </div>
 
         <!-- ═══════════════════════════════════════════════════
@@ -2244,9 +2248,6 @@
         </div>
     </div><!-- /#solana-swap -->
 
-    <!-- ⚡ SIGNAL TERMINAL — always visible di bawah semua tab content -->
-    <div id="signalTerminalPanel"></div>
-
     <!-- External Scripts -->
     <script src="analysis-utils.js"></script>
     <script src="app.js"></script>
@@ -2293,17 +2294,14 @@
             });
         })();
 
-        // Init Signal Terminal otomatis saat halaman dimuat — tanpa klik tab
+        // Init Signal Terminal otomatis saat halaman dimuat — langsung di scanner tab
         (function () {
             function startSterm() {
                 const panel = document.getElementById('signalTerminalPanel');
                 if (panel && window.SignalTerminal) SignalTerminal.init(panel);
             }
-            if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', startSterm);
-            } else {
-                startSterm();
-            }
+            // Tunggu semua script selesai load baru init
+            window.addEventListener('load', startSterm);
         })();
 
         // Restore saved API key into input fields on page load
