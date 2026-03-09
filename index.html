@@ -30,10 +30,12 @@
             </div>
         </div>
 
+        <!-- ⚡ SIGNAL TERMINAL — always visible, auto-init, no tab needed -->
+        <div id="signalTerminalPanel"></div>
+
         <!-- Navigation Tabs -->
         <div class="tabs">
             <button class="tab-btn active" data-tab="scanner"><img src="images/ic_dashboard_1.svg" alt="" style="width: 20px; height: 20px; vertical-align: middle;"> 🪙 Crypto Scanner</button>
-            <button class="tab-btn" data-tab="signal-terminal">⚡ Signal Terminal</button>
             <button class="tab-btn" data-tab="dex-analyzer"><img src="images/ic_build.png" alt="" style="width: 20px; height: 20px; vertical-align: middle; border-radius:4px;"> 🔬 DEX Analyzer</button>
             <button class="tab-btn" data-tab="idx-stocks"><img src="images/ic_db.svg" alt="" style="width: 20px; height: 20px; vertical-align: middle;"> 🇮🇩 IDX Stocks</button>
             <button class="tab-btn" data-tab="us-stocks"><img src="images/ic_rules.svg" alt="" style="width: 20px; height: 20px; vertical-align: middle;"> 🇺🇸 US Stocks</button>
@@ -2245,13 +2247,6 @@
         </div>
     </div><!-- /#solana-swap -->
 
-    <!-- ╔══════════════════════════════════════════════════════════════╗
-         ║          SIGNAL TERMINAL — Live Bot Feed                    ║
-         ╚══════════════════════════════════════════════════════════════╝ -->
-    <div id="signal-terminal" class="tab-content">
-        <div id="signalTerminalPanel"></div>
-    </div><!-- /#signal-terminal -->
-
     <!-- External Scripts -->
     <script src="analysis-utils.js"></script>
     <script src="app.js"></script>
@@ -2298,16 +2293,17 @@
             });
         })();
 
-        // Init Signal Terminal saat tab dibuka pertama kali
+        // Init Signal Terminal otomatis saat halaman dimuat — tanpa klik tab
         (function () {
-            let _stermInited = false;
-            document.addEventListener('tabchange', function (e) {
-                if (e.detail === 'signal-terminal' && !_stermInited) {
-                    _stermInited = true;
-                    const panel = document.getElementById('signalTerminalPanel');
-                    if (panel && window.SignalTerminal) SignalTerminal.init(panel);
-                }
-            });
+            function startSterm() {
+                const panel = document.getElementById('signalTerminalPanel');
+                if (panel && window.SignalTerminal) SignalTerminal.init(panel);
+            }
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', startSterm);
+            } else {
+                startSterm();
+            }
         })();
 
         // Restore saved API key into input fields on page load

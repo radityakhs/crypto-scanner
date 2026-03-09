@@ -39,58 +39,6 @@ const SignalTerminal = (() => {
     }
     function uid(s) { return s.coinId + '_' + s.signal + '_' + s.timestamp; }
 
-    // ── LOADING SCREEN ──────────────────────────────────────────────────────
-    // Langsung tampil di #signalTerminalPanel saat halaman dimuat,
-    // sehingga user tahu panel sedang siap meski tab belum diklik.
-    function showLoadingScreen(panel) {
-        panel.innerHTML =
-            '<div class="sterm-boot-screen" id="stermBootScreen">' +
-                '<div class="sterm-boot-inner">' +
-                    '<div class="sterm-boot-logo">' +
-                        '<div class="sterm-boot-hex">\u2B21</div>' +
-                        '<div class="sterm-boot-brand">SIGNAL TERMINAL</div>' +
-                        '<div class="sterm-boot-sub">Quant Analyst v2 &middot; 10 Engines Active</div>' +
-                    '</div>' +
-                    '<div class="sterm-boot-bar-wrap">' +
-                        '<div class="sterm-boot-bar" id="stermBootBar"></div>' +
-                    '</div>' +
-                    '<div class="sterm-boot-log" id="stermBootLog"></div>' +
-                    '<div class="sterm-boot-hint">Klik tab <b>&#9889; Signal Terminal</b> untuk membuka tampilan penuh</div>' +
-                '</div>' +
-            '</div>';
-        runBootAnim();
-    }
-
-    function runBootAnim() {
-        const bar = document.getElementById('stermBootBar');
-        const log = document.getElementById('stermBootLog');
-        if (!bar || !log) return;
-        const steps = [
-            [10,  'Memuat modul quant engine...'],
-            [22,  'Market Structure Engine OK'],
-            [34,  'Liquidity &amp; Supply/Demand OK'],
-            [46,  'Volume Profile &amp; Order Flow OK'],
-            [58,  'Whale Activity Scanner OK'],
-            [70,  'Volatility Phase Detector OK'],
-            [80,  'Monte Carlo GBM Engine OK'],
-            [90,  'Directional Probability Model OK'],
-            [96,  'Trade Decision Engine OK'],
-            [100, '&#9989; Siap &mdash; klik tab untuk membuka terminal'],
-        ];
-        let i = 0;
-        const tick = setInterval(function() {
-            if (i >= steps.length) { clearInterval(tick); return; }
-            var s   = steps[i++];
-            var pct = s[0], msg = s[1];
-            bar.style.width = pct + '%';
-            var line = document.createElement('div');
-            line.className = 'sterm-boot-log-line';
-            line.innerHTML = '<span class="sterm-boot-pct">[' + String(pct).padStart(3, ' ') + '%]</span> ' + msg;
-            log.appendChild(line);
-            log.scrollTop = log.scrollHeight;
-        }, 300);
-    }
-
     // ── MATRIX RAIN ─────────────────────────────────────────────────────────
     function startMatrixRain(canvas) {
         var ctx   = canvas.getContext('2d');
@@ -356,23 +304,16 @@ const SignalTerminal = (() => {
         _pollTimer = setInterval(poll, POLL_MS);
     }
 
-    // ── PRE-INIT (loading screen — langsung saat halaman load) ─────────────────
-    function preInit() {
-        var panel = document.getElementById('signalTerminalPanel');
-        if (panel) showLoadingScreen(panel);
-    }
-
-    function destroy() {
-        if (_pollTimer)  clearInterval(_pollTimer);
-        if (_matrixAnim) clearInterval(_matrixAnim);
-    }
-
-    return { init, preInit, destroy };
+    return { init, destroy };
 })();
 
-// Jalankan loading screen segera saat DOM siap
+// Auto-init langsung saat DOM siap — tidak perlu klik apapun
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function() { SignalTerminal.preInit(); });
+    document.addEventListener('DOMContentLoaded', function() {
+        var panel = document.getElementById('signalTerminalPanel');
+        if (panel) SignalTerminal.init(panel);
+    });
 } else {
-    SignalTerminal.preInit();
+    var panel = document.getElementById('signalTerminalPanel');
+    if (panel) SignalTerminal.init(panel);
 }
