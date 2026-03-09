@@ -33,6 +33,7 @@
         <!-- Navigation Tabs -->
         <div class="tabs">
             <button class="tab-btn active" data-tab="scanner"><img src="images/ic_dashboard_1.svg" alt="" style="width: 20px; height: 20px; vertical-align: middle;"> 🪙 Crypto Scanner</button>
+            <button class="tab-btn" data-tab="signal-terminal">⚡ Signal Bot</button>
             <button class="tab-btn" data-tab="dex-analyzer"><img src="images/ic_build.png" alt="" style="width: 20px; height: 20px; vertical-align: middle; border-radius:4px;"> 🔬 DEX Analyzer</button>
             <button class="tab-btn" data-tab="idx-stocks"><img src="images/ic_db.svg" alt="" style="width: 20px; height: 20px; vertical-align: middle;"> 🇮🇩 IDX Stocks</button>
             <button class="tab-btn" data-tab="us-stocks"><img src="images/ic_rules.svg" alt="" style="width: 20px; height: 20px; vertical-align: middle;"> 🇺🇸 US Stocks</button>
@@ -529,8 +530,7 @@
             </div>
           </div>
 
-          <!-- ⚡ SIGNAL TERMINAL — selalu visible di tab Portfolio (tab default) -->
-          <div id="signalTerminalPanel" style="margin-top:1.5rem;min-height:400px;border:1px solid #22d3ee22;"></div>
+
 
         </div>
 
@@ -1497,6 +1497,11 @@
 
         </div>
 
+        <!-- ⚡ SIGNAL TERMINAL TAB -->
+        <div id="signal-terminal" class="tab-content">
+            <div id="signalTerminalPanel" style="min-height:600px;"></div>
+        </div>
+
         <!-- ═══════════════════════════════════════════════════
              DEX ANALYZER TAB  — DEXScreener-style live scanner
              + deep analysis side panel + Web3 trading
@@ -2295,25 +2300,15 @@
             });
         })();
 
-        // Init Signal Terminal — retry loop hingga SignalTerminal dan panel siap
+        // Init Signal Terminal saat tab diklik — lazy init
         (function () {
             var _stermDone = false;
-            function tryInit() {
-                if (_stermDone) return;
+            document.addEventListener('tabchange', function (e) {
+                if (e.detail !== 'signal-terminal' || _stermDone) return;
+                _stermDone = true;
                 var panel = document.getElementById('signalTerminalPanel');
-                if (panel && window.SignalTerminal) {
-                    _stermDone = true;
-                    SignalTerminal.init(panel);
-                    return;
-                }
-                setTimeout(tryInit, 100);
-            }
-            // Coba langsung, lalu tiap 100ms sampai berhasil
-            if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', tryInit);
-            } else {
-                tryInit();
-            }
+                if (panel && window.SignalTerminal) SignalTerminal.init(panel);
+            });
         })();
 
         // Restore saved API key into input fields on page load
