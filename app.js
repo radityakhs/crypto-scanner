@@ -4721,10 +4721,29 @@ function generateExitStrategy(coinId) {
     const coin = cryptoData.find(c => c.id === coinId);
     if (!coin) { console.warn('Coin not found:', coinId); return; }
 
-    // Pastikan section exit strategy terlihat
-    const exitSection = document.querySelector('.exit-strategy-section');
-    if (exitSection) exitSection.style.display = 'block';
+    // 1. Pastikan tab scanner aktif (exit-strategy-section ada di dalam tab scanner)
+    const scannerTab = document.getElementById('scanner');
+    if (scannerTab && !scannerTab.classList.contains('active')) {
+        // Switch ke tab scanner
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        scannerTab.classList.add('active');
+        const scannerBtn = document.querySelector('.tab-btn[data-tab="scanner"]');
+        if (scannerBtn) scannerBtn.classList.add('active');
+    }
 
+    // 2. Pastikan section exit strategy terlihat (tidak di-hide inline)
+    const exitSection = document.querySelector('.exit-strategy-section');
+    if (exitSection) exitSection.style.display = '';
+
+    // 3. Isi API key dari localStorage jika input kosong
+    const keyInput = document.getElementById('ameKeyInput');
+    if (keyInput && !keyInput.value) {
+        const saved = localStorage.getItem('hf_gemini_key') || '';
+        if (saved) keyInput.value = saved;
+    }
+
+    // 4. Jalankan analisis AI
     if (typeof generateAIExitStrategy === 'function') {
         generateAIExitStrategy(coin.current_price, { coin });
     } else {
@@ -4732,10 +4751,10 @@ function generateExitStrategy(coinId) {
         _renderExitStrategyFallback(coin);
     }
 
-    // Scroll ke section
+    // 5. Scroll ke section setelah DOM update
     const container = document.getElementById('exitStrategyContainer');
     if (container) {
-        setTimeout(() => container.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+        setTimeout(() => container.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
     }
 }
 
