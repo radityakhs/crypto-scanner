@@ -9801,3 +9801,211 @@ img[src*="ic_dev"],        img[src*="ic_code"] {
 }
 .sterm-boot-hint b { color: #22d3ee; }
 
+
+/* ============================================================
+   WALLET FLOW GRAPH  — Panel, Canvas, Controls, Tooltip
+   ============================================================ */
+
+/* ── Panel wrapper ─────────────────────────────────────────── */
+.wg-panel {
+    background: #080d1a;
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    border-radius: 16px;
+    margin-top: 24px;
+    overflow: hidden;
+    position: relative;
+    box-shadow: 0 0 40px rgba(99,102,241,0.08);
+}
+
+/* ── Header ───────────────────────────────────────────────── */
+.wg-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: rgba(99,102,241,0.07);
+    border-bottom: 1px solid rgba(99,102,241,0.2);
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.wg-header-left { display: flex; align-items: center; gap: 10px; }
+.wg-header-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.wg-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: #e2e8f0;
+    letter-spacing: 0.03em;
+}
+.wg-address-label {
+    font-size: 12px;
+    color: #a5b4fc;
+    font-family: monospace;
+    background: rgba(99,102,241,0.15);
+    padding: 2px 8px;
+    border-radius: 6px;
+}
+.wg-filter-label { font-size: 12px; color: #64748b; }
+.wg-filter-input {
+    width: 80px;
+    background: #1e293b;
+    border: 1px solid rgba(99,102,241,0.3);
+    border-radius: 6px;
+    color: #e2e8f0;
+    font-size: 12px;
+    padding: 4px 8px;
+}
+.wg-ctrl-btn {
+    background: rgba(99,102,241,0.12);
+    border: 1px solid rgba(99,102,241,0.3);
+    color: #a5b4fc;
+    border-radius: 7px;
+    font-size: 12px;
+    padding: 4px 10px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+.wg-ctrl-btn:hover { background: rgba(99,102,241,0.25); }
+.wg-close-btn {
+    background: rgba(239,68,68,0.1);
+    border-color: rgba(239,68,68,0.3);
+    color: #f87171;
+}
+.wg-close-btn:hover { background: rgba(239,68,68,0.2); }
+
+/* ── Legend ───────────────────────────────────────────────── */
+.wg-legend {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 8px 16px;
+    border-bottom: 1px solid rgba(148,163,184,0.08);
+    font-size: 11px;
+}
+.wg-legend-item { color: #64748b; }
+.wg-legend-item.root     { color: #818cf8; }
+.wg-legend-item.exchange { color: #f59e0b; }
+.wg-legend-item.defi     { color: #06b6d4; }
+.wg-legend-item.contract { color: #10b981; }
+.wg-legend-item.wallet   { color: #94a3b8; }
+.wg-legend-item.in       { color: #4ade80; }
+.wg-legend-item.out      { color: #f87171; }
+
+/* ── Stats bar ────────────────────────────────────────────── */
+.wg-stats {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    padding: 6px 16px;
+    border-bottom: 1px solid rgba(148,163,184,0.08);
+    font-size: 12px;
+    color: #64748b;
+}
+.wg-stat b { color: #e2e8f0; }
+
+/* ── SVG canvas wrapper ───────────────────────────────────── */
+.wg-canvas-wrap {
+    width: 100%;
+    height: 520px;
+    position: relative;
+    overflow: hidden;
+    cursor: grab;
+}
+.wg-canvas-wrap:active { cursor: grabbing; }
+.wg-canvas-wrap svg { display: block; width: 100%; height: 100%; }
+
+/* D3 node & link styles (applied via JS attr, but override here) */
+.graph-node { cursor: pointer; }
+.graph-node:hover circle { filter: brightness(1.4); }
+.graph-link { cursor: crosshair; }
+
+/* ── Loading overlay ──────────────────────────────────────── */
+.wg-loading-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(8,13,26,0.82);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    font-size: 14px;
+    color: #94a3b8;
+    z-index: 10;
+    border-radius: 0 0 16px 16px;
+}
+
+/* ── Helius hint ──────────────────────────────────────────── */
+.wg-helius-hint {
+    padding: 8px 16px;
+    font-size: 11px;
+    color: #4b5563;
+    border-top: 1px solid rgba(148,163,184,0.06);
+    line-height: 1.6;
+}
+.wg-helius-hint a { color: #6366f1; }
+.wg-helius-hint code {
+    background: rgba(99,102,241,0.15);
+    padding: 1px 4px;
+    border-radius: 3px;
+    color: #a5b4fc;
+    font-size: 10px;
+}
+
+/* ── Tooltip ──────────────────────────────────────────────── */
+.wg-tooltip {
+    position: fixed;
+    z-index: 9999;
+    background: #0f172a;
+    border: 1px solid rgba(99,102,241,0.4);
+    border-radius: 10px;
+    padding: 10px 13px;
+    font-size: 12px;
+    color: #e2e8f0;
+    pointer-events: none;
+    max-width: 220px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    display: none;
+}
+.wg-tip-title {
+    font-weight: 700;
+    font-size: 13px;
+    margin-bottom: 5px;
+    color: #f1f5f9;
+}
+.wg-tip-addr {
+    font-family: monospace;
+    font-size: 10px;
+    color: #6366f1;
+    margin-bottom: 6px;
+    word-break: break-all;
+}
+.wg-tip-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 2px;
+}
+.wg-tip-row span { color: #64748b; }
+.wg-tip-row b    { color: #e2e8f0; }
+.wg-tip-expand {
+    margin-top: 6px;
+    font-size: 11px;
+    color: #6366f1;
+    font-style: italic;
+}
+
+/* ── Wallet card: Flow Graph button ──────────────────────── */
+.wt-graph-btn {
+    background: rgba(99,102,241,0.15);
+    border: 1px solid rgba(99,102,241,0.35);
+    color: #a5b4fc;
+    border-radius: 7px;
+    font-size: 11px;
+    padding: 4px 10px;
+    cursor: pointer;
+    transition: background 0.15s;
+    white-space: nowrap;
+}
+.wt-graph-btn:hover {
+    background: rgba(99,102,241,0.3);
+    color: #e0e7ff;
+}

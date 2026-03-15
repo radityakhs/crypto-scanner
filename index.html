@@ -8,6 +8,8 @@
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@2.2.1"></script>
+    <!-- D3.js untuk Wallet Flow Graph -->
+    <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
 </head>
 <body>
     <div class="container">
@@ -1314,6 +1316,58 @@
                             <span style="font-size:2rem">📭</span>
                             <p>Belum ada transaksi. Transaksi baru akan muncul otomatis saat terdeteksi.</p>
                         </div>
+                    </div>
+                </div>
+
+                <!-- ── Flow Graph Panel (Arkham-style) ─────────────── -->
+                <div class="wg-panel" id="walletGraphPanel" style="display:none">
+                    <!-- Header -->
+                    <div class="wg-header">
+                        <div class="wg-header-left">
+                            <span class="wg-title">🔗 Transaction Flow Graph</span>
+                            <span class="wg-address-label" id="wgAddressLabel">—</span>
+                        </div>
+                        <div class="wg-header-right">
+                            <!-- Filter USD -->
+                            <label class="wg-filter-label">USD ≥</label>
+                            <input type="number" id="wgFilterUsd" class="wg-filter-input"
+                                placeholder="0" min="0" value="0"
+                                onchange="walletGraph.applyFilter()">
+                            <!-- Helius API key hint -->
+                            <button class="wg-ctrl-btn" title="Reset zoom" onclick="walletGraph.resetZoom()">⊙ Reset</button>
+                            <button class="wg-ctrl-btn wg-close-btn" onclick="walletGraph.closeGraph()">✕ Tutup</button>
+                        </div>
+                    </div>
+
+                    <!-- Legend -->
+                    <div class="wg-legend">
+                        <span class="wg-legend-item root">⬡ Wallet Anda</span>
+                        <span class="wg-legend-item exchange">● Exchange</span>
+                        <span class="wg-legend-item defi">● DeFi Protocol</span>
+                        <span class="wg-legend-item contract">● Smart Contract</span>
+                        <span class="wg-legend-item wallet">● Wallet Biasa</span>
+                        <span class="wg-legend-item in">→ IN</span>
+                        <span class="wg-legend-item out">→ OUT</span>
+                    </div>
+
+                    <!-- Stats bar -->
+                    <div class="wg-stats" id="wgStats"></div>
+
+                    <!-- SVG canvas -->
+                    <div class="wg-canvas-wrap" id="walletGraphSvg"></div>
+
+                    <!-- Loading overlay -->
+                    <div class="wg-loading-overlay" id="wgLoadingOverlay" style="display:none">
+                        <span class="g-spinner"></span>
+                        <span>Memuat transaksi…</span>
+                    </div>
+
+                    <!-- Helius key hint for Solana -->
+                    <div class="wg-helius-hint" id="wgHeliusHint">
+                        💡 Untuk data Solana lebih detail (nilai transfer, counterparty), tambahkan
+                        <b>Helius API Key</b> gratis di
+                        <a href="https://dev.helius.xyz" target="_blank">dev.helius.xyz</a>
+                        → simpan di <b>⚙ Set API Keys</b> dengan nama field <code>heliusApiKey</code>.
                     </div>
                 </div>
 
@@ -2706,6 +2760,7 @@
     <script src="ai-alerts.js"></script>
     <script src="auto-trader-ui.js"></script>
     <script src="dex-hunter-ui.js"></script>
+    <script src="wallet-graph.js"></script>
     <script>
     // ── SIGNAL TERMINAL (inline — tidak bergantung file eksternal) ────────────
     window.SignalTerminal = (function () {

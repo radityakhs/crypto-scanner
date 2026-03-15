@@ -5459,6 +5459,9 @@ const walletTracker = (() => {
                     ? `<span class="wt-preview-tracked-note">✅ Wallet ini sudah ada di tracker kamu</span>`
                     : `<button class="wt-add-btn" onclick="walletTracker.confirmAddFromPreview('${chain}','${address}')">+ Track Wallet Ini</button>`
                 }
+                ${(chain === 'ethereum' || chain === 'solana')
+                    ? `<button class="wt-graph-btn" onclick="walletGraph.loadGraph('${address}','${chain}')">🕸 Flow Graph</button>`
+                    : ''}
                 <button class="wt-preview-dismiss" onclick="document.getElementById('wtPreviewPanel').style.display='none'">Tutup</button>
             </div>
 
@@ -5714,6 +5717,9 @@ const walletTracker = (() => {
                 <div class="wt-card-actions">
                     <button class="wt-refresh-btn" onclick="walletTracker.refreshSingle('${w.id}')">↻ Refresh</button>
                     <a class="wt-explorer-btn" href="${explorerUrl(w)}" target="_blank">🔗 Explorer</a>
+                    ${(w.chain === 'ethereum' || w.chain === 'solana')
+                        ? `<button class="wt-graph-btn" onclick="walletGraph.loadGraph('${w.address}','${w.chain}')">🕸 Flow Graph</button>`
+                        : ''}
                 </div>
             </div>`;
         }).join('');
