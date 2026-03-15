@@ -2243,26 +2243,40 @@ function getFuturesAnalysis(coin, marketChart = null) {
 
     if (direction === 'long' || direction === 'long_weak') {
         entry      = price;
-        sl         = Math.max(price - atr * 1.5, support * 0.995);
-        const risk  = entry - sl;
+        // SL harus SELALU di bawah entry — jika support > price, pakai ATR saja
+        const slByAtr    = price - atr * 1.5;
+        const slBySupport = support < price ? support * 0.995 : slByAtr;
+        sl         = Math.max(slByAtr, slBySupport);
+        // Pastikan SL selalu di bawah entry
+        if (sl >= entry) sl = entry - atr * 1.5;
+        const risk  = entry - sl;  // selalu positif
         tp1        = entry + risk * rr;
         tp2        = entry + risk * rr * 1.8;
-        // Estimasi liquidation (simplified: entry / (1 + 1/leverage * 0.9))
+        // Estimasi liquidation
         liqEstimate = entry * (1 - (1 / leverage) * 0.9);
     } else if (direction === 'short' || direction === 'short_weak') {
         entry      = price;
-        sl         = Math.min(price + atr * 1.5, resist * 1.005);
-        const risk  = sl - entry;
+        // SL harus SELALU di atas entry — jika resist < price (sudah ditembus), pakai ATR saja
+        const slByAtr   = price + atr * 1.5;
+        const slByResist = resist > price ? resist * 1.005 : slByAtr;
+        sl         = Math.min(slByAtr, slByResist);
+        // Pastikan SL selalu di atas entry
+        if (sl <= entry) sl = entry + atr * 1.5;
+        const risk  = sl - entry;  // selalu positif sekarang
         tp1        = entry - risk * rr;
         tp2        = entry - risk * rr * 1.8;
+        // TP tidak boleh negatif
+        tp1 = Math.max(tp1, 0);
+        tp2 = Math.max(tp2, 0);
         liqEstimate = entry * (1 + (1 / leverage) * 0.9);
     } else {
         entry = tp1 = tp2 = sl = liqEstimate = price;
     }
 
-    // Pastikan angka valid
-    tp2  = Math.max(tp2, 0);
-    sl   = Math.max(sl, 0);
+    // Pastikan semua angka valid & tidak negatif
+    tp1  = Math.max(tp1  ?? 0, 0);
+    tp2  = Math.max(tp2  ?? 0, 0);
+    sl   = Math.max(sl   ?? 0, 0);
 
     // ── Hitung risk & reward dalam % ─────────────────────────────────
     const riskPct   = entry > 0 ? Math.abs(entry - sl) / entry * 100 : 0;
@@ -2686,17 +2700,17 @@ function renderFuturesPanel(coin, marketChart = null) {
                         <tr class="futures-row-tp1">
                             <td>✅ Take Profit 1</td>
                             <td>${f.tp1}</td>
-                            <td class="tp-pct">+${f.rewardPct}%</td>
+                            <td class="tp-pct">${isShort ? '−' : '+'}${f.rewardPct}%</td>
                         </tr>
                         <tr class="futures-row-tp2">
                             <td>🚀 Take Profit 2</td>
                             <td>${f.tp2}</td>
-                            <td class="tp-pct">+${(parseFloat(f.rewardPct) * 1.8).toFixed(2)}%</td>
+                            <td class="tp-pct">${isShort ? '−' : '+'}${(parseFloat(f.rewardPct) * 1.8).toFixed(2)}%</td>
                         </tr>
                         <tr class="futures-row-sl">
                             <td>🛑 Stop Loss</td>
                             <td>${f.sl}</td>
-                            <td class="sl-pct">−${f.riskPct}%</td>
+                            <td class="sl-pct">${isShort ? '+' : '−'}${f.riskPct}%</td>
                         </tr>
                         <tr class="futures-row-liq">
                             <td>💀 Est. Liquidasi</td>
