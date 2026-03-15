@@ -2153,15 +2153,50 @@ function getFuturesAnalysis(coin, marketChart = null) {
     const atr      = rawAtr > 0 ? rawAtr : estimateAtrFromPct();
     const atrPct   = price > 0 ? (atr / price) * 100 : 2;  // ATR sebagai % harga
 
-    // Support / Resistance dari persentil 7d
+    // Support / Resistance — gunakan swing high/low dari 14 bar terakhir
+    // Lebih relevan daripada persentil statis yang bisa sudah ketinggalan harga
+    function calcSwingLevels(prices, lookback = 20) {
+        if (!prices || prices.length < lookback) return null;
+        const recent = prices.slice(-lookback);
+        const highs  = [];
+        const lows   = [];
+        for (let i = 1; i < recent.length - 1; i++) {
+            if (recent[i] >= recent[i-1] && recent[i] >= recent[i+1]) highs.push(recent[i]);
+            if (recent[i] <= recent[i-1] && recent[i] <= recent[i+1]) lows.push(recent[i]);
+        }
+        // Ambil swing high terdekat di atas harga, swing low terdekat di bawah harga
+        const aboveHighs = highs.filter(h => h > price).sort((a, b) => a - b);
+        const belowLows  = lows.filter(l => l < price).sort((a, b) => b - a);
+        return {
+            resist: aboveHighs[0] || null,
+            support: belowLows[0] || null,
+        };
+    }
+
+    const swings = spark.length > 20 ? calcSwingLevels(spark, 30) : null;
+
+    // Fallback bertingkat:
+    // 1. Swing high/low (paling akurat)
+    // 2. Persentil 10/90 dari data historis
+    // 3. Estimasi % dari harga terkini
     const sorted   = [...spark].sort((a, b) => a - b);
-    // Fallback S/R dari % changes jika sparkline kosong
-    const support  = spark.length > 10
-        ? sorted[Math.floor(sorted.length * 0.1)]
-        : price * (1 - Math.max(Math.abs(ch7d) / 100 * 0.6, 0.05));
-    const resist   = spark.length > 10
-        ? sorted[Math.floor(sorted.length * 0.9)]
-        : price * (1 + Math.max(Math.abs(ch7d) / 100 * 0.6, 0.05));
+    const pct10    = spark.length > 10 ? sorted[Math.floor(sorted.length * 0.1)] : null;
+    const pct90    = spark.length > 10 ? sorted[Math.floor(sorted.length * 0.9)] : null;
+
+    // Resistance: swing high di atas harga, atau pct90 jika masih di atas harga, atau estimasi +5%
+    const resist = (swings?.resist && swings.resist > price)
+        ? swings.resist
+        : (pct90 && pct90 > price)
+            ? pct90
+            : price * (1 + Math.max(Math.abs(ch7d) / 100 * 0.4, 0.03));
+
+    // Support: swing low di bawah harga, atau pct10 jika masih di bawah harga, atau estimasi -5%
+    const support = (swings?.support && swings.support < price)
+        ? swings.support
+        : (pct10 && pct10 < price)
+            ? pct10
+            : price * (1 - Math.max(Math.abs(ch7d) / 100 * 0.4, 0.03));
+
     const midLine  = (support + resist) / 2;
 
     // High & Low 7d
@@ -2196,9 +2231,25 @@ function getFuturesAnalysis(coin, marketChart = null) {
     if (ema20 > ema50)    { score += 1; factors.push(`EMA20 > EMA50 bullish`); }
     else if (ema20 < ema50){ score -= 1; factors.push(`EMA20 < EMA50 bearish`); }
 
-    // Faktor 5: Posisi harga dalam range
-    if (posInRange < 0.2) { score += 1; factors.push(`Harga dekat support`); }
-    if (posInRange > 0.8) { score -= 1; factors.push(`Harga dekat resistensi`); }
+    // Faktor 5: Posisi harga terhadap Support/Resistance
+    // Breakout di atas resistance → bullish (bukan bearish!)
+    // Breakdown di bawah support → bearish
+    const distToResist = (resist - price) / price * 100;  // % jarak ke resistance (negatif = sudah lewat)
+    const distToSupport = (price - support) / price * 100; // % jarak ke support (negatif = sudah lewat)
+    if (distToSupport < 1 && distToSupport >= 0) {
+        // Harga sangat dekat support dari atas — bullish reversal potential
+        score += 1; factors.push(`Harga dekat support`);
+    } else if (distToSupport < 0) {
+        // Harga breakdown di bawah support — bearish
+        score -= 2; factors.push(`Breakdown support ↓`);
+    }
+    if (distToResist < 0) {
+        // Harga sudah breakout di atas resistance — bullish, bukan short!
+        score += 1; factors.push(`Breakout resistance ↑`);
+    } else if (distToResist < 2) {
+        // Harga mepet resistance dari bawah — potensi reversal bearish
+        score -= 1; factors.push(`Harga dekat resistensi`);
+    }
 
     // Faktor 6: Volume momentum
     if (volRatio > 0.2 && ch24h > 0)  { score += 1; factors.push(`Volume spike + naik`); }
