@@ -8,11 +8,13 @@ const hedgeFundAI = (() => {
     'use strict';
 
     // ── Gemini endpoint ────────────────────────────────────────────────────────
+    // Model fallback chain — dicoba satu per satu jika quota habis
+    // Diurutkan: terbaru → lebih lama, semua masih aktif per Maret 2026
     const GEMINI_MODELS = [
-        'gemini-2.0-flash',
-        'gemini-2.0-flash-lite',
-        'gemini-1.5-flash',
-        'gemini-1.5-flash-8b',
+        'gemini-2.5-flash-lite',   // paling cepat & murah, quota besar
+        'gemini-2.5-flash',        // price-performance terbaik
+        'gemini-2.0-flash',        // deprecated tapi masih jalan
+        'gemini-2.0-flash-lite',   // deprecated tapi masih jalan
     ];
     const GEMINI_URL = (k, model) =>
         `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${k}`;
