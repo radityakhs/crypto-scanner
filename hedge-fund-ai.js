@@ -932,7 +932,7 @@ Output STRICT JSON only — no markdown, no explanation outside JSON:
         if (!_lastResult && !_isLoading) {
             const keyEl = _g('hfaiKeyInput');
             if (keyEl && !keyEl.value) {
-                const saved = sessionStorage.getItem('hf_gemini_key') || '';
+                const saved = localStorage.getItem('hf_gemini_key') || '';
                 if (saved) keyEl.value = saved;
             }
         }

@@ -6537,7 +6537,7 @@ const dexAnalyzer = (() => {
         if (tab === 'ai') {
             const keyEl = document.getElementById('hfaiKeyInput');
             if (keyEl && !keyEl.value) {
-                const saved = sessionStorage.getItem('hf_gemini_key') || '';
+                const saved = localStorage.getItem('hf_gemini_key') || '';
                 if (saved) keyEl.value = saved;
             }
         }
