@@ -1800,9 +1800,22 @@ function displayCoinAnalysis(coin, detailedData, expertAnalysis, marketChart) {
                 <button class="btn-primary" onclick="addToPortfolio('${coin.id}')">
                     Add to Portfolio
                 </button>
-                <button class="btn-secondary" onclick="generateExitStrategy('${coin.id}')">
-                    Exit Strategy
-                </button>
+            </div>
+
+            <!-- AI Daily Narrative — auto-load -->
+            <div id="inlineNarrativeWrap" style="margin-top:16px">
+                <div class="exit-strategy-header" style="margin-bottom:8px">
+                    <h3 style="margin:0;font-size:1rem;color:#f1f5f9">
+                        <img src="images/ic_development.svg" style="width:16px;height:16px;vertical-align:middle;margin-right:6px">
+                        AI Daily Narrative — Skenario 5 Hari
+                    </h3>
+                </div>
+                <div id="inlineNarrativeContainer">
+                    <div class="ame-loading">
+                        <span class="g-spinner"></span>
+                        <span>AI sedang menyusun skenario 5 hari untuk <strong>${coin.name}</strong>…</span>
+                    </div>
+                </div>
             </div>
         </div>
     `;
@@ -1822,6 +1835,69 @@ function displayCoinAnalysis(coin, detailedData, expertAnalysis, marketChart) {
             renderFibLegend(expertAnalysis?.fibonacciInsight);
         });
     }
+
+    // ── Auto-trigger AI Daily Narrative (tidak perlu klik apapun) ─────────
+    _autoRunNarrative(coin, marketChart);
+}
+
+// Jalankan AI Daily Narrative secara otomatis saat coin dianalisa
+function _autoRunNarrative(coin, marketChart) {
+    const apiKey = localStorage.getItem('hf_gemini_key') || '';
+    const inlineContainer = document.getElementById('inlineNarrativeContainer');
+    if (!inlineContainer) return;
+
+    // Kalau tidak ada API key — tampilkan form input inline (satu kali setup)
+    if (!apiKey) {
+        const coinId = coin.id || '';
+        inlineContainer.innerHTML = `
+        <div class="ame-key-row" style="margin:0">
+            <input id="inlineGeminiKeyInput" type="password" class="ame-key-input"
+                placeholder="🔑 Masukkan Gemini API Key sekali untuk mengaktifkan AI Narrative"
+                autocomplete="off" style="flex:1">
+            <button class="ame-key-btn" onclick="_activateNarrativeKey('${coinId}')">
+                ▶ Aktifkan &amp; Analisa
+            </button>
+        </div>
+        <p style="font-size:0.72rem;color:#64748b;margin:6px 0 0">
+            API Key gratis di <a href="https://aistudio.google.com" target="_blank" style="color:#38bdf8">aistudio.google.com</a>
+            — hanya perlu dimasukkan sekali, tersimpan permanen.
+        </p>`;
+        return;
+    }
+
+    // Ada API key — langsung jalankan
+    if (typeof aiMarketExpert === 'undefined') return;
+
+    const asset = {
+        symbol:    (coin.symbol  || 'CRYPTO').toUpperCase(),
+        name:      coin.name     || coin.id   || 'Crypto Asset',
+        price:     coin.current_price || 0,
+        change24h: coin.price_change_percentage_24h || null,
+        change7d:  coin.price_change_percentage_7d_in_currency || null,
+        volume24h: coin.total_volume   || null,
+        marketCap: coin.market_cap     || null,
+        rsi:       null,
+        trend:     null,
+        fearGreed: fearGreedData?.value || null,
+    };
+
+    aiMarketExpert.analyze(apiKey, asset, 'inlineNarrativeContainer');
+    // Sync juga ke input ameKeyInput supaya tombol Simpan Key tetap terisi
+    const ameInput = document.getElementById('ameKeyInput');
+    if (ameInput && !ameInput.value) ameInput.value = apiKey;
+}
+
+// Dipanggil dari tombol inline saat user belum punya API key tersimpan
+function _activateNarrativeKey(coinId) {
+    const k = (document.getElementById('inlineGeminiKeyInput') || {}).value?.trim();
+    if (!k) { alert('⚠️ Masukkan API Key terlebih dahulu'); return; }
+    localStorage.setItem('hf_gemini_key', k);
+    const ameInput = document.getElementById('ameKeyInput');
+    if (ameInput) ameInput.value = k;
+    const el = document.getElementById('inlineNarrativeContainer');
+    if (el) el.innerHTML = '<div class="ame-loading"><span class="g-spinner"></span><span>Memulai analisis AI…</span></div>';
+    const coin = cryptoData.find(c => c.id === coinId);
+    if (coin) _autoRunNarrative(coin, null);
 }
 
 function closeAnalysis() {
