@@ -332,29 +332,107 @@ function updateFearGreedBadge() {
 }
 
 async function fetchMacroAgenda() {
-    try {
-        // Timeout 5 detik — API ini sering lambat, jangan blokir UI
+    // ForexFactory public JSON — gratis, tanpa API key, data real-time
+    // Tersedia: ff_calendar_thisweek.json dan ff_calendar_nextweek.json
+    const FF_THIS  = 'https://nfs.faireconomy.media/ff_calendar_thisweek.json';
+    const FF_NEXT  = 'https://nfs.faireconomy.media/ff_calendar_nextweek.json';
+
+    const safeFetch = async (url) => {
         const controller = new AbortController();
-        const tid = setTimeout(() => controller.abort(), 5000);
-        const response = await fetch(
-            'https://api.tradingeconomics.com/calendar/country/united%20states?c=guest:guest&format=json',
-            { signal: controller.signal }
-        );
-        clearTimeout(tid);
-        const data = await response.json();
-        const now = new Date();
-        macroAgendaData = Array.isArray(data)
-            ? data.filter(item => new Date(item.Date) >= now).slice(0, 8)
-            : [];
-    } catch (error) {
-        if (error.name === 'AbortError') {
-            console.warn('⏱ Macro agenda timeout — skipped');
-        } else {
-            console.error('Error fetching macro agenda:', error);
+        const tid = setTimeout(() => controller.abort(), 7000);
+        try {
+            const r = await fetch(url, { signal: controller.signal });
+            clearTimeout(tid);
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            return await r.json();
+        } catch (e) {
+            clearTimeout(tid);
+            return [];
         }
+    };
+
+    try {
+        // Ambil minggu ini + minggu depan sekaligus
+        const [thisWeek, nextWeek] = await Promise.all([safeFetch(FF_THIS), safeFetch(FF_NEXT)]);
+        const combined = [...(Array.isArray(thisWeek) ? thisWeek : []),
+                          ...(Array.isArray(nextWeek)  ? nextWeek  : [])];
+
+        const now = new Date();
+        // Filter: USD only, belum berlalu, Importance Medium/High saja
+        macroAgendaData = combined
+            .filter(e => {
+                if (e.country !== 'USD') return false;
+                const d = new Date(e.date);
+                if (isNaN(d) || d < now) return false;
+                return true; // tampilkan semua impact, termasuk Low
+            })
+            .sort((a, b) => new Date(a.date) - new Date(b.date))
+            .slice(0, 20);
+
+        console.log(`✅ MacroAgenda: ${macroAgendaData.length} events loaded`);
+    } catch (error) {
+        console.error('Error fetching macro agenda:', error);
         macroAgendaData = [];
     }
     renderMacroAgenda();
+}
+
+function _macroImpactSentiment(event) {
+    // Hitung apakah data actual lebih baik/buruk dari forecast → bull/bear signal
+    // Return: { sentiment: 'bullish'|'bearish'|'neutral', score: 1-3 }
+    const actual   = parseFloat((event.actual   || '').toString().replace(/[%$,KBM]/gi, ''));
+    const forecast = parseFloat((event.forecast || '').toString().replace(/[%$,KBM]/gi, ''));
+    const previous = parseFloat((event.previous || '').toString().replace(/[%$,KBM]/gi, ''));
+    const title    = (event.title || '').toLowerCase();
+    const impact   = (event.impact || '').toLowerCase();
+
+    // Belum ada actual → upcoming (belum dirilis)
+    if (isNaN(actual)) return { sentiment: 'upcoming', score: 0 };
+
+    // Tentukan apakah "lebih tinggi = baik" atau "lebih rendah = baik"
+    // CPI, Inflation, Unemployment, Jobless Claims → lebih rendah = bullish
+    const lowerIsBetter = title.includes('cpi') || title.includes('inflation')
+        || title.includes('unemployment') || title.includes('jobless')
+        || title.includes('initial claims') || title.includes('ppi')
+        || title.includes('deficit');
+
+    const baseline = !isNaN(forecast) ? forecast : (!isNaN(previous) ? previous : NaN);
+    if (isNaN(baseline)) return { sentiment: 'neutral', score: 1 };
+
+    const diff = actual - baseline;
+    const pct  = Math.abs(diff / (Math.abs(baseline) || 1));
+
+    let sentiment, rawScore;
+    if (lowerIsBetter) {
+        sentiment = diff < 0 ? 'bullish' : diff > 0 ? 'bearish' : 'neutral';
+    } else {
+        sentiment = diff > 0 ? 'bullish' : diff < 0 ? 'bearish' : 'neutral';
+    }
+
+    // Score 1-3 berdasarkan seberapa jauh dari forecast
+    // High impact event mendapat minimal score 2
+    if (sentiment === 'neutral') rawScore = 1;
+    else if (pct > 0.15) rawScore = 3;
+    else if (pct > 0.05) rawScore = 2;
+    else rawScore = 1;
+
+    if (impact === 'high' && rawScore < 2) rawScore = 2;
+
+    return { sentiment, score: rawScore };
+}
+
+function _macroImpactIcon(sentiment, score) {
+    // Tampilkan icon bull/bear dengan jumlah sesuai score (1-3)
+    if (sentiment === 'upcoming') return '<span class="agenda-upcoming">⏳ Upcoming</span>';
+    if (sentiment === 'neutral')  return '<span class="agenda-neutral">➖ Neutral</span>';
+
+    const isBull = sentiment === 'bullish';
+    const icon   = isBull ? '🐂' : '🐻';
+    const cls    = isBull ? 'agenda-bull' : 'agenda-bear';
+    const label  = isBull ? 'Bullish' : 'Bearish';
+    // Score 1 = 1 ikon, score 2 = 2 ikon, score 3 = 3 ikon
+    const icons  = icon.repeat(score);
+    return `<span class="${cls}">${icons} ${label}</span>`;
 }
 
 function renderMacroAgenda() {
@@ -367,9 +445,10 @@ function renderMacroAgenda() {
     }
 
     const filtered = macroAgendaData.filter(item => {
-        const name = (item.Event || '').toLowerCase();
-        if (macroAgendaFilter === 'fomc') return name.includes('fomc') || name.includes('fed');
-        if (macroAgendaFilter === 'cpi') return name.includes('cpi') || name.includes('inflation');
+        const name = (item.title || '').toLowerCase();
+        if (macroAgendaFilter === 'fomc') return name.includes('fomc') || name.includes('fed') || name.includes('federal funds');
+        if (macroAgendaFilter === 'cpi')  return name.includes('cpi')  || name.includes('inflation') || name.includes('ppi');
+        if (macroAgendaFilter === 'nfp')  return name.includes('nfp')  || name.includes('non-farm') || name.includes('employment') || name.includes('unemployment');
         return true;
     });
 
@@ -379,36 +458,67 @@ function renderMacroAgenda() {
     }
 
     const now = new Date();
+
+    // Impact badge styling
+    const impactBadge = (impact) => {
+        const cls = impact === 'High' ? 'impact-high' : impact === 'Medium' ? 'impact-med' : 'impact-low';
+        const dot = impact === 'High' ? '🔴' : impact === 'Medium' ? '🟡' : '⚪';
+        return `<span class="agenda-impact ${cls}">${dot} ${impact}</span>`;
+    };
+
+    // Type badge (FOMC / CPI / NFP / dll)
+    const typeBadge = (name) => {
+        const n = name.toLowerCase();
+        if (n.includes('fomc') || n.includes('federal funds') || n.includes('fed chair'))
+            return '<span class="agenda-type-badge fomc">FOMC</span>';
+        if (n.includes('cpi') || n.includes('inflation'))
+            return '<span class="agenda-type-badge cpi">CPI</span>';
+        if (n.includes('ppi'))
+            return '<span class="agenda-type-badge cpi">PPI</span>';
+        if (n.includes('non-farm') || n.includes('nfp') || n.includes('unemployment'))
+            return '<span class="agenda-type-badge nfp">NFP</span>';
+        if (n.includes('gdp'))
+            return '<span class="agenda-type-badge gdp">GDP</span>';
+        return '';
+    };
+
     const html = filtered.map(event => {
-        const eventDate = new Date(event.Date);
-        const time = eventDate.toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+        const eventDate = new Date(event.date);
+        const time = eventDate.toLocaleString('id-ID', {
+            weekday: 'short', day: '2-digit', month: 'short',
+            hour: '2-digit', minute: '2-digit'
+        });
 
-        // Detect type
-        const nameLower = (event.Event || '').toLowerCase();
-        const isFOMC = nameLower.includes('fomc') || nameLower.includes('fed');
-        const isCPI  = nameLower.includes('cpi') || nameLower.includes('inflation');
-        const typeClass = isFOMC ? 'fomc' : isCPI ? 'cpi' : '';
-        const typeBadge = isFOMC
-            ? '<span class="agenda-type-badge fomc">FOMC</span>'
-            : isCPI
-            ? '<span class="agenda-type-badge cpi">CPI</span>'
-            : '';
+        const diffMs       = eventDate - now;
+        const countdownStr = diffMs > 0
+            ? `⏰ ${formatCountdown(diffMs)} lagi`
+            : '<span style="color:#4caf50">✅ Sudah dirilis</span>';
 
-        // Countdown to event
-        const diffMs = eventDate - now;
-        const countdownStr = diffMs > 0 ? `⏰ ${formatCountdown(diffMs)} lagi` : '✅ Sudah berlalu';
+        const { sentiment, score } = _macroImpactSentiment(event);
+        const sentimentHtml = _macroImpactIcon(sentiment, score);
+
+        const impactLevel = event.impact || 'Low';
+        const isHighImpact = impactLevel === 'High';
 
         return `
-            <div class="agenda-card ${typeClass}">
-                <div class="agenda-time">${time} ${typeBadge}</div>
-                <div class="agenda-title">${event.Event || 'Event'}</div>
-                <div class="agenda-meta">${event.Country || ''} • ${event.Importance || 'Medium'}</div>
-                <div class="agenda-values">
-                    <span>Actual: ${event.Actual || '-'} </span>
-                    <span>Forecast: ${event.Forecast || '-'} </span>
-                    <span>Previous: ${event.Previous || '-'} </span>
+            <div class="agenda-card ${isHighImpact ? 'high-impact' : ''}">
+                <div class="agenda-header-row">
+                    <div class="agenda-time">${time}</div>
+                    <div class="agenda-badges">
+                        ${impactBadge(impactLevel)}
+                        ${typeBadge(event.title)}
+                    </div>
                 </div>
-                <div class="agenda-countdown">${countdownStr}</div>
+                <div class="agenda-title">${event.title || 'Event'}</div>
+                <div class="agenda-values">
+                    <span class="agenda-val actual">Actual: <b>${event.actual || '—'}</b></span>
+                    <span class="agenda-val forecast">Forecast: ${event.forecast || '—'}</span>
+                    <span class="agenda-val previous">Previous: ${event.previous || '—'}</span>
+                </div>
+                <div class="agenda-footer-row">
+                    <div class="agenda-countdown">${countdownStr}</div>
+                    <div class="agenda-sentiment">${sentimentHtml}</div>
+                </div>
             </div>
         `;
     }).join('');
