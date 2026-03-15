@@ -16,6 +16,8 @@ let marketStatsData = null;
 let fearGreedData = null;
 let macroAgendaData = [];
 let macroAgendaFilter = 'all';
+let macroAgendaPage   = 0;          // halaman saat ini (0-based)
+const AGENDA_PAGE_SIZE = 5;         // event per halaman
 
 // ── DEX UI State ──────────────────────────────────────────────
 let activeSortCol    = 'mcap';  // current sort column (default: market cap rank → BTC #1)
@@ -155,6 +157,7 @@ function setupEventListeners() {
             const target = event.currentTarget;
             target.classList.add('active');
             macroAgendaFilter = target.dataset.filter || 'all';
+            macroAgendaPage   = 0;   // reset ke halaman pertama saat filter berubah
             renderMacroAgenda();
         });
     });
@@ -457,6 +460,13 @@ function renderMacroAgenda() {
         return;
     }
 
+    // ── Pagination ────────────────────────────────────────────────────────────
+    const totalPages = Math.ceil(filtered.length / AGENDA_PAGE_SIZE);
+    macroAgendaPage  = Math.max(0, Math.min(macroAgendaPage, totalPages - 1));
+    const pageStart  = macroAgendaPage * AGENDA_PAGE_SIZE;
+    const pageEnd    = pageStart + AGENDA_PAGE_SIZE;
+    const pageItems  = filtered.slice(pageStart, pageEnd);
+
     const now = new Date();
 
     // Impact badge styling
@@ -482,7 +492,7 @@ function renderMacroAgenda() {
         return '';
     };
 
-    const html = filtered.map(event => {
+    const cardsHtml = pageItems.map(event => {
         const eventDate = new Date(event.date);
         const time = eventDate.toLocaleString('id-ID', {
             weekday: 'short', day: '2-digit', month: 'short',
@@ -523,7 +533,22 @@ function renderMacroAgenda() {
         `;
     }).join('');
 
-    container.innerHTML = html;
+    // ── Pagination controls ───────────────────────────────────────────────────
+    const prevDisabled = macroAgendaPage === 0 ? 'disabled' : '';
+    const nextDisabled = macroAgendaPage >= totalPages - 1 ? 'disabled' : '';
+    const pageInfo     = `${pageStart + 1}–${Math.min(pageEnd, filtered.length)} dari ${filtered.length} event`;
+
+    const paginationHtml = totalPages <= 1 ? '' : `
+        <div class="agenda-pagination">
+            <button class="agenda-page-btn" ${prevDisabled}
+                onclick="macroAgendaPage--; renderMacroAgenda()">‹ Prev</button>
+            <span class="agenda-page-info">${pageInfo}</span>
+            <button class="agenda-page-btn" ${nextDisabled}
+                onclick="macroAgendaPage++; renderMacroAgenda()">Next ›</button>
+        </div>
+    `;
+
+    container.innerHTML = cardsHtml + paginationHtml;
 }
 
 function updateGlobalSessions() {
