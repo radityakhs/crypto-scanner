@@ -26,8 +26,8 @@ let activeModalFilters = {};    // { minLiquidity, maxMcap, ... }
 let activeSearchTerm = '';      // current search string
 // ──────────────────────────────────────────────────────────────
 
-// API Configuration
-const COINGECKO_API = 'https://api.coingecko.com/api/v3';
+// API Configuration — lewat proxy lokal (ada cache 5 menit, hindari rate limit 429)
+const COINGECKO_API = 'http://127.0.0.1:3001/cg';
 let autoRefreshInterval;
 
 // ── Simple in-memory cache ─────────────────────────────────────
@@ -906,17 +906,17 @@ async function loadCryptoData() {
     try {
         showLoading('cryptoTableBody');
 
-        // ── Cache 90 detik — per_page=200 diambil dari 2 halaman paralel ──
-        const CACHE_KEY = 'cryptoMarkets_v2';  // v2 = 200 koin
+        // ── Cache 90 detik — ambil 200 koin via proxy lokal (CoinPaprika, tanpa rate limit) ──
+        const CACHE_KEY = 'cryptoMarkets_v3';  // v3 = CoinPaprika via proxy
         const TTL = 90_000;
         let coins = cacheGet(CACHE_KEY);
 
         if (!coins) {
-            const BASE = `${COINGECKO_API}/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&sparkline=true&price_change_percentage=1h,24h,7d`;
+            const PROXY = 'http://127.0.0.1:3001/api/markets';
             // Fetch halaman 1 & 2 paralel → total 200 koin
             const [res1, res2] = await Promise.all([
-                fetchWithTimeout(`${BASE}&page=1`, 12000),
-                fetchWithTimeout(`${BASE}&page=2`, 12000),
+                fetchWithTimeout(`${PROXY}?per_page=100&page=1`, 15000),
+                fetchWithTimeout(`${PROXY}?per_page=100&page=2`, 15000),
             ]);
             const [page1, page2] = await Promise.all([res1.json(), res2.json()]);
             coins = [...(Array.isArray(page1) ? page1 : []), ...(Array.isArray(page2) ? page2 : [])];
@@ -1501,20 +1501,45 @@ async function analyzeCoin(coinId) {
         // ── Fetch detail + chart IN PARALLEL ──────────────────────────────
         const detailUrl = `${COINGECKO_API}/coins/${coinId}?localization=false&tickers=false&community_data=false&developer_data=false`;
         const chartUrl  = `${COINGECKO_API}/coins/${coinId}/market_chart?vs_currency=usd&days=30`;
+        const chartFallbackUrl = `http://127.0.0.1:3001/api/chart/${coinId}?days=30`;
+        const detailFallbackUrl = `http://127.0.0.1:3001/api/coin-detail/${coinId}`;
 
-        const [detailRes, chartRes] = await Promise.all([
-            fetchWithTimeout(detailUrl, 12000),
-            fetchWithTimeout(chartUrl,  12000),
+        // Fetch chart — pakai fallback endpoint jika CoinGecko error/429
+        async function fetchChart() {
+            try {
+                const r = await fetchWithTimeout(chartUrl, 10000);
+                if (r.ok) {
+                    const d = await r.json();
+                    if (d?.prices?.length) return d;
+                }
+            } catch (_) {}
+            // Fallback ke /api/chart (CoinPaprika atau synthetic)
+            const r2 = await fetchWithTimeout(chartFallbackUrl, 12000);
+            return r2.json();
+        }
+
+        // Fetch detail — pakai fallback endpoint jika CoinGecko error/429
+        async function fetchDetail() {
+            try {
+                const r = await fetchWithTimeout(detailUrl, 10000);
+                if (r.ok) {
+                    const d = await r.json();
+                    if (d?.id) return d;
+                }
+            } catch (_) {}
+            // Fallback ke /api/coin-detail
+            const r2 = await fetchWithTimeout(detailFallbackUrl, 10000);
+            return r2.json();
+        }
+
+        const [detailedData, marketChart] = await Promise.all([
+            fetchDetail(),
+            fetchChart(),
         ]);
 
         setProgress(60);
         setPill('apill1', true);
         setPill('apill2', true);
-
-        const [detailedData, marketChart] = await Promise.all([
-            detailRes.json(),
-            chartRes.json(),
-        ]);
 
         // Cache results
         cacheSet(`coin_detail_${coinId}`, detailedData, CACHE_TTL);
@@ -3534,9 +3559,9 @@ const portfolioTracker = (() => {
             const pair = (d.pairs||[]).find(p => p.baseToken?.symbol?.toUpperCase() === symbol.toUpperCase());
             if (pair && pair.priceUsd) return parseFloat(pair.priceUsd);
         } catch(_) {}
-        // 3. CoinGecko simple price
+        // 3. CoinGecko simple price (via proxy)
         try {
-            const r = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(symbol.toLowerCase())}&vs_currencies=usd`);
+            const r = await fetch(`${COINGECKO_API}/simple/price?ids=${encodeURIComponent(symbol.toLowerCase())}&vs_currencies=usd`);
             const d = await r.json();
             const keys = Object.keys(d);
             if (keys.length) return d[keys[0]].usd;

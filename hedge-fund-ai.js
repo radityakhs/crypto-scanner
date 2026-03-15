@@ -414,7 +414,7 @@ Output STRICT JSON only — no markdown, no explanation outside JSON:
             const result = await _callGemini(apiKey.trim(), _currentMetrics);
             _lastResult  = result;
             _renderResult(result);
-            sessionStorage.setItem('hf_gemini_key', apiKey.trim());
+            localStorage.setItem('hf_gemini_key', apiKey.trim());
         } catch (e) {
             _renderError(`Gagal: ${e.message}`);
         } finally {
@@ -922,7 +922,7 @@ Output STRICT JSON only — no markdown, no explanation outside JSON:
     function triggerAnalysis() {
         const keyEl  = _g('hfaiKeyInput');
         const apiKey = keyEl ? keyEl.value.trim()
-                             : (sessionStorage.getItem('hf_gemini_key') || '');
+                             : (localStorage.getItem('hf_gemini_key') || '');
         analyzeToken(apiKey);
     }
 

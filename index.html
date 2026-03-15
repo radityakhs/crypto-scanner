@@ -47,6 +47,8 @@
             <button class="tab-btn" data-tab="alerts">🔔 Alerts</button>
             <button class="tab-btn" data-tab="okx">🟠 OKX Trading</button>
             <button class="tab-btn" data-tab="solana-swap">🪐 Solana Swap</button>
+            <button class="tab-btn" data-tab="auto-trader">🤖 Auto Trader</button>
+            <button class="tab-btn" data-tab="dex-hunter">🎯 DEX Hunter</button>
         </div>
 
         <!-- ╔══════════════════════════════════════════╗
@@ -788,12 +790,12 @@
                 <!-- API Key row -->
                 <div class="ame-key-row">
                     <input id="ameKeyInput" type="password" placeholder="🔑 Gemini API Key (AIza...)"
-                        oninput="if(this.value) sessionStorage.setItem('hf_gemini_key',this.value.trim())"
+                        oninput="if(this.value) localStorage.setItem('hf_gemini_key',this.value.trim())"
                         autocomplete="off">
                     <button class="ame-key-btn" onclick="
-                        const k=document.getElementById('ameKeyInput').value.trim()||sessionStorage.getItem('hf_gemini_key')||'';
-                        if(k) document.getElementById('ameKeyInput').value=k;
-                        alert(k ? '✅ API Key tersimpan. Klik Analyze pada coin.' : '⚠️ Masukkan API Key terlebih dahulu.');
+                        const k=document.getElementById('ameKeyInput').value.trim()||localStorage.getItem('hf_gemini_key')||'';
+                        if(k){ document.getElementById('ameKeyInput').value=k; localStorage.setItem('hf_gemini_key',k); }
+                        alert(k ? '✅ API Key tersimpan permanen. Klik Analyze pada coin.' : '⚠️ Masukkan API Key terlebih dahulu.');
                     ">💾 Simpan Key</button>
                 </div>
                 <div id="exitStrategyContainer" class="exit-strategy-container">
@@ -2272,6 +2274,443 @@
         </div>
     </div><!-- /#solana-swap -->
 
+    <!-- ╔══════════════════════════════════════════════════════════╗
+         ║             AUTO TRADER — Dashboard Panel               ║
+         ╚══════════════════════════════════════════════════════════╝ -->
+    <div id="auto-trader" class="tab-content">
+        <style>
+            /* ── Auto Trader Panel Styles ──────────────────────────────── */
+            .at-wrap { padding: 20px; font-family: 'Inter', system-ui, sans-serif; }
+            .at-header { display:flex; align-items:center; gap:14px; margin-bottom:20px; flex-wrap:wrap; }
+            .at-title  { font-size:22px; font-weight:800; color:#e2e8f0; }
+            .at-subtitle { font-size:13px; color:#64748b; }
+            .at-badge  { padding:4px 12px; border-radius:20px; font-size:12px; font-weight:700; letter-spacing:0.05em; }
+            .at-badge-info    { background:#1e3a5f; color:#60a5fa; border:1px solid #1d4ed8; }
+            .at-badge-live    { background:#3f1515; color:#f87171; border:1px solid #dc2626; animation: at-pulse 1.5s infinite; }
+            .at-badge-warn    { background:#3d2f00; color:#fbbf24; border:1px solid #d97706; }
+            .at-badge-error   { background:#3f1515; color:#f87171; border:1px solid #dc2626; }
+            .at-badge-offline { background:#1e293b; color:#475569; border:1px solid #334155; }
+            @keyframes at-pulse { 0%,100%{opacity:1} 50%{opacity:0.6} }
+
+            /* ── KPI Cards ──────────────────────────────────────────────── */
+            .at-kpi-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:12px; margin-bottom:20px; }
+            .at-kpi { background:#0f172a; border:1px solid #1e293b; border-radius:10px; padding:14px 16px; }
+            .at-kpi-label { font-size:11px; color:#475569; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:6px; }
+            .at-kpi-value { font-size:20px; font-weight:800; color:#e2e8f0; }
+            .at-kpi-sub   { font-size:11px; color:#64748b; margin-top:3px; }
+
+            /* ── Config block ────────────────────────────────────────────── */
+            .at-config-grid { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:20px; }
+            .at-config-item { background:#0f172a; border:1px solid #1e293b; border-radius:8px; padding:8px 14px; font-size:12px; color:#94a3b8; }
+            .at-config-item b { color:#cbd5e1; }
+
+            /* ── Buttons ────────────────────────────────────────────────── */
+            .at-btn-row { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:20px; align-items:center; }
+            .at-btn { padding:8px 18px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; border:none; transition:opacity .15s; }
+            .at-btn:hover { opacity:.85; }
+            .at-btn-danger  { background:#dc2626; color:#fff; }
+            .at-btn-warn    { background:#d97706; color:#fff; }
+            .at-btn-ghost   { background:transparent; border:1px solid #334155; color:#94a3b8; }
+
+            /* ── Tables ─────────────────────────────────────────────────── */
+            .at-section-title { font-size:14px; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:10px; margin-top:24px; }
+            .at-table-wrap { overflow-x:auto; }
+            .at-table { width:100%; border-collapse:collapse; font-size:13px; }
+            .at-table th { background:#0f172a; color:#64748b; padding:8px 12px; text-align:left; font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid #1e293b; }
+            .at-table td { padding:10px 12px; border-bottom:1px solid #0f172a; color:#cbd5e1; vertical-align:middle; }
+            .at-table tbody tr:hover { background:#0d1a2d; }
+
+            /* ── Risk meter ─────────────────────────────────────────────── */
+            .at-risk-bar-wrap { background:#1e293b; border-radius:4px; height:8px; overflow:hidden; margin-top:4px; }
+            .at-risk-bar { height:100%; border-radius:4px; transition:width .4s; }
+
+            /* ── Notice ─────────────────────────────────────────────────── */
+            .at-notice { background:#1a1000; border:1px solid #854d0e; border-radius:8px; padding:12px 16px; font-size:12px; color:#fbbf24; margin-bottom:16px; line-height:1.6; }
+            .at-notice-live { background:#1a0000; border-color:#7f1d1d; color:#f87171; }
+            code { background:#0f172a; padding:2px 6px; border-radius:4px; font-size:11px; color:#7dd3fc; }
+        </style>
+
+        <div class="at-wrap">
+            <!-- Header -->
+            <div class="at-header">
+                <span class="at-title">🤖 Auto Trader</span>
+                <span id="at-status-badge" class="at-badge at-badge-offline">🔌 OFFLINE</span>
+                <button id="at-btn-reset-cb" class="at-btn at-btn-warn" onclick="autoTraderUI.resetCircuitBreaker()" style="display:none">
+                    ⚡ Reset Circuit Breaker
+                </button>
+                <button class="at-btn at-btn-danger" onclick="autoTraderUI.closeAll()">🛑 Close All Positions</button>
+                <button class="at-btn at-btn-ghost" onclick="autoTraderUI.fetchState()">🔄 Refresh</button>
+                <span class="at-subtitle">Auto refresh tiap 5 detik</span>
+            </div>
+
+            <!-- Notice -->
+            <div class="at-notice">
+                ⚠️ <b>Cara Menjalankan:</b>
+                &nbsp;1. Jalankan proxy: <code>node proxy-server.js</code>
+                &nbsp;→&nbsp;2. Jalankan signal bot: <code>node signal-bot.js</code>
+                &nbsp;→&nbsp;3. Jalankan auto trader: <code>node auto-trader.js</code>
+                <br>Default mode adalah <b>DRY RUN</b> (paper trading). Ubah <code>DRY_RUN: false</code> di <code>auto-trader.js</code> untuk mode live.
+            </div>
+
+            <!-- KPI Cards -->
+            <div class="at-kpi-grid">
+                <div class="at-kpi">
+                    <div class="at-kpi-label">Equity</div>
+                    <div class="at-kpi-value" id="at-equity">—</div>
+                    <div class="at-kpi-sub">Total portfolio</div>
+                </div>
+                <div class="at-kpi">
+                    <div class="at-kpi-label">Peak Equity</div>
+                    <div class="at-kpi-value" id="at-peak">—</div>
+                    <div class="at-kpi-sub">High water mark</div>
+                </div>
+                <div class="at-kpi">
+                    <div class="at-kpi-label">Daily P&L</div>
+                    <div class="at-kpi-value" id="at-daily-pnl">—</div>
+                    <div class="at-kpi-sub">Hari ini</div>
+                </div>
+                <div class="at-kpi">
+                    <div class="at-kpi-label">Total P&L</div>
+                    <div class="at-kpi-value" id="at-total-pnl">—</div>
+                    <div class="at-kpi-sub">Semua waktu</div>
+                </div>
+                <div class="at-kpi">
+                    <div class="at-kpi-label">Drawdown</div>
+                    <div class="at-kpi-value" id="at-drawdown">—</div>
+                    <div class="at-kpi-sub">Dari peak</div>
+                </div>
+                <div class="at-kpi">
+                    <div class="at-kpi-label">Win Rate</div>
+                    <div class="at-kpi-value" id="at-winrate">—</div>
+                    <div class="at-kpi-sub" id="at-trades">0W / 0L</div>
+                </div>
+                <div class="at-kpi">
+                    <div class="at-kpi-label">Best Trade</div>
+                    <div class="at-kpi-value" id="at-best">—</div>
+                    <div class="at-kpi-sub">Profit terbesar</div>
+                </div>
+                <div class="at-kpi">
+                    <div class="at-kpi-label">Worst Trade</div>
+                    <div class="at-kpi-value" id="at-worst">—</div>
+                    <div class="at-kpi-sub">Loss terbesar</div>
+                </div>
+            </div>
+
+            <!-- Config -->
+            <div class="at-config-grid">
+                <div class="at-config-item">⚖️ Risk per trade: <b id="at-cfg-risk">—</b></div>
+                <div class="at-config-item">📌 Max posisi: <b id="at-cfg-max-pos">—</b></div>
+                <div class="at-config-item">🛡️ Max daily loss: <b id="at-cfg-maxloss">—</b></div>
+            </div>
+
+            <!-- Open Positions -->
+            <div class="at-section-title">📌 Posisi Terbuka</div>
+            <div class="at-table-wrap">
+                <table class="at-table">
+                    <thead>
+                        <tr>
+                            <th>Coin</th><th>Side</th><th>Entry</th><th>Harga Skrg</th>
+                            <th>Unrealized P&L</th><th>Stop Loss</th><th>TP1</th><th>Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody id="at-positions-body">
+                        <tr><td colspan="8" style="text-align:center;color:#475569;padding:20px">Tidak ada posisi terbuka</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Trade History -->
+            <div class="at-section-title">📜 Riwayat Trade Terakhir</div>
+            <div class="at-table-wrap">
+                <table class="at-table">
+                    <thead>
+                        <tr>
+                            <th>Coin</th><th>Side</th><th>Entry</th><th>Exit</th>
+                            <th>P&L</th><th>Alasan</th><th>Waktu</th>
+                        </tr>
+                    </thead>
+                    <tbody id="at-trades-body">
+                        <tr><td colspan="7" style="text-align:center;color:#475569;padding:20px">Belum ada riwayat</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Risk Engine Info -->
+            <div class="at-section-title">🧠 Logika & Proteksi</div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-bottom:20px">
+                <div style="background:#0f172a;border:1px solid #1e293b;border-radius:10px;padding:16px">
+                    <div style="font-weight:700;color:#a78bfa;margin-bottom:8px">⚖️ Position Sizing</div>
+                    <div style="font-size:12px;color:#94a3b8;line-height:1.7">
+                        Dihitung berdasarkan <b>% risiko × equity / jarak SL</b>.<br>
+                        Max 20% equity per posisi. SL harus dalam range 0.1%–25%.
+                    </div>
+                </div>
+                <div style="background:#0f172a;border:1px solid #1e293b;border-radius:10px;padding:16px">
+                    <div style="font-weight:700;color:#22c55e;margin-bottom:8px">🎯 Partial Take Profit</div>
+                    <div style="font-size:12px;color:#94a3b8;line-height:1.7">
+                        <b>TP1:</b> Tutup 50% posisi → SL geser ke breakeven<br>
+                        <b>TP2:</b> Tutup 30% posisi<br>
+                        <b>TP3:</b> Tutup sisa 20% posisi
+                    </div>
+                </div>
+                <div style="background:#0f172a;border:1px solid #1e293b;border-radius:10px;padding:16px">
+                    <div style="font-weight:700;color:#60a5fa;margin-bottom:8px">🔄 Trailing Stop</div>
+                    <div style="font-size:12px;color:#94a3b8;line-height:1.7">
+                        Aktif saat profit ≥ 1.5%.<br>
+                        Jarak trailing 0.8% dari harga saat ini.<br>
+                        SL bergeser otomatis mengikuti harga.
+                    </div>
+                </div>
+                <div style="background:#0f172a;border:1px solid #1e293b;border-radius:10px;padding:16px">
+                    <div style="font-weight:700;color:#f87171;margin-bottom:8px">⛔ Circuit Breaker</div>
+                    <div style="font-size:12px;color:#94a3b8;line-height:1.7">
+                        Stop otomatis jika:<br>
+                        • Daily loss &gt; 5% equity<br>
+                        • Drawdown &gt; 8% dari peak<br>
+                        • 3 loss berturut-turut → pause 1 jam
+                    </div>
+                </div>
+                <div style="background:#0f172a;border:1px solid #1e293b;border-radius:10px;padding:16px">
+                    <div style="font-weight:700;color:#fbbf24;margin-bottom:8px">🔍 Entry Filter</div>
+                    <div style="font-size:12px;color:#94a3b8;line-height:1.7">
+                        Sinyal harus lolos:<br>
+                        • Confidence ≥ 20%<br>
+                        • Bullish/Bearish ≥ 60%<br>
+                        • R:R ≥ 1:1.5 | Usia ≤ 30 menit<br>
+                        • Harga masih dalam range entry
+                    </div>
+                </div>
+                <div style="background:#0f172a;border:1px solid #1e293b;border-radius:10px;padding:16px">
+                    <div style="font-weight:700;color:#34d399;margin-bottom:8px">📡 Signal Source</div>
+                    <div style="font-size:12px;color:#94a3b8;line-height:1.7">
+                        Membaca <code>signals.json</code> dari <b>signal-bot.js</b>.<br>
+                        10 quant engine: Market Structure, Liquidity,<br>
+                        S&D, Volume Profile, Order Flow, Whale,<br>
+                        Volatility, Monte Carlo GBM, dll.
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div><!-- /#auto-trader -->
+
+    <!-- ╔══════════════════════════════════════════╗
+         ║         DEX HUNTER — Memecoin Trader    ║
+         ╚══════════════════════════════════════════╝ -->
+    <div id="dex-hunter" class="tab-content">
+        <style>
+            .dh-wrap   { padding:20px; font-family:'Inter',system-ui,sans-serif; }
+            .dh-header { display:flex; align-items:center; gap:12px; margin-bottom:18px; flex-wrap:wrap; }
+            .dh-title  { font-size:22px; font-weight:800; color:#e2e8f0; }
+            .dh-badge  { padding:4px 12px; border-radius:20px; font-size:12px; font-weight:700; }
+            .dh-badge-dry  { background:#1a3a1a; color:#4ade80; border:1px solid #16a34a; }
+            .dh-badge-live { background:#3f1515; color:#f87171; border:1px solid #dc2626; animation:dh-pulse 1.5s infinite; }
+            .dh-badge-off  { background:#1e293b; color:#475569; border:1px solid #334155; }
+            @keyframes dh-pulse { 0%,100%{opacity:1}50%{opacity:0.6} }
+
+            .dh-notice { background:#111827; border:1px solid #1e3a5f; border-radius:8px; padding:12px 16px; font-size:12px; color:#93c5fd; margin-bottom:16px; line-height:1.7; }
+            .dh-notice code { background:#0f172a; padding:2px 6px; border-radius:3px; color:#7dd3fc; font-size:11px; }
+            .dh-notice-warn { border-color:#854d0e; color:#fbbf24; background:#1a1000; }
+
+            /* KPI */
+            .dh-kpi-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(145px,1fr)); gap:10px; margin-bottom:18px; }
+            .dh-kpi  { background:#0f172a; border:1px solid #1e293b; border-radius:10px; padding:12px 14px; }
+            .dh-kpi-label { font-size:10px; color:#475569; text-transform:uppercase; letter-spacing:.07em; margin-bottom:5px; }
+            .dh-kpi-value { font-size:19px; font-weight:800; color:#e2e8f0; }
+            .dh-kpi-sub   { font-size:10px; color:#64748b; margin-top:2px; }
+
+            /* Buttons */
+            .dh-btn-row { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:18px; align-items:center; }
+            .dh-btn { padding:7px 16px; border-radius:7px; font-size:12px; font-weight:600; cursor:pointer; border:none; transition:opacity .15s; }
+            .dh-btn:hover { opacity:.82; }
+            .dh-btn-primary { background:#2563eb; color:#fff; }
+            .dh-btn-danger  { background:#dc2626; color:#fff; }
+            .dh-btn-ghost   { background:transparent; border:1px solid #334155; color:#94a3b8; }
+            .dh-btn-green   { background:#16a34a; color:#fff; }
+
+            /* Section */
+            .dh-section-title { font-size:13px; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:.08em; margin:22px 0 10px; }
+
+            /* Table */
+            .dh-table-wrap { overflow-x:auto; margin-bottom:8px; }
+            .dh-table { width:100%; border-collapse:collapse; font-size:12px; }
+            .dh-table th { background:#0f172a; color:#64748b; padding:7px 10px; text-align:left; font-weight:600; font-size:10px; text-transform:uppercase; letter-spacing:.06em; border-bottom:1px solid #1e293b; white-space:nowrap; }
+            .dh-table td { padding:9px 10px; border-bottom:1px solid #0f172a; color:#cbd5e1; vertical-align:middle; white-space:nowrap; }
+            .dh-table tbody tr:hover { background:#0d1a2d; }
+            .dh-badge-score { display:inline-block; padding:2px 7px; border-radius:4px; font-size:11px; font-weight:700; }
+            .dh-score-hi  { background:#14532d; color:#4ade80; }
+            .dh-score-mid { background:#1c3a1c; color:#86efac; }
+            .dh-score-lo  { background:#292524; color:#a8a29e; }
+            .dh-pnl-pos  { color:#4ade80; font-weight:700; }
+            .dh-pnl-neg  { color:#f87171; font-weight:700; }
+            .dh-pnl-zero { color:#94a3b8; }
+            .dh-tag-buy  { background:#14532d; color:#4ade80; padding:2px 6px; border-radius:3px; font-size:10px; font-weight:700; }
+            .dh-tag-sell { background:#450a0a; color:#f87171; padding:2px 6px; border-radius:3px; font-size:10px; font-weight:700; }
+            .dh-link { color:#60a5fa; text-decoration:none; font-size:11px; }
+            .dh-link:hover { text-decoration:underline; }
+
+            /* Scan candidate cards */
+            .dh-candidates { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:10px; margin-bottom:10px; }
+            .dh-candidate-card { background:#0f172a; border:1px solid #1e293b; border-radius:10px; padding:14px; cursor:pointer; transition:border-color .15s; }
+            .dh-candidate-card:hover { border-color:#334155; }
+            .dh-cc-top { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px; }
+            .dh-cc-sym { font-size:15px; font-weight:800; color:#e2e8f0; }
+            .dh-cc-name { font-size:11px; color:#64748b; margin-top:1px; }
+            .dh-cc-chg { font-size:16px; font-weight:800; color:#4ade80; }
+            .dh-cc-chg-neg { color:#f87171; }
+            .dh-cc-stats { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px; }
+            .dh-cc-stat { font-size:11px; color:#64748b; }
+            .dh-cc-stat b { color:#94a3b8; }
+            .dh-cc-reasons { font-size:11px; color:#4ade80; margin-bottom:10px; line-height:1.5; }
+            .dh-cc-actions { display:flex; gap:6px; }
+            .dh-cc-buy { background:#16a34a; color:#fff; border:none; border-radius:5px; padding:5px 12px; font-size:11px; font-weight:700; cursor:pointer; }
+            .dh-cc-buy:hover { background:#15803d; }
+
+            /* Strategy info cards */
+            .dh-info-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:10px; margin-bottom:20px; }
+            .dh-info-card { background:#0f172a; border:1px solid #1e293b; border-radius:10px; padding:14px; }
+            .dh-info-card-title { font-weight:700; font-size:13px; margin-bottom:7px; }
+            .dh-info-card-body  { font-size:12px; color:#94a3b8; line-height:1.7; }
+        </style>
+
+        <div class="dh-wrap">
+            <!-- Header -->
+            <div class="dh-header">
+                <span class="dh-title">🎯 DEX Hunter</span>
+                <span id="dh-status-badge" class="dh-badge dh-badge-off">🔌 OFFLINE</span>
+                <span id="dh-mode-badge" class="dh-badge dh-badge-dry" style="display:none">📄 DRY RUN</span>
+                <span class="dh-title" style="font-size:13px;color:#64748b;font-weight:400;">Auto-trade meme coins pump.fun Solana</span>
+            </div>
+
+            <!-- Notice cara pakai -->
+            <div class="dh-notice">
+                ⚡ <b>Cara Menjalankan:</b>
+                <br>Terminal 1: <code>node dex-trader-proxy.js</code> &nbsp;→&nbsp; jalankan server port 3004
+                <br>Terminal 2: <code>node memecoin-hunter.js</code> &nbsp;→&nbsp; bot scan &amp; trading otomatis
+                <br>Live trading: set <code>SOLANA_WALLET_ADDRESS</code> + <code>SOLANA_PRIVATE_KEY</code> di file <code>.env</code>, lalu: <code>node memecoin-hunter.js --live</code>
+            </div>
+
+            <!-- Buttons -->
+            <div class="dh-btn-row">
+                <button class="dh-btn dh-btn-primary" onclick="dexHunterUI.fetchState()">🔄 Refresh</button>
+                <button class="dh-btn dh-btn-primary" onclick="dexHunterUI.scanNow()">🔍 Scan Sekarang</button>
+                <button class="dh-btn dh-btn-danger"  onclick="dexHunterUI.closeAll()">🛑 Close All</button>
+                <span id="dh-last-scan" style="font-size:11px;color:#475569;margin-left:4px;"></span>
+            </div>
+
+            <!-- KPI Cards -->
+            <div class="dh-kpi-grid">
+                <div class="dh-kpi"><div class="dh-kpi-label">Total P&L</div><div class="dh-kpi-value" id="dh-total-pnl">—</div><div class="dh-kpi-sub">Semua waktu</div></div>
+                <div class="dh-kpi"><div class="dh-kpi-label">Daily P&L</div><div class="dh-kpi-value" id="dh-daily-pnl">—</div><div class="dh-kpi-sub">Hari ini</div></div>
+                <div class="dh-kpi"><div class="dh-kpi-label">Open Positions</div><div class="dh-kpi-value" id="dh-open-count">—</div><div class="dh-kpi-sub">Aktif</div></div>
+                <div class="dh-kpi"><div class="dh-kpi-label">Total Trades</div><div class="dh-kpi-value" id="dh-total-trades">—</div><div class="dh-kpi-sub" id="dh-wl">—W / —L</div></div>
+                <div class="dh-kpi"><div class="dh-kpi-label">Win Rate</div><div class="dh-kpi-value" id="dh-winrate">—</div><div class="dh-kpi-sub">Closed trades</div></div>
+                <div class="dh-kpi"><div class="dh-kpi-label">Best Trade</div><div class="dh-kpi-value" id="dh-best">—</div><div class="dh-kpi-sub">Profit terbesar</div></div>
+            </div>
+
+            <!-- Open Positions -->
+            <div class="dh-section-title">📌 Posisi Terbuka</div>
+            <div class="dh-table-wrap">
+                <table class="dh-table">
+                    <thead><tr>
+                        <th>Token</th><th>Chain/DEX</th><th>Entry Price</th><th>Harga Skrg</th>
+                        <th>P&L%</th><th>Modal</th><th>SL</th><th>TP1/TP2/TP3</th>
+                        <th>Score</th><th>Umur</th><th>Aksi</th>
+                    </tr></thead>
+                    <tbody id="dh-positions-body">
+                        <tr><td colspan="11" style="text-align:center;color:#475569;padding:20px">Tidak ada posisi terbuka — jalankan memecoin-hunter.js</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Live Scan Candidates -->
+            <div class="dh-section-title" style="display:flex;align-items:center;gap:10px;">
+                📡 Kandidat Scan Terbaru
+                <span id="dh-scan-count" style="font-size:11px;color:#475569;font-weight:400;text-transform:none;letter-spacing:0"></span>
+            </div>
+            <div id="dh-candidates-grid" class="dh-candidates">
+                <div style="color:#475569;font-size:13px;padding:10px 0">Klik "Scan Sekarang" untuk melihat token kandidat dari DEXScreener.</div>
+            </div>
+
+            <!-- Closed Trades -->
+            <div class="dh-section-title">📜 Riwayat Trade</div>
+            <div class="dh-table-wrap">
+                <table class="dh-table">
+                    <thead><tr>
+                        <th>Token</th><th>Entry Date</th><th>Close Date</th><th>Entry</th>
+                        <th>Exit</th><th>P&L</th><th>Alasan</th><th>Durasi</th><th>Score</th>
+                    </tr></thead>
+                    <tbody id="dh-trades-body">
+                        <tr><td colspan="9" style="text-align:center;color:#475569;padding:20px">Belum ada riwayat trade</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Strategy Info -->
+            <div class="dh-section-title">🧠 Strategi & Parameter</div>
+            <div class="dh-info-grid">
+                <div class="dh-info-card">
+                    <div class="dh-info-card-title" style="color:#4ade80">🔍 Entry Filter</div>
+                    <div class="dh-info-card-body">
+                        Age: &lt; 24 jam | Vol24h: &gt; $10K<br>
+                        Txns24h: &gt; 200 | chg24h: &gt; +150%<br>
+                        Vol1h: &gt; $500 (masih aktif)<br>
+                        Min Score: 60/100
+                    </div>
+                </div>
+                <div class="dh-info-card">
+                    <div class="dh-info-card-title" style="color:#60a5fa">📊 Scoring Engine</div>
+                    <div class="dh-info-card-body">
+                        Momentum (30pt): chg24h, 1h, 5m<br>
+                        Volume (25pt): vol1h, txns, buy/sell ratio<br>
+                        Makers (20pt): distribusi wallet unik<br>
+                        Age Sweet Spot (15pt): 1–6h ideal<br>
+                        FDV (10pt): semakin kecil semakin early
+                    </div>
+                </div>
+                <div class="dh-info-card">
+                    <div class="dh-info-card-title" style="color:#fbbf24">🎯 Exit Strategy</div>
+                    <div class="dh-info-card-body">
+                        TP1: +50% → jual 50% posisi<br>
+                        TP2: +100% → jual 30% posisi<br>
+                        TP3: +300% → jual 20% sisa<br>
+                        Trailing SL: -25% dari peak<br>
+                        Initial SL: -30% dari entry
+                    </div>
+                </div>
+                <div class="dh-info-card">
+                    <div class="dh-info-card-title" style="color:#f87171">🚫 Rug Filter</div>
+                    <div class="dh-info-card-body">
+                        5m dump &gt; -25% saat 24h masih &gt; +300%<br>
+                        Sell &gt;&gt; Buy 5m (4:1 ratio)<br>
+                        Vol1h = $0 saat 24h besar (dead coin)<br>
+                        Nama mengandung kata suspicious<br>
+                        FDV terlalu besar (&gt;$10M)
+                    </div>
+                </div>
+                <div class="dh-info-card">
+                    <div class="dh-info-card-title" style="color:#c084fc">💰 Position Sizing</div>
+                    <div class="dh-info-card-body">
+                        Fixed $20 per trade (DRY RUN)<br>
+                        Maks 5 posisi bersamaan<br>
+                        Circuit breaker: stop jika daily loss &gt; $50<br>
+                        Max hold: 48 jam
+                    </div>
+                </div>
+                <div class="dh-info-card">
+                    <div class="dh-info-card-title" style="color:#34d399">🔗 Live Trading Setup</div>
+                    <div class="dh-info-card-body">
+                        1. Deposit SOL ke wallet Solana<br>
+                        2. Set <code>.env</code>: SOLANA_WALLET_ADDRESS<br>
+                        3. Set <code>.env</code>: SOLANA_PRIVATE_KEY<br>
+                        4. <code>node memecoin-hunter.js --live</code><br>
+                        Swap via Jupiter aggregator
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div><!-- /#dex-hunter -->
+
     <!-- External Scripts -->
     <script src="analysis-utils.js"></script>
     <script src="app.js"></script>
@@ -2289,6 +2728,8 @@
     <script src="macro-bar.js"></script>
     <script src="pt-simple.js"></script>
     <script src="ai-alerts.js"></script>
+    <script src="auto-trader-ui.js"></script>
+    <script src="dex-hunter-ui.js"></script>
     <script>
     // ── SIGNAL TERMINAL (inline — tidak bergantung file eksternal) ────────────
     window.SignalTerminal = (function () {
@@ -2332,18 +2773,125 @@
             _feedEl.appendChild(div);_feedEl.scrollTop=_feedEl.scrollHeight;
         }
 
+        // ── Chart Modal ──────────────────────────────────────────────
+        function openChartModal(sig){
+            var sym = sig.coinSymbol.toUpperCase();
+            // TradingView symbol mapping: pakai BINANCE atau CRYPTO feed
+            var tvSym = 'BINANCE:'+sym+'USDT';
+            var modal = document.getElementById('stermChartModal');
+            if(!modal){
+                modal = document.createElement('div');
+                modal.id = 'stermChartModal';
+                modal.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.85);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;';
+                document.body.appendChild(modal);
+            }
+            var isLong = sig.signal==='LONG';
+            var badgeColor = isLong ? '#4ade80' : '#f87171';
+            modal.innerHTML =
+                '<div style="width:100%;max-width:1100px;background:#0d1117;border:1px solid #30363d;border-radius:12px;overflow:hidden;box-shadow:0 24px 64px #000a;">'
+                // ── Header ──
+                +'<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:#161b22;border-bottom:1px solid #30363d;">'
+                  +'<div style="display:flex;align-items:center;gap:12px;">'
+                    +'<span style="font-size:1.2rem;font-weight:700;color:#e6edf3;">'+sym+'</span>'
+                    +'<span style="background:'+badgeColor+';color:#000;font-size:.7rem;font-weight:700;padding:2px 8px;border-radius:4px;">'+sig.signal+'</span>'
+                    +'<span style="color:#8b949e;font-size:.8rem;">'+sig.coinName+'</span>'
+                    +'<span style="color:#e6edf3;font-size:.85rem;font-weight:600;">'+fmtPrice(sig.currentPrice)+'</span>'
+                  +'</div>'
+                  +'<div style="display:flex;gap:8px;align-items:center;">'
+                    +'<a href="https://www.coingecko.com/en/coins/'+sig.coinId+'" target="_blank" style="color:#58a6ff;font-size:.75rem;text-decoration:none;">CoinGecko ↗</a>'
+                    +'<button onclick="document.getElementById(\'stermChartModal\').remove()" style="background:#21262d;border:1px solid #30363d;color:#e6edf3;border-radius:6px;padding:4px 12px;cursor:pointer;font-size:.8rem;">✕ Tutup</button>'
+                  +'</div>'
+                +'</div>'
+                // ── Levels bar ──
+                +'<div style="display:flex;gap:0;background:#0d1117;border-bottom:1px solid #21262d;">'
+                  +['Entry: '+fmtPrice(sig.entryLow)+' – '+fmtPrice(sig.entryHigh),'SL: '+fmtPrice(sig.stopLoss),'TP1: '+fmtPrice(sig.tp1),'TP2: '+fmtPrice(sig.tp2),'TP3: '+fmtPrice(sig.tp3),'R:R 1:'+sig.rr,'Conf: '+sig.confidence+'%','Bull: '+sig.bullish+'%'].map(function(t,i){
+                    var colors=['#e6edf3','#f87171','#4ade80','#4ade80','#4ade80','#fbbf24','#a78bfa','#4ade80'];
+                    return '<div style="flex:1;min-width:0;text-align:center;padding:6px 4px;border-right:1px solid #21262d;font-size:.68rem;color:'+colors[i]+';">'+t+'</div>';
+                  }).join('')
+                +'</div>'
+                // ── TradingView Chart ──
+                +'<div id="stermTVContainer" style="height:480px;position:relative;">'
+                  +'<div id="stermTVWidget" style="height:100%;"></div>'
+                +'</div>'
+                // ── Footer tabs ──
+                +'<div style="display:flex;gap:8px;padding:10px 16px;background:#161b22;border-top:1px solid #30363d;flex-wrap:wrap;">'
+                  +['1m','5m','15m','1h','4h','1D','1W'].map(function(tf){
+                    return '<button onclick="loadTVChart(\''+tvSym+'\',\''+tf+'\')" style="background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:4px;padding:3px 10px;cursor:pointer;font-size:.75rem;">'+tf+'</button>';
+                  }).join('')
+                  +'<div style="margin-left:auto;color:#8b949e;font-size:.72rem;display:flex;align-items:center;gap:6px;">'
+                    +'<span>Chart by TradingView</span>'
+                    +'<a href="https://www.tradingview.com/chart/?symbol='+encodeURIComponent(tvSym)+'" target="_blank" style="color:#58a6ff;font-size:.72rem;">Buka Full ↗</a>'
+                  +'</div>'
+                +'</div>'
+                +'</div>';
+
+            // Klik backdrop → tutup
+            modal.addEventListener('click', function(e){ if(e.target===modal) modal.remove(); });
+
+            // Load chart
+            window._stermTVSym = tvSym;
+            loadTVChart(tvSym, '1h');
+        }
+
+        window.loadTVChart = function(sym, interval){
+            // highlight tombol aktif
+            document.querySelectorAll('#stermChartModal button[onclick^="loadTVChart"]').forEach(function(b){
+                b.style.color = b.textContent.trim()===interval ? '#e6edf3' : '#8b949e';
+                b.style.background = b.textContent.trim()===interval ? '#388bfd30' : '#21262d';
+                b.style.borderColor = b.textContent.trim()===interval ? '#388bfd' : '#30363d';
+            });
+            var container = document.getElementById('stermTVWidget');
+            if(!container) return;
+            container.innerHTML = '';
+            // Gunakan TradingView Widget embed (gratis, no API key)
+            var s = document.createElement('script');
+            s.src = 'https://s3.tradingview.com/tv.js';
+            s.onload = function(){
+                new TradingView.widget({
+                    container_id : 'stermTVWidget',
+                    symbol       : sym,
+                    interval     : interval === '1m' ? '1' : interval === '5m' ? '5' : interval === '15m' ? '15' : interval === '1h' ? '60' : interval === '4h' ? '240' : interval === '1D' ? 'D' : 'W',
+                    timezone     : 'Asia/Jakarta',
+                    theme        : 'dark',
+                    style        : '1',
+                    locale       : 'id',
+                    toolbar_bg   : '#0d1117',
+                    enable_publishing    : false,
+                    hide_top_toolbar     : false,
+                    hide_legend          : false,
+                    save_image           : false,
+                    withdateranges       : true,
+                    allow_symbol_change  : true,
+                    studies              : ['RSI@tv-basicstudies','MACD@tv-basicstudies','BB@tv-basicstudies'],
+                    width  : '100%',
+                    height : '480',
+                });
+            };
+            // Jika tv.js sudah dimuat sebelumnya
+            if(window.TradingView && window.TradingView.widget){
+                s.onload();
+            } else {
+                document.head.appendChild(s);
+            }
+        };
+
         function appendSignalCard(sig){
             if(!_feedEl)return;
             var isLong=sig.signal==='LONG',card=document.createElement('div');
             card.className='sterm-signal-card sterm-card-'+(isLong?'long':'short');
             var sub=(sig.subScores||[]).slice(0,3).map(function(s){return s.label.split(' ')[0]+':'+s.score;}).join(' · ');
-            card.innerHTML='<div class="sterm-card-header"><span class="sterm-card-coin sterm-card-coin-'+(isLong?'long':'short')+'">'+(isLong?'▲':'▼')+' '+sig.coinSymbol.toUpperCase()+' / '+sig.coinName+'</span><span class="sterm-card-badge sterm-card-badge-'+(isLong?'long':'short')+'">'+sig.signal+'</span></div>'
+            var sym = sig.coinSymbol.toUpperCase();
+            card.innerHTML='<div class="sterm-card-header"><span class="sterm-card-coin sterm-card-coin-'+(isLong?'long':'short')+'">'+(isLong?'▲':'▼')+' '+sym+' / '+sig.coinName+'</span>'
+                +'<span class="sterm-card-badge sterm-card-badge-'+(isLong?'long':'short')+'">'+sig.signal+'</span>'
+                +'<button class="sterm-btn-chart" data-coinsym="'+sym+'" title="Lihat Chart TradingView">📈 Chart</button></div>'
                 +'<div class="sterm-card-levels"><div class="sterm-card-level"><div class="sterm-card-level-lbl">HARGA</div><div class="sterm-card-level-val blue">'+fmtPrice(sig.currentPrice)+'</div></div><div class="sterm-card-level"><div class="sterm-card-level-lbl">ENTRY</div><div class="sterm-card-level-val">'+fmtPrice(sig.entryLow)+' — '+fmtPrice(sig.entryHigh)+'</div></div><div class="sterm-card-level"><div class="sterm-card-level-lbl">STOP LOSS</div><div class="sterm-card-level-val red">'+fmtPrice(sig.stopLoss)+'</div></div><div class="sterm-card-level"><div class="sterm-card-level-lbl">TP1</div><div class="sterm-card-level-val green">'+fmtPrice(sig.tp1)+'</div></div><div class="sterm-card-level"><div class="sterm-card-level-lbl">TP2</div><div class="sterm-card-level-val green">'+fmtPrice(sig.tp2)+'</div></div><div class="sterm-card-level"><div class="sterm-card-level-lbl">R:R</div><div class="sterm-card-level-val">1:'+sig.rr+'</div></div></div>'
                 +'<div class="sterm-card-footer"><span>📊 Bull <b>'+sig.bullish+'%</b> Bear <b>'+sig.bearish+'%</b> Conf <b>'+sig.confidence+'%</b></span>'
                 +(sig.volatilityScore!=null?'<span>⚡ Volatilitas: <b style="color:#f59e0b">'+sig.volatilityScore+'%</b></span>':'')
                 +(sig.priceChange24h!=null?'<span>📈 24h: <b style="color:'+(sig.priceChange24h>=0?'#4ade80':'#f87171')+'">'+((sig.priceChange24h>=0?'+':'')+sig.priceChange24h.toFixed(2))+'%</b></span>':'')
-                +(sig.volume24h?'<span>� Vol: <b>$'+(sig.volume24h>=1e9?(sig.volume24h/1e9).toFixed(1)+'B':(sig.volume24h/1e6).toFixed(0)+'M')+'</b></span>':'')
-                +'<span>�🐋 Whale: <b>'+(sig.whaleBias||'—')+'</b></span><span>📏 VolPhase: <b>'+(sig.volPhase||'—')+'</b></span><span>🎲 MC: <b>'+(sig.mcProbUp!=null?sig.mcProbUp:'—')+'%</b></span><span>🕐 <b>'+fmtDate(sig.timestamp)+'</b></span>'+(sub?'<span>🔍 '+sub+'</span>':'')+'</div>';
+                +(sig.volume24h?'<span>💧 Vol: <b>$'+(sig.volume24h>=1e9?(sig.volume24h/1e9).toFixed(1)+'B':(sig.volume24h/1e6).toFixed(0)+'M')+'</b></span>':'')
+                +'<span>🐋 Whale: <b>'+(sig.whaleBias||'—')+'</b></span><span>📏 VolPhase: <b>'+(sig.volPhase||'—')+'</b></span><span>🎲 MC: <b>'+(sig.mcProbUp!=null?sig.mcProbUp:'—')+'%</b></span><span>🕐 <b>'+fmtDate(sig.timestamp)+'</b></span>'+(sub?'<span>🔍 '+sub+'</span>':'')+'</div>';
+            // Event listener tombol chart
+            card.querySelector('.sterm-btn-chart').addEventListener('click', function(){ openChartModal(sig); });
             _feedEl.appendChild(card);_feedEl.scrollTop=_feedEl.scrollHeight;
         }
 
@@ -2504,11 +3052,37 @@
 
         // Restore saved API key into input fields on page load
         (function () {
-            const saved = sessionStorage.getItem('hf_gemini_key') || '';
+            const saved = localStorage.getItem('hf_gemini_key') || '';
             if (!saved) return;
             ['ameKeyInput', 'hfaiKeyInput', 'eqaiKeyInput'].forEach(id => {
                 const el = document.getElementById(id);
                 if (el && !el.value) el.value = saved;
+            });
+        })();
+
+        // ── Auto Trader tab init ──────────────────────────────────────────
+        (function () {
+            document.querySelectorAll('.tab-btn[data-tab="auto-trader"]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    if (typeof autoTraderUI !== 'undefined') {
+                        autoTraderUI.startPolling(5000);
+                    }
+                });
+            });
+        })();
+
+        // ── DEX Hunter tab init ───────────────────────────────────────────
+        (function () {
+            let _inited = false;
+            document.addEventListener('tabchange', function (e) {
+                if (e.detail !== 'dex-hunter') return;
+                if (typeof dexHunterUI !== 'undefined') {
+                    dexHunterUI.fetchState();
+                    if (!_inited) {
+                        _inited = true;
+                        dexHunterUI.startPolling(8000);
+                    }
+                }
             });
         })();
     </script>

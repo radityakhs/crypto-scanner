@@ -20,6 +20,27 @@ const fs    = require('fs');
 const path  = require('path');
 const https = require('https');
 
+// ─── ADAPTIVE WEIGHTS ─────────────────────────────────────────────────────────
+const { getCurrentWeights, DEFAULT_WEIGHTS } = require('./adaptive-weights');
+
+// Cache weights tiap 5 menit agar tidak baca file tiap scan
+let _cachedWeights     = null;
+let _cachedWeightsTime = 0;
+const WEIGHTS_CACHE_MS = 5 * 60 * 1000;
+
+function getWeights() {
+    if (_cachedWeights && (Date.now() - _cachedWeightsTime) < WEIGHTS_CACHE_MS) {
+        return _cachedWeights;
+    }
+    try {
+        _cachedWeights     = getCurrentWeights();
+        _cachedWeightsTime = Date.now();
+    } catch {
+        _cachedWeights = DEFAULT_WEIGHTS;
+    }
+    return _cachedWeights;
+}
+
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
 const CONFIG = {
     INTERVAL_MIN      : 15,          // polling interval (menit)
@@ -116,6 +137,116 @@ async function fetchTopCoins(n = CONFIG.TOP_N_COINS) {
 async function fetchMarketChart(coinId) {
     const url = `${CG_BASE}/coins/${coinId}/market_chart?vs_currency=${CONFIG.VS_CURRENCY}&days=${CONFIG.DAYS}&interval=daily`;
     return fetchWithRetry(url);
+}
+
+// Fetch chart 90 hari untuk higher timeframe (proxy 4h/weekly trend)
+async function fetchMarketChartHTF(coinId) {
+    try {
+        const url = `${CG_BASE}/coins/${coinId}/market_chart?vs_currency=${CONFIG.VS_CURRENCY}&days=90&interval=daily`;
+        return fetchWithRetry(url);
+    } catch { return null; }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  MARKET REGIME DETECTOR
+//  Deteksi kondisi pasar global dari BTC + top 10 coins
+//  Output: 'bull' | 'bear' | 'ranging' | 'unknown'
+//  Disimpan di cache global, diupdate setiap 30 menit
+// ══════════════════════════════════════════════════════════════════════════════
+let _regimeCache     = { regime: 'unknown', score: 50, updatedAt: 0 };
+const REGIME_TTL_MS  = 30 * 60 * 1000; // 30 menit
+
+async function detectMarketRegime(topCoins) {
+    if (Date.now() - _regimeCache.updatedAt < REGIME_TTL_MS) return _regimeCache;
+
+    try {
+        // Hitung dari top 20 coins: berapa % yang uptrend vs downtrend
+        const sample = topCoins.slice(0, 20);
+        let bullCount = 0, bearCount = 0;
+
+        for (const c of sample) {
+            const chg = c.price_change_percentage_24h || 0;
+            if (chg >  2) bullCount++;
+            if (chg < -2) bearCount++;
+        }
+
+        // BTC dominance signal (dari price change BTC vs altcoins)
+        const btcCoin   = topCoins.find(c => c.symbol === 'btc');
+        const btcChange = btcCoin?.price_change_percentage_24h || 0;
+
+        // Rata-rata perubahan 24h
+        const avgChange = sample.reduce((s, c) => s + (c.price_change_percentage_24h || 0), 0) / sample.length;
+
+        // Regime score: 0 = full bear, 100 = full bull
+        const regimeScore = Math.round(50 + avgChange * 3 + (bullCount - bearCount) * 1.5);
+        const clampedScore = Math.max(0, Math.min(100, regimeScore));
+
+        const regime = clampedScore >= 62 ? 'bull'
+                     : clampedScore <= 38 ? 'bear'
+                     : 'ranging';
+
+        _regimeCache = {
+            regime,
+            score     : clampedScore,
+            btcChange : +btcChange.toFixed(2),
+            avgChange : +avgChange.toFixed(2),
+            bullCount,
+            bearCount,
+            updatedAt : Date.now(),
+        };
+
+        log(`📊 Market Regime: ${regime.toUpperCase()} (score=${clampedScore}, avgChg=${avgChange.toFixed(1)}%, bull=${bullCount} bear=${bearCount})`, 'SYSTEM');
+    } catch (e) {
+        log(`Regime detection error: ${e.message}`, 'WARN');
+    }
+
+    return _regimeCache;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  MULTI-TIMEFRAME CONFIRMATION
+//  Cek apakah sinyal selaras dengan higher timeframe (HTF)
+//  LTF signal LONG harus selaras dengan HTF uptrend
+//  LTF signal SHORT harus selaras dengan HTF downtrend
+//  Jika tidak selaras → confidence dipotong 30%
+// ══════════════════════════════════════════════════════════════════════════════
+async function getHTFConfirmation(coinId, ltfSignal) {
+    try {
+        const htfChart = await fetchMarketChartHTF(coinId);
+        if (!htfChart) return { aligned: true, htfTrend: 'unknown', penalty: 0 };
+
+        const prices = (htfChart.prices || []).map(p => p[1]);
+        if (prices.length < 20) return { aligned: true, htfTrend: 'unknown', penalty: 0 };
+
+        // Analisa struktur di HTF
+        const htfStructure = analyzeMarketStructure(prices);
+        const htfTrend     = htfStructure.trend;
+
+        // Cek alignment
+        const isLong  = ltfSignal === 'LONG';
+        const bullish = ['uptrend', 'reversal_bottom'];
+        const bearish = ['downtrend', 'reversal_top'];
+
+        let aligned = true, penalty = 0, reason = '';
+
+        if (isLong && bearish.includes(htfTrend)) {
+            aligned = false; penalty = 30;
+            reason  = `HTF ${htfTrend} (kontra LONG)`;
+        } else if (!isLong && bullish.includes(htfTrend)) {
+            aligned = false; penalty = 30;
+            reason  = `HTF ${htfTrend} (kontra SHORT)`;
+        } else if (isLong && bullish.includes(htfTrend)) {
+            penalty = -5; // bonus alignment
+            reason  = `HTF ${htfTrend} ✅ aligned`;
+        } else if (!isLong && bearish.includes(htfTrend)) {
+            penalty = -5;
+            reason  = `HTF ${htfTrend} ✅ aligned`;
+        }
+
+        return { aligned, htfTrend, penalty, reason };
+    } catch {
+        return { aligned: true, htfTrend: 'unknown', penalty: 0, reason: 'HTF fetch error' };
+    }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -318,28 +449,139 @@ function monteCarloGBM(prices, PATHS = 500, DAYS = 7) {
     };
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+//  BAYESIAN UPDATER
+//  Mengupdate probabilitas P(LONG) menggunakan Bayes' Theorem:
+//    P(H|E) = P(E|H) * P(H) / P(E)
+//  Prior    = weighted score dari semua engine (0-1)
+//  Likelihood = seberapa kuat setiap evidence mendukung hipotesis LONG
+// ══════════════════════════════════════════════════════════════════════════════
+function bayesianUpdate(priorBullish, evidences) {
+    // priorBullish: angka 0-100 dari weighted engine score
+    let pLong  = priorBullish / 100;  // P(LONG) prior
+    let pShort = 1 - pLong;           // P(SHORT) prior
+
+    for (const { pEgivenLong, pEgivenShort } of evidences) {
+        // P(E) = P(E|LONG)*P(LONG) + P(E|SHORT)*P(SHORT)
+        const pE = pEgivenLong * pLong + pEgivenShort * pShort;
+        if (pE <= 0) continue;
+        // Update posterior
+        pLong  = (pEgivenLong  * pLong)  / pE;
+        pShort = (pEgivenShort * pShort) / pE;
+        // Normalize
+        const total = pLong + pShort;
+        pLong  /= total;
+        pShort /= total;
+    }
+
+    return { pLong: clamp(pLong, 0.01, 0.99), pShort: clamp(pShort, 0.01, 0.99) };
+}
+
+function buildBayesianEvidences(structure, orderFlow, whale, volatility, monteCarlo, coin) {
+    const evidences = [];
+
+    // Evidence 1: BOS direction
+    if (structure.bos === 'bullish_bos')       evidences.push({ pEgivenLong: 0.82, pEgivenShort: 0.18 });
+    else if (structure.bos === 'bearish_bos')  evidences.push({ pEgivenLong: 0.18, pEgivenShort: 0.82 });
+
+    // Evidence 2: CVD trend
+    if (orderFlow.cvdTrend === 'positive')     evidences.push({ pEgivenLong: 0.75, pEgivenShort: 0.25 });
+    else if (orderFlow.cvdTrend === 'negative') evidences.push({ pEgivenLong: 0.25, pEgivenShort: 0.75 });
+
+    // Evidence 3: Whale OBV
+    if (whale.whaleBias === 'accumulation')    evidences.push({ pEgivenLong: 0.78, pEgivenShort: 0.22 });
+    else if (whale.whaleBias === 'distribution') evidences.push({ pEgivenLong: 0.22, pEgivenShort: 0.78 });
+
+    // Evidence 4: Monte Carlo P(up)
+    const mcP = (monteCarlo.probUp || 50) / 100;
+    evidences.push({ pEgivenLong: mcP, pEgivenShort: 1 - mcP });
+
+    // Evidence 5: Volatility expansion + trend alignment
+    if (volatility.phase === 'expansion' || volatility.phase === 'high_expansion') {
+        const aligned = structure.trend === 'uptrend' ? 0.70 : structure.trend === 'downtrend' ? 0.30 : 0.50;
+        evidences.push({ pEgivenLong: aligned, pEgivenShort: 1 - aligned });
+    }
+
+    // Evidence 6: Price change 24h magnitude
+    const chg = coin?.price_change_percentage_24h || 0;
+    if (Math.abs(chg) > 3) {
+        const pL = chg > 0 ? 0.72 : 0.28;
+        evidences.push({ pEgivenLong: pL, pEgivenShort: 1 - pL });
+    }
+
+    return evidences;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  KELLY CRITERION
+//  f* = (b*p - q) / b
+//  b = payoff ratio (TP1 / SL distance)
+//  p = P(win) dari Bayesian posterior
+//  q = 1 - p
+//  Fractional Kelly = f* * KELLY_FRACTION (0.25) untuk konservatif
+//  Output: fraction of equity to risk (0.0 - MAX_KELLY_FRACTION)
+// ══════════════════════════════════════════════════════════════════════════════
+const KELLY_FRACTION   = 0.25;   // fractional Kelly (25% dari full Kelly)
+const MAX_KELLY_BET    = 0.04;   // hard cap 4% equity per trade
+const MIN_KELLY_BET    = 0.005;  // min 0.5% equity (kalau terlalu kecil, skip)
+
+function calcKelly(pWin, payoffRatio) {
+    if (pWin <= 0 || pWin >= 1 || payoffRatio <= 0) return 0;
+    const p = pWin;
+    const q = 1 - p;
+    const b = payoffRatio;
+    const fullKelly = (b * p - q) / b;
+    if (fullKelly <= 0) return 0;  // negative EV — jangan trade
+    const fractionalKelly = fullKelly * KELLY_FRACTION;
+    return clamp(fractionalKelly, 0, MAX_KELLY_BET);
+}
+
+function calcExpectedValue(pWin, payoffRatio, costPct = 0.001) {
+    // EV = p*b - q - cost
+    const ev = pWin * payoffRatio - (1 - pWin) - costPct;
+    return +ev.toFixed(4);
+}
+
 function calcDirectionalProb(structure, liquidity, volumeProfile, orderFlow, whale, volatility, monteCarlo, coin) {
+    // ── Baca adaptive weights (self-learning) ─────────────────────────────
+    const W = getWeights();
+
     const scores = [];
     const msScore = structure.trend === 'uptrend' ? 80 : structure.trend === 'reversal_bottom' ? 65 : structure.trend === 'consolidation' ? 50 : structure.trend === 'reversal_top' ? 35 : 20;
-    scores.push({ label: 'Market Structure', score: msScore, weight: 0.25 });
+    scores.push({ label: 'Market Structure', score: msScore, weight: W['Market Structure'] });
     let bosScore = structure.bos === 'bullish_bos' ? 82 : structure.bos === 'bearish_bos' ? 18 : 50;
     if (structure.choch) bosScore = structure.trend === 'uptrend' ? 25 : 75;
-    scores.push({ label: 'BOS / CHoCH', score: bosScore, weight: 0.12 });
+    scores.push({ label: 'BOS / CHoCH', score: bosScore, weight: W['BOS / CHoCH'] });
     const vpScore = volumeProfile.currentVsPoC === 'above' ? 70 : volumeProfile.currentVsPoC === 'at' ? 52 : 30;
-    scores.push({ label: 'Volume Profile', score: vpScore, weight: 0.15 });
+    scores.push({ label: 'Volume Profile', score: vpScore, weight: W['Volume Profile'] });
     const ofScore = orderFlow.cvdTrend === 'positive' ? 72 : orderFlow.cvdTrend === 'negative' ? 28 : 50;
     const absAdj  = orderFlow.absorption ? (orderFlow.cvdTrend === 'positive' ? 8 : -8) : 0;
-    scores.push({ label: 'Order Flow (CVD)', score: clamp(ofScore + absAdj, 5, 95), weight: 0.15 });
-    scores.push({ label: 'Bid/Ask Imbalance', score: clamp(Math.round(50 + orderFlow.imbalance * 100), 5, 95), weight: 0.08 });
-    scores.push({ label: 'Whale Activity', score: whale.pressureScore, weight: 0.10 });
+    scores.push({ label: 'Order Flow (CVD)', score: clamp(ofScore + absAdj, 5, 95), weight: W['Order Flow (CVD)'] });
+    scores.push({ label: 'Bid/Ask Imbalance', score: clamp(Math.round(50 + orderFlow.imbalance * 100), 5, 95), weight: W['Bid/Ask Imbalance'] });
+    scores.push({ label: 'Whale Activity', score: whale.pressureScore, weight: W['Whale Activity'] });
     const volScore = volatility.phase === 'contraction' ? 50 : volatility.phase === 'expansion' ? (structure.trend === 'uptrend' ? 68 : 32) : volatility.phase === 'high_expansion' ? 40 : 50;
-    scores.push({ label: 'Volatility Phase', score: volScore, weight: 0.05 });
-    scores.push({ label: 'Monte Carlo GBM', score: monteCarlo.probUp ?? 50, weight: 0.07 });
+    scores.push({ label: 'Volatility Phase', score: volScore, weight: W['Volatility Phase'] });
+    scores.push({ label: 'Monte Carlo GBM', score: monteCarlo.probUp ?? 50, weight: W['Monte Carlo GBM'] });
     const change24h = coin?.price_change_percentage_24h || 0;
-    scores.push({ label: 'Momentum 24h', score: clamp(Math.round(50 + change24h * 2), 5, 95), weight: 0.03 });
+    scores.push({ label: 'Momentum 24h', score: clamp(Math.round(50 + change24h * 2), 5, 95), weight: W['Momentum 24h'] });
     const rawBullish = scores.reduce((s, m) => s + m.score * m.weight, 0);
-    const bullish    = clamp(Math.round(rawBullish), 5, 95);
-    return { bullish, bearish: 100 - bullish, subScores: scores, confidence: Math.round(Math.abs(bullish - 50) * 2) };
+    const weightedBullish = clamp(Math.round(rawBullish), 5, 95);
+
+    // ── Bayesian update ────────────────────────────────────────────────────
+    const evidences    = buildBayesianEvidences(structure, orderFlow, whale, volatility, monteCarlo, coin);
+    const bayesian     = bayesianUpdate(weightedBullish, evidences);
+    const bullish      = clamp(Math.round(bayesian.pLong * 100), 5, 95);
+    const confidence   = Math.round(Math.abs(bullish - 50) * 2);
+
+    return {
+        bullish, bearish: 100 - bullish,
+        subScores: scores,
+        confidence,
+        bayesianPLong : +bayesian.pLong.toFixed(4),
+        bayesianPShort: +bayesian.pShort.toFixed(4),
+        evidenceCount : evidences.length,
+        weightsMode   : _cachedWeights === DEFAULT_WEIGHTS ? 'DEFAULT' : 'ADAPTIVE',
+    };
 }
 
 function calcTradeLevels(prices, structure, volumeProfile, dirProb, supplyDemand) {
@@ -427,6 +669,8 @@ function printSignalBox(entry) {
     console.log(`\n╔${line}╗`);
     console.log(`║  ${icon}  SIGNAL: ${entry.signal.padEnd(5)} — ${entry.coinSymbol.toUpperCase().padEnd(10)} $${entry.currentPrice}`);
     console.log(`║  📊 Bullish ${entry.bullish}%  Bearish ${entry.bearish}%  Conf ${entry.confidence}%`);
+    console.log(`║  🧠 Bayesian P(LONG)=${(entry.bayesianPLong*100).toFixed(1)}%  P(SHORT)=${(entry.bayesianPShort*100).toFixed(1)}%  Evidence=${entry.evidenceCount}`);
+    console.log(`║  📐 Kelly=${(entry.kellyFraction*100).toFixed(2)}%  EV=${entry.expectedValue >= 0 ? '+' : ''}${entry.expectedValue}`);
     console.log(`║  Alasan : ${entry.signalReason}`);
     console.log(`║  Entry  : $${entry.entryLow} — $${entry.entryHigh}`);
     console.log(`║  SL     : $${entry.stopLoss}`);
@@ -437,7 +681,7 @@ function printSignalBox(entry) {
 }
 
 // ─── SCAN SATU COIN ────────────────────────────────────────────────────────────
-async function scanCoin(coin) {
+async function scanCoin(coin, regimeCtx = null) {
     try {
         const chart = await fetchMarketChart(coin.id);
         await sleep(1200); // hindari rate limit CoinGecko
@@ -446,6 +690,40 @@ async function scanCoin(coin) {
 
         const { dirProb: dp, tradeLevels: tl, structure: s } = result;
         if (tl.signal === 'WAIT') return null;
+
+        // ── Multi-Timeframe Confirmation ───────────────────────────────────
+        const mtf = await getHTFConfirmation(coin.id, tl.signal);
+        await sleep(800); // extra delay setelah HTF fetch
+
+        // Terapkan MTF penalty ke confidence
+        let adjustedConfidence = dp.confidence + mtf.penalty;
+        adjustedConfidence     = Math.max(0, Math.min(100, adjustedConfidence));
+
+        // Terapkan regime filter: di bear regime, SHORT lebih mudah lolos; LONG lebih ketat
+        let regimeAdjust = 0;
+        if (regimeCtx && regimeCtx.regime !== 'unknown') {
+            if (regimeCtx.regime === 'bear'    && tl.signal === 'LONG')  regimeAdjust = -10;
+            if (regimeCtx.regime === 'bull'    && tl.signal === 'SHORT') regimeAdjust = -10;
+            if (regimeCtx.regime === 'bear'    && tl.signal === 'SHORT') regimeAdjust = +5;
+            if (regimeCtx.regime === 'bull'    && tl.signal === 'LONG')  regimeAdjust = +5;
+            adjustedConfidence = Math.max(0, Math.min(100, adjustedConfidence + regimeAdjust));
+        }
+
+        // Tolak jika confidence setelah MTF + regime adjustment < minimum
+        if (adjustedConfidence < CONFIG.MIN_CONFIDENCE) {
+            log(`  Skip ${coin.symbol.toUpperCase()}: Confidence ${dp.confidence}% → ${adjustedConfidence}% setelah MTF/Regime (${mtf.reason})`, 'INFO');
+            return null;
+        }
+
+        // ── Kelly Criterion ────────────────────────────────────────────────
+        const pWin       = tl.signal === 'LONG' ? dp.bayesianPLong : dp.bayesianPShort;
+        const payoff     = tl.rr || 1.5;
+        const kellyFrac  = calcKelly(pWin, payoff);
+        const ev         = calcExpectedValue(pWin, payoff);
+        if (kellyFrac < MIN_KELLY_BET || ev <= 0) {
+            log(`  Skip ${coin.symbol.toUpperCase()}: Kelly=${(kellyFrac*100).toFixed(2)}% EV=${ev}`, 'INFO');
+            return null;
+        }
 
         const entry = {
             timestamp      : new Date().toISOString(),
@@ -456,7 +734,21 @@ async function scanCoin(coin) {
             signalReason   : tl.signalReason,
             bullish        : dp.bullish,
             bearish        : dp.bearish,
-            confidence     : dp.confidence,
+            confidence     : adjustedConfidence,
+            confidenceRaw  : dp.confidence,
+            bayesianPLong  : dp.bayesianPLong,
+            bayesianPShort : dp.bayesianPShort,
+            evidenceCount  : dp.evidenceCount,
+            weightsMode    : dp.weightsMode || 'DEFAULT',
+            kellyFraction  : +kellyFrac.toFixed(4),
+            expectedValue  : ev,
+            // MTF info
+            htfTrend       : mtf.htfTrend,
+            htfAligned     : mtf.aligned,
+            mtfReason      : mtf.reason || '',
+            // Regime info
+            marketRegime   : regimeCtx?.regime || 'unknown',
+            regimeScore    : regimeCtx?.score  || 50,
             currentPrice   : result.currentPrice,
             priceChange24h : coin.price_change_percentage_24h || 0,
             volume24h      : coin.total_volume || 0,
@@ -506,24 +798,39 @@ async function runScan() {
     // Sort by volatility desc — coin paling volatile duluan
     coins.sort((a, b) => Math.abs(b.price_change_percentage_24h || 0) - Math.abs(a.price_change_percentage_24h || 0));
 
+    // Deteksi market regime global
+    const regimeCtx = await detectMarketRegime(coins);
+
     let signalCount = 0;
     for (const coin of coins) {
         process.stdout.write(`  → Scanning ${coin.symbol.toUpperCase().padEnd(8)} (${(coin.price_change_percentage_24h||0).toFixed(1)}%)... `);
-        const sig = await scanCoin(coin);
-        if (sig) { signalCount++; process.stdout.write(`✅ ${sig.signal}\n`); }
+        const sig = await scanCoin(coin, regimeCtx);
+        if (sig) { signalCount++; process.stdout.write(`✅ ${sig.signal} [HTF:${sig.htfTrend}|${sig.marketRegime}]\n`); }
         else      { process.stdout.write(`WAIT\n`); }
     }
 
-    log(`Scan selesai. ${signalCount} sinyal baru ditemukan. Sinyal total tersimpan: ${loadSignals().length}`);
+    log(`Scan selesai. ${signalCount} sinyal baru. Regime: ${regimeCtx.regime.toUpperCase()} (score=${regimeCtx.score}). Total sinyal: ${loadSignals().length}`);
 }
 
 // ─── ENTRY POINT ──────────────────────────────────────────────────────────────
 async function main() {
     console.log('\n' + '═'.repeat(60));
-    console.log('  🤖  Signal Bot v1 — Quant Analyst v2 Engine');
+    console.log('  🤖  Signal Bot v2 — Expert Quant Engine');
     console.log(`  Scan: top ${CONFIG.TOP_N_COINS} coins | Interval: ${CONFIG.INTERVAL_MIN} menit`);
     console.log(`  Threshold: Bullish/Bearish >${CONFIG.MIN_BULLISH}% + Confidence >${CONFIG.MIN_CONFIDENCE}%`);
+    console.log(`  Engines: Bayesian + Kelly + MTF + Regime + Adaptive Weights`);
     console.log(`  Signal log: ${CONFIG.SIGNALS_FILE}`);
+    // Tampilkan mode weights saat ini
+    try {
+        const w = require('./adaptive-weights');
+        const saved = w.loadWeights();
+        if (saved?.mode === 'ADAPTIVE') {
+            console.log(`  🧠 Adaptive Weights: AKTIF (${saved.totalTrades} trades, alpha=${saved.alpha})`);
+        } else {
+            const needed = (saved?.minRequired || 30) - (saved?.totalTrades || 0);
+            console.log(`  🧠 Adaptive Weights: DEFAULT (butuh ${needed} trades lagi)`);
+        }
+    } catch {}
     console.log('═'.repeat(60) + '\n');
 
     // Scan pertama langsung

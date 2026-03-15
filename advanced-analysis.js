@@ -1,15 +1,7 @@
 // Advanced Technical Analysis Module
-console.log('✅ Advanced Analysis module loaded');
+// Catatan: Implementasi nyata MA/EMA/MACD/Bollinger ada di:
+//   - analysis-utils.js  → calculateSMA, calculateEMA, calculateMACD, calculateFibonacciLevels, dsb.
+//   - app.js             → buildExpertAnalysis(), renderExpertCharts(), calculateIndicators()
+// File ini dipertahankan untuk kompatibilitas backward saja.
 
-function performAdvancedAnalysis(coin) {
-    console.log(`Performing advanced analysis for ${coin.name}`);
-    return {
-        rsi: Math.random() * 100,
-        macd: Math.random() * 2 - 1,
-        bollingerBands: {
-            upper: coin.current_price * 1.1,
-            middle: coin.current_price,
-            lower: coin.current_price * 0.9
-        }
-    };
-}
+console.log('✅ Advanced Analysis module loaded (implementasi: analysis-utils.js + app.js)');

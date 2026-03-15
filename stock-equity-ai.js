@@ -344,7 +344,7 @@ OUTPUT FORMAT — Strict JSON only:
         const keyId  = market === 'idx' ? 'idxEquityAiKey' : 'usEquityAiKey';
         const keyEl  = document.getElementById(keyId);
         const rawKey = keyEl ? keyEl.value.trim() : '';
-        const apiKey = rawKey || sessionStorage.getItem('hf_gemini_key') || '';
+        const apiKey = rawKey || localStorage.getItem('hf_gemini_key') || '';
 
         if (!apiKey) {
             const containerId = market === 'idx' ? 'idxAnalysisContainer' : 'usAnalysisContainer';
@@ -369,7 +369,7 @@ OUTPUT FORMAT — Strict JSON only:
         try {
             const payload = _buildPayload(stock, market);
             const result  = await _callGemini(apiKey, payload);
-            sessionStorage.setItem('hf_gemini_key', apiKey);
+            localStorage.setItem('hf_gemini_key', apiKey);
             if (container) container.innerHTML = _renderPanel(stock, market, result, false);
         } catch (e) {
             const c = document.getElementById(containerId);
@@ -388,7 +388,7 @@ OUTPUT FORMAT — Strict JSON only:
             : `$${stock.price.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
         const chColor = stock.change >= 0 ? '#4ade80' : '#f87171';
         const chSign  = stock.change >= 0 ? '+' : '';
-        const savedKey = sessionStorage.getItem('hf_gemini_key') || '';
+        const savedKey = localStorage.getItem('hf_gemini_key') || '';
         const keyId    = market === 'idx' ? 'idxEquityAiKey' : 'usEquityAiKey';
 
         const pe   = stock.pe   != null ? `${stock.pe}×`  : 'N/A';

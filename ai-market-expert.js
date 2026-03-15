@@ -822,7 +822,7 @@ OUTPUT FORMAT — Strict JSON only:
         try {
             const payload = _buildPayload(asset);
             const result  = await _callGemini(apiKey.trim(), payload);
-            sessionStorage.setItem('hf_gemini_key', apiKey.trim());
+            localStorage.setItem('hf_gemini_key', apiKey.trim());
             _renderResult(result, containerId);
         } catch (e) {
             container.innerHTML = `<div class="ame-error">❌ Gagal: ${e.message}<br><small>Pastikan API key valid dan kuota tidak habis.</small></div>`;
@@ -836,7 +836,7 @@ OUTPUT FORMAT — Strict JSON only:
 function generateAIExitStrategy(currentPrice, payload) {
     const containerId = 'exitStrategyContainer';
     const keyInput = document.getElementById('ameKeyInput');
-    const savedKey = sessionStorage.getItem('hf_gemini_key') || '';
+    const savedKey = localStorage.getItem('hf_gemini_key') || '';
     const apiKey   = (keyInput && keyInput.value.trim()) || savedKey;
 
     const coin = (payload && payload.coin) || {};

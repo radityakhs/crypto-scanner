@@ -1,5 +1,25 @@
+# Environment & secrets
 .env
+.env.*
+
+# Dependencies
 node_modules/
+
+# Runtime state — jangan di-commit (berubah terus)
+auto-trader-state.json
+adaptive-weights.json
+signals.json
+dex-sim-results.json
+dex-sim.log
+trade-journal.csv
+
+# Proxy server (berisi API keys logic, di-exclude dari repo publik)
 proxy-server.js
+
+# Logs
 *.log
+
+# macOS
+.DS_Store
+
 
