@@ -782,31 +782,6 @@
                 </section>
             </div>
 
-            <!-- ── EXIT STRATEGY ─────────────────────────────────── -->
-            <section class="exit-strategy-section">
-                <div class="exit-strategy-header">
-                    <h2><img src="images/ic_development.svg" alt="" style="width:20px;height:20px;vertical-align:middle"> AI Daily Narrative — Skenario 5 Hari</h2>
-                    <p class="info-text">💡 Masukkan Gemini API Key → klik "Analyze" pada coin → AI menyusun narasi harian 5 hari ke depan</p>
-                </div>
-                <!-- API Key row -->
-                <div class="ame-key-row">
-                    <input id="ameKeyInput" type="password" placeholder="🔑 Gemini API Key (AIza...)"
-                        oninput="if(this.value) localStorage.setItem('hf_gemini_key',this.value.trim())"
-                        autocomplete="off">
-                    <button class="ame-key-btn" onclick="
-                        const k=document.getElementById('ameKeyInput').value.trim()||localStorage.getItem('hf_gemini_key')||'';
-                        if(k){ document.getElementById('ameKeyInput').value=k; localStorage.setItem('hf_gemini_key',k); }
-                        alert(k ? '✅ API Key tersimpan permanen. Klik Analyze pada coin.' : '⚠️ Masukkan API Key terlebih dahulu.');
-                    ">💾 Simpan Key</button>
-                </div>
-                <div id="exitStrategyContainer" class="exit-strategy-container">
-                    <div class="no-analysis">
-                        <img src="images/ic_development.svg" style="width:48px;height:48px;opacity:0.3">
-                        <p>Masukkan API Key → Pilih coin → klik Analyze → Narasi 5 Hari</p>
-                    </div>
-                </div>
-            </section>
-
             <!-- ── AI COIN SCORING ───────────────────────────────── -->
             <section class="coin-scoring-section">
                 <div class="score-header">

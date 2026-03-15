@@ -2017,9 +2017,6 @@ function _autoRunNarrative(coin, marketChart) {
     };
 
     aiMarketExpert.analyze(apiKey, asset, 'inlineNarrativeContainer');
-    // Sync juga ke input ameKeyInput supaya tombol Simpan Key tetap terisi
-    const ameInput = document.getElementById('ameKeyInput');
-    if (ameInput && !ameInput.value) ameInput.value = apiKey;
 }
 
 // Dipanggil dari tombol inline saat user belum punya API key tersimpan
@@ -2027,8 +2024,6 @@ function _activateNarrativeKey(coinId) {
     const k = (document.getElementById('inlineGeminiKeyInput') || {}).value?.trim();
     if (!k) { alert('⚠️ Masukkan API Key terlebih dahulu'); return; }
     localStorage.setItem('hf_gemini_key', k);
-    const ameInput = document.getElementById('ameKeyInput');
-    if (ameInput) ameInput.value = k;
     const el = document.getElementById('inlineNarrativeContainer');
     if (el) el.innerHTML = '<div class="ame-loading"><span class="g-spinner"></span><span>Memulai analisis AI…</span></div>';
     const coin = cryptoData.find(c => c.id === coinId);
@@ -4992,146 +4987,6 @@ function renderCoinScoreGrid(coins, filter) {
         </div>
     `).join('');
 }
-
-function generateExitStrategy(coinId) {
-    const coin = cryptoData.find(c => c.id === coinId);
-    if (!coin) { console.warn('Coin not found:', coinId); return; }
-
-    // 1. Pastikan tab scanner aktif (exit-strategy-section ada di dalam tab scanner)
-    const scannerTab = document.getElementById('scanner');
-    if (scannerTab && !scannerTab.classList.contains('active')) {
-        // Switch ke tab scanner
-        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-        scannerTab.classList.add('active');
-        const scannerBtn = document.querySelector('.tab-btn[data-tab="scanner"]');
-        if (scannerBtn) scannerBtn.classList.add('active');
-    }
-
-    // 2. Pastikan section exit strategy terlihat (tidak di-hide inline)
-    const exitSection = document.querySelector('.exit-strategy-section');
-    if (exitSection) exitSection.style.display = '';
-
-    // 3. Isi API key dari localStorage jika input kosong
-    const keyInput = document.getElementById('ameKeyInput');
-    if (keyInput && !keyInput.value) {
-        const saved = localStorage.getItem('hf_gemini_key') || '';
-        if (saved) keyInput.value = saved;
-    }
-
-    // 4. Jalankan analisis AI
-    if (typeof generateAIExitStrategy === 'function') {
-        generateAIExitStrategy(coin.current_price, { coin });
-    } else {
-        // Fallback: render langsung tanpa ai-market-expert.js
-        _renderExitStrategyFallback(coin);
-    }
-
-    // 5. Scroll ke section setelah DOM update
-    const container = document.getElementById('exitStrategyContainer');
-    if (container) {
-        setTimeout(() => container.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
-    }
-}
-
-function _renderExitStrategyFallback(coin) {
-    const container = document.getElementById('exitStrategyContainer');
-    if (!container) return;
-
-    const price   = coin.current_price;
-    const spark   = coin.sparkline_in_7d?.price || [];
-    const high7d  = spark.length ? Math.max(...spark) : price * 1.2;
-    const low7d   = spark.length ? Math.min(...spark) : price * 0.8;
-    const atr     = calcATR(spark, 14);
-    const rsi     = calcRSI(spark, 14);
-    const f       = getFuturesAnalysis(coin);
-
-    const fmt = (n) => n >= 1000 ? `$${(n/1000).toFixed(2)}K` : n >= 1 ? `$${n.toFixed(3)}` : `$${n.toFixed(5)}`;
-
-    // Entry zones dari Fibonacci
-    const range  = high7d - low7d;
-    const z1     = low7d + range * 0.618;  // support kuat
-    const z2     = low7d + range * 0.5;    // support sedang
-    const z3     = low7d + range * 0.382;  // support konservatif
-
-    // Exit targets
-    const tp1    = price * 1.15;
-    const tp2    = price * 1.30;
-    const tp3    = price * 1.50;
-    const sl     = price * 0.92;
-
-    container.innerHTML = `
-        <div class="exit-strategy-content">
-            <div class="strategy-current-price">
-                <h3>${coin.name} (${coin.symbol.toUpperCase()}) — ${fmt(price)}</h3>
-                <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:6px">
-                    <span style="color:#94a3b8;font-size:0.82rem">RSI: <strong style="color:${rsi<30?'#4ade80':rsi>70?'#f87171':'#fbbf24'}">${rsi.toFixed(0)}</strong></span>
-                    <span style="color:#94a3b8;font-size:0.82rem">ATR: <strong>${fmt(atr)}</strong></span>
-                    <span style="color:#94a3b8;font-size:0.82rem">Futures: <strong style="color:${f.dirColor}">${f.dirEmoji} ${f.dirLabel} ${f.leverage}×</strong></span>
-                </div>
-            </div>
-
-            <div class="strategy-section">
-                <h3>📍 Entry Zones (Zona Beli)</h3>
-                <div class="entry-zones">
-                    ${[
-                        {label:'Zone 1 — Agresif', price: z1, prob:'50%', desc:'Lebih dekat harga sekarang, risk lebih tinggi', action:'⚠️ Konfirmasi volume sebelum entry'},
-                        {label:'Zone 2 — Moderat ⭐', price: z2, prob:'70%', desc:'Keseimbangan risk/reward (RECOMMENDED)', action:'🟡 Tunggu candle konfirmasi'},
-                        {label:'Zone 3 — Konservatif', price: z3, prob:'85%', desc:'Dekat support kuat, risk rendah', action:'🟢 Entry aman dengan SL ketat'},
-                    ].map(z => `
-                        <div class="entry-zone-card">
-                            <div class="zone-header"><strong>${z.label}</strong></div>
-                            <div class="zone-price">${fmt(z.price)}</div>
-                            <div class="zone-probability">Success Rate: ${z.prob}</div>
-                            <p class="zone-desc">${z.desc}</p>
-                            <div class="zone-action">${z.action}</div>
-                        </div>`).join('')}
-                </div>
-            </div>
-
-            <div class="strategy-section">
-                <h3>🎯 Exit Targets (Zona Jual)</h3>
-                <div class="exit-targets">
-                    ${[
-                        {label:'Target 1', price: tp1, profit:'+15%', action:'Ambil 30% profit', desc:'Profit cepat'},
-                        {label:'Target 2', price: tp2, profit:'+30%', action:'Ambil 40% profit', desc:'Target menengah'},
-                        {label:'Target 3 🚀', price: tp3, profit:'+50%', action:'Sisa 30% posisi', desc:'Moon target'},
-                    ].map(t => `
-                        <div class="exit-target-card">
-                            <div class="target-header"><strong>${t.label}</strong></div>
-                            <div class="target-price">${fmt(t.price)}</div>
-                            <div class="target-profit positive">${t.profit}</div>
-                            <div class="target-action">${t.action}</div>
-                            <p class="target-desc">${t.desc}</p>
-                        </div>`).join('')}
-                </div>
-            </div>
-
-            <div class="strategy-section stop-loss-section">
-                <h3>🛑 Stop Loss (WAJIB!)</h3>
-                <div class="stop-loss-card">
-                    <div class="stop-loss-price">${fmt(sl)}</div>
-                    <div class="stop-loss-percent negative">−8%</div>
-                    <p>Lindungi modal Anda</p>
-                    <div class="warning-box">⚠️ <strong>PENTING:</strong> Set SL SEBELUM masuk posisi!</div>
-                </div>
-            </div>
-
-            <div class="strategy-section">
-                <h3>⚖️ Risk / Reward</h3>
-                <div class="risk-reward-card">
-                    <div class="rr-stat"><span class="rr-label">Risk</span><span class="rr-value negative">8%</span></div>
-                    <div class="rr-ratio"><strong>1.88 : 1</strong><p>Excellent</p></div>
-                    <div class="rr-stat"><span class="rr-label">Reward (TP1)</span><span class="rr-value positive">15%</span></div>
-                </div>
-            </div>
-
-            <div class="strategy-disclaimer">
-                <p>⚠️ <strong>Disclaimer:</strong> Analisis ini bersifat edukatif dan BUKAN saran keuangan. Selalu lakukan riset mandiri.</p>
-            </div>
-        </div>`;
-}
-
 console.log('✅ App.js loaded successfully');
 
 // ============================================================
