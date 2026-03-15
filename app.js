@@ -2050,22 +2050,42 @@ function getFuturesAnalysis(coin, marketChart = null) {
     const ch7d     = coin.price_change_percentage_7d_in_currency || 0;
     const volRatio = coin.market_cap ? coin.total_volume / coin.market_cap : 0;
 
-    // Ambil harga dari sparkline 7d (168 titik = setiap jam)
-    const spark   = coin.sparkline_in_7d?.price || [];
-    // Harga 30d dari marketChart jika tersedia
-    const hist    = marketChart?.prices?.map(p => p[1]) || spark;
+    // Ambil harga: utamakan marketChart (30d), fallback ke sparkline 7d
+    // CoinPaprika tidak menyediakan sparkline sehingga sparkline_in_7d.price bisa []
+    const spark7d  = coin.sparkline_in_7d?.price || [];
+    const chartPrices = marketChart?.prices?.map(p => p[1]) || [];
+    // Gunakan dataset yang paling lengkap
+    const spark    = chartPrices.length >= spark7d.length ? chartPrices : spark7d;
+
+    // ── Estimasi ATR dari % changes jika tidak ada data historis ─────
+    // ATR ≈ harga * rata-rata daily range harian
+    // Gunakan |ch24h| dan |ch7d/7| sebagai proxy harian
+    function estimateAtrFromPct() {
+        const daily24h = Math.abs(ch24h) / 100 * price;
+        const daily7d  = Math.abs(ch7d)  / 7 / 100 * price;
+        // Rata-rata keduanya, minimal 1% dari harga
+        const est = (daily24h * 0.6 + daily7d * 0.4);
+        return Math.max(est, price * 0.01);
+    }
 
     // ── Indikator teknikal ───────────────────────────────────────────
     const rsi      = calcRSI(spark, 14);
     const ema20    = calcEMA(spark, 20);
     const ema50    = calcEMA(spark, 50);
-    const atr      = calcATR(spark, 14);
+    const rawAtr   = calcATR(spark, 14);
+    // Jika ATR = 0 (sparkline kosong), gunakan estimasi dari % changes
+    const atr      = rawAtr > 0 ? rawAtr : estimateAtrFromPct();
     const atrPct   = price > 0 ? (atr / price) * 100 : 2;  // ATR sebagai % harga
 
     // Support / Resistance dari persentil 7d
     const sorted   = [...spark].sort((a, b) => a - b);
-    const support  = spark.length > 10 ? sorted[Math.floor(sorted.length * 0.1)] : price * 0.9;
-    const resist   = spark.length > 10 ? sorted[Math.floor(sorted.length * 0.9)] : price * 1.1;
+    // Fallback S/R dari % changes jika sparkline kosong
+    const support  = spark.length > 10
+        ? sorted[Math.floor(sorted.length * 0.1)]
+        : price * (1 - Math.max(Math.abs(ch7d) / 100 * 0.6, 0.05));
+    const resist   = spark.length > 10
+        ? sorted[Math.floor(sorted.length * 0.9)]
+        : price * (1 + Math.max(Math.abs(ch7d) / 100 * 0.6, 0.05));
     const midLine  = (support + resist) / 2;
 
     // High & Low 7d
