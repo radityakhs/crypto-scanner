@@ -7,9 +7,14 @@
 const stockEquityAI = (() => {
     'use strict';
 
-    const GEMINI_MODEL = 'gemini-2.0-flash';
-    const GEMINI_URL   = (k) =>
-        `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${k}`;
+    const GEMINI_MODELS = [
+        'gemini-2.0-flash',
+        'gemini-2.0-flash-lite',
+        'gemini-1.5-flash',
+        'gemini-1.5-flash-8b',
+    ];
+    const GEMINI_URL = (k, model) =>
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${k}`;
 
     // ── System Prompt v2 ──────────────────────────────────────────────────────
     const SYSTEM_PROMPT = `You are an institutional-grade equity research AI with expertise in quantitative finance, macroeconomics, valuation modeling, market microstructure, and capital allocation.
@@ -287,7 +292,7 @@ OUTPUT FORMAT — Strict JSON only:
         };
     }
 
-    // ── Call Gemini ────────────────────────────────────────────────────────────
+    // ── Call Gemini — dengan fallback otomatis ke model lain jika quota habis ─
     async function _callGemini(apiKey, payload) {
         const body = {
             system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
@@ -302,19 +307,35 @@ OUTPUT FORMAT — Strict JSON only:
                 responseMimeType: 'application/json',
             }
         };
-        const resp = await fetch(GEMINI_URL(apiKey), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-        });
-        if (!resp.ok) {
-            const e = await resp.json().catch(() => ({}));
-            throw new Error(e?.error?.message || `HTTP ${resp.status}`);
+
+        let lastError = null;
+        for (const model of GEMINI_MODELS) {
+            try {
+                const resp = await fetch(GEMINI_URL(apiKey, model), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                if (!resp.ok) {
+                    const e = await resp.json().catch(() => ({}));
+                    const msg = e?.error?.message || `HTTP ${resp.status}`;
+                    const isQuota = resp.status === 429 || msg.toLowerCase().includes('quota') || msg.toLowerCase().includes('rate');
+                    if (isQuota) { lastError = new Error(`${model}: ${msg}`); continue; }
+                    throw new Error(msg);
+                }
+                const data = await resp.json();
+                const raw  = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+                const clean = raw.replace(/^```json?\s*/i,'').replace(/```\s*$/i,'').trim();
+                console.log(`✅ Stock Equity AI via ${model}`);
+                return JSON.parse(clean);
+            } catch (err) {
+                if (err.message?.toLowerCase().includes('quota') || err.message?.toLowerCase().includes('rate')) {
+                    lastError = err; continue;
+                }
+                throw err;
+            }
         }
-        const data = await resp.json();
-        const raw  = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        const clean = raw.replace(/^```json?\s*/i,'').replace(/```\s*$/i,'').trim();
-        return JSON.parse(clean);
+        throw lastError || new Error('Semua model Gemini quota habis. Coba lagi besok atau buat API key baru di aistudio.google.com');
     }
 
     // ── Open Panel ────────────────────────────────────────────────────────────

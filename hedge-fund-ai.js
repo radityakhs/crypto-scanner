@@ -8,9 +8,14 @@ const hedgeFundAI = (() => {
     'use strict';
 
     // ── Gemini endpoint ────────────────────────────────────────────────────────
-    const GEMINI_MODEL = 'gemini-2.0-flash';
-    const GEMINI_URL   = (k) =>
-        `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${k}`;
+    const GEMINI_MODELS = [
+        'gemini-2.0-flash',
+        'gemini-2.0-flash-lite',
+        'gemini-1.5-flash',
+        'gemini-1.5-flash-8b',
+    ];
+    const GEMINI_URL = (k, model) =>
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${k}`;
 
     // ── Extended system prompt v3 — Advanced Hedge Fund Detection ─────────────
     const SYSTEM_PROMPT = `You are operating in advanced hedge fund detection mode.
@@ -362,7 +367,7 @@ Output STRICT JSON only — no markdown, no explanation outside JSON:
         _lastResult     = null;
     }
 
-    // ── Call Gemini ────────────────────────────────────────────────────────────
+    // ── Call Gemini — dengan fallback otomatis ke model lain jika quota habis ─
     async function _callGemini(apiKey, payload) {
         const userMsg =
             `Analyze this token using ONLY the provided on-chain metrics. Output strict JSON only:\n\n`
@@ -378,21 +383,34 @@ Output STRICT JSON only — no markdown, no explanation outside JSON:
             }
         };
 
-        const resp = await fetch(GEMINI_URL(apiKey), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
-        });
-
-        if (!resp.ok) {
-            const err = await resp.json().catch(() => ({}));
-            throw new Error(err?.error?.message || `HTTP ${resp.status}`);
+        let lastError = null;
+        for (const model of GEMINI_MODELS) {
+            try {
+                const resp = await fetch(GEMINI_URL(apiKey, model), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                if (!resp.ok) {
+                    const err = await resp.json().catch(() => ({}));
+                    const msg = err?.error?.message || `HTTP ${resp.status}`;
+                    const isQuota = resp.status === 429 || msg.toLowerCase().includes('quota') || msg.toLowerCase().includes('rate');
+                    if (isQuota) { lastError = new Error(`${model}: ${msg}`); continue; }
+                    throw new Error(msg);
+                }
+                const data    = await resp.json();
+                const raw     = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+                const cleaned = raw.replace(/^```json?\s*/i, '').replace(/```\s*$/i, '').trim();
+                console.log(`✅ Hedge Fund AI via ${model}`);
+                return JSON.parse(cleaned);
+            } catch (err) {
+                if (err.message?.toLowerCase().includes('quota') || err.message?.toLowerCase().includes('rate')) {
+                    lastError = err; continue;
+                }
+                throw err;
+            }
         }
-
-        const data    = await resp.json();
-        const raw     = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        const cleaned = raw.replace(/^```json?\s*/i, '').replace(/```\s*$/i, '').trim();
-        return JSON.parse(cleaned);
+        throw lastError || new Error('Semua model Gemini quota habis. Coba lagi besok atau buat API key baru di aistudio.google.com');
     }
 
     // ── Public: analyze ────────────────────────────────────────────────────────
