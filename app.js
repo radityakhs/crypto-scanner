@@ -13,6 +13,7 @@ let portfolioData = JSON.parse(localStorage.getItem('portfolio')) || [];
 let tradingHistory = JSON.parse(localStorage.getItem('tradingHistory')) || [];
 let analysisCharts = { priceChart: null, macdChart: null };
 let marketStatsData = null;
+let _bubbleRenderTimer = null;  // debounce timer untuk bubble graph
 let fearGreedData = null;
 let macroAgendaData = [];
 let macroAgendaFilter = 'all';
@@ -78,8 +79,37 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function initializeApp() {
-    // Set initial tab
-    switchTab('scanner');
+    // Restore saved tab or default to home
+    const savedTab = localStorage.getItem('cs_current_tab') || 'home';
+    switchTab(savedTab);
+    
+    // Restore wallet state if previously connected
+    const savedWalletAddr = localStorage.getItem('cs_wallet_addr');
+    const savedWalletChain = localStorage.getItem('cs_wallet_chain');
+    if (savedWalletAddr && typeof homeLoadWallet === 'function') {
+        homeLoadWallet(savedWalletAddr, savedWalletChain || 'ethereum');
+    }
+    
+    // Restore exchange selection
+    const savedExchange = localStorage.getItem('cs_wallet_exchange') || 'okx';
+    const exBtn = document.querySelector(`.home-ex-tab[data-ex="${savedExchange}"]`);
+    if (exBtn && typeof homeSelectExchange === 'function') {
+        homeSelectExchange(savedExchange, exBtn);
+    }
+    
+    // Restore risk selection
+    const savedRisk = localStorage.getItem('cs_wallet_cfg');
+    if (savedRisk) {
+        try {
+            const cfg = JSON.parse(savedRisk);
+            if (cfg.risk) {
+                const riskBtn = document.querySelector(`.wallet-mode-btn[onclick*="walletSetRisk('${cfg.risk}"]`);
+                if (riskBtn && typeof walletSetRisk === 'function') {
+                    walletSetRisk(cfg.risk, riskBtn);
+                }
+            }
+        } catch(e) {}
+    }
     
     // Load saved data (legacy stubs — portfolioTracker handles its own storage)
     updateGlobalSessions();
@@ -187,6 +217,24 @@ function switchTab(tabName) {
     if (selectedBtn) {
         selectedBtn.classList.add('active');
     }
+
+    // Save current tab to localStorage for persistence
+    localStorage.setItem('cs_current_tab', tabName);
+
+    // Show macro bar only on scanner tab
+    const macroBar = document.getElementById('macroBar');
+    if (macroBar) {
+        if (tabName === 'scanner') {
+            macroBar.classList.remove('macrobar-hidden');
+        } else {
+            macroBar.classList.add('macrobar-hidden');
+        }
+    }
+    // Adjust app-main top margin accordingly
+    const appMain = document.querySelector('.app-main');
+    if (appMain) {
+        appMain.classList.toggle('no-macrobar', tabName !== 'scanner');
+    }
     
     // Load tab-specific data
     switch(tabName) {
@@ -194,6 +242,7 @@ function switchTab(tabName) {
             if (cryptoData.length === 0) {
                 loadCryptoData();
             }
+            if (window._fngHistory && window._fngHistory.length) updateFngGauge();
             break;
         case 'news':
             // Initialize top movers when switching to news tab
@@ -306,13 +355,21 @@ async function loadMarketStats() {
 
 async function fetchFearGreedIndex() {
     try {
-        const cached = cacheGet('fearGreed');
-        if (cached) { fearGreedData = cached; updateFearGreedBadge(); return; }
-        const response = await fetch('https://api.alternative.me/fng/?limit=1&format=json');
+        const cached = cacheGet('fearGreedHist');
+        if (cached) {
+            window._fngHistory = cached;
+            fearGreedData = cached[0] || null;
+            updateFearGreedBadge();
+            updateFngGauge();
+            return;
+        }
+        const response = await fetch('https://api.alternative.me/fng/?limit=365&format=json');
         const data = await response.json();
-        fearGreedData = data?.data?.[0] || null;
-        if (fearGreedData) cacheSet('fearGreed', fearGreedData, 5 * 60_000); // cache 5 menit
+        window._fngHistory = data?.data || [];
+        fearGreedData = window._fngHistory[0] || null;
+        if (window._fngHistory.length) cacheSet('fearGreedHist', window._fngHistory, 5 * 60_000);
         updateFearGreedBadge();
+        updateFngGauge();
     } catch (error) {
         console.error('Error fetching Fear & Greed index:', error);
         fearGreedData = null;
@@ -326,12 +383,209 @@ function updateFearGreedBadge() {
     if (!fearGreedData) { el.textContent = '—'; return; }
     const v   = parseInt(fearGreedData.value) || 0;
     const lbl = fearGreedData.value_classification || '';
-    const color = v >= 70 ? '#f87171'   // extreme greed
-                : v >= 55 ? '#fbbf24'   // greed
-                : v >= 45 ? '#94a3b8'   // neutral
-                : v >= 30 ? '#60a5fa'   // fear
-                :           '#a78bfa';  // extreme fear
+    const color = v >= 75 ? '#f87171'
+                : v >= 55 ? '#fb923c'
+                : v >= 45 ? '#facc15'
+                : v >= 25 ? '#a3e635'
+                :           '#4ade80';
     el.innerHTML = `<span style="color:${color};font-weight:700">${v}</span> <span style="color:#64748b;font-size:0.78rem">${lbl}</span>`;
+}
+
+/* ─── Fear & Greed Gauge ─────────────────────────────────────
+   SVG viewBox: 0 0 300 168   Centre: (150,148)   Radius: 108
+   SVG Y-axis goes DOWN. 0°=right, 90°=down, 180°=left, 270°=up.
+   We want the top semicircle: LEFT(180°) → UP(270°) → RIGHT(0°/360°).
+   That is CLOCKWISE in SVG terms → sweep-flag = 1.
+   val=0 → left (180°), val=100 → right (0°).
+──────────────────────────────────────────────────────────────*/
+const FNG_CX = 150, FNG_CY = 148, FNG_R = 108;
+
+function _fngArcPath(cx, cy, r, startDeg, endDeg) {
+    const toRad = d => (d * Math.PI) / 180;
+    if (Math.abs(endDeg - startDeg) < 0.1) return '';
+    const sx = cx + r * Math.cos(toRad(startDeg));
+    const sy = cy + r * Math.sin(toRad(startDeg));
+    const ex = cx + r * Math.cos(toRad(endDeg));
+    const ey = cy + r * Math.sin(toRad(endDeg));
+    // Clockwise sweep (flag=1) draws the TOP semicircle.
+    // large-arc: CW span = (endDeg - startDeg + 360) % 360
+    const span = ((endDeg - startDeg) + 360) % 360;
+    const large = span > 180 ? 1 : 0;
+    return `M ${sx.toFixed(2)} ${sy.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${ex.toFixed(2)} ${ey.toFixed(2)}`;
+}
+
+// val 0–100 → SVG angle: val=0 → 180° (left), val=100 → 360° (right)
+// CW from 180°→360° traces the TOP semicircle (above centre line)
+function _fngValToAngle(val) { return 180 + (Math.min(100, Math.max(0, val)) / 100) * 180; }
+
+function updateFngGauge() {
+    const v = parseInt(fearGreedData?.value) || 0;
+    const CX = FNG_CX, CY = FNG_CY, R = FNG_R;
+
+    // Background track: CW 180° → 360° = top semicircle
+    const trackEl = document.getElementById('fng-track');
+    if (trackEl) trackEl.setAttribute('d', _fngArcPath(CX, CY, R, 180, 360));
+
+    // Zone definitions: value range → colors
+    const zones = [
+        { id: 'fng-arc-ef', from: 0,  to: 25,  color: '#4ade80' },  // Extreme Fear
+        { id: 'fng-arc-f',  from: 25, to: 45,  color: '#a3e635' },  // Fear
+        { id: 'fng-arc-n',  from: 45, to: 55,  color: '#facc15' },  // Neutral
+        { id: 'fng-arc-g',  from: 55, to: 75,  color: '#fb923c' },  // Greed
+        { id: 'fng-arc-eg', from: 75, to: 100, color: '#f87171' },  // Extreme Greed
+    ];
+
+    zones.forEach(z => {
+        const el = document.getElementById(z.id);
+        if (!el) return;
+        // val=0 → 180° (left), val=100 → 360° (right)
+        // CW sweep from aStart(left boundary) → aEnd(right boundary) = top arc
+        const aStart = _fngValToAngle(z.from);  // e.g. EF.from=0  → 180°
+        const aEnd   = _fngValToAngle(z.to);    // e.g. EF.to=25   → 225°
+        el.setAttribute('d', _fngArcPath(CX, CY, R, aStart, aEnd));
+        el.setAttribute('stroke', z.color);
+        el.setAttribute('fill', 'none');
+    });
+
+    // Tick marks (outer edge)
+    const ticksEl = document.getElementById('fngTicks');
+    if (ticksEl) {
+        ticksEl.innerHTML = '';
+        for (let i = 0; i <= 100; i += 5) {
+            const isMajor = (i % 25 === 0);
+            const angle = _fngValToAngle(i);
+            const rad = (angle * Math.PI) / 180;
+            const r1 = R + 10;
+            const r2 = R + (isMajor ? 22 : 15);
+            const x1 = (CX + r1 * Math.cos(rad)).toFixed(2);
+            const y1 = (CY + r1 * Math.sin(rad)).toFixed(2);
+            const x2 = (CX + r2 * Math.cos(rad)).toFixed(2);
+            const y2 = (CY + r2 * Math.sin(rad)).toFixed(2);
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.setAttribute('x1', x1); line.setAttribute('y1', y1);
+            line.setAttribute('x2', x2); line.setAttribute('y2', y2);
+            line.setAttribute('stroke', isMajor ? '#475569' : '#2d3f55');
+            line.setAttribute('stroke-width', isMajor ? '2' : '1');
+            line.setAttribute('stroke-linecap', 'round');
+            ticksEl.appendChild(line);
+        }
+    }
+
+    // Zone labels — horizontal text outside the arc
+    const labelsEl = document.getElementById('fngZoneLabels');
+    if (labelsEl) {
+        labelsEl.innerHTML = '';
+        const labelDefs = [
+            { mid: 12,  lines: ['Extreme','Fear'], color: '#4ade80' },
+            { mid: 35,  lines: ['Fear'],            color: '#a3e635' },
+            { mid: 50,  lines: ['Netral'],          color: '#facc15' },
+            { mid: 65,  lines: ['Greed'],           color: '#fb923c' },
+            { mid: 88,  lines: ['Extreme','Greed'], color: '#f87171' },
+        ];
+        const LR = R + 30;
+        labelDefs.forEach(l => {
+            const angle = _fngValToAngle(l.mid);
+            const rad = (angle * Math.PI) / 180;
+            const lx = parseFloat((CX + LR * Math.cos(rad)).toFixed(2));
+            const ly = parseFloat((CY + LR * Math.sin(rad)).toFixed(2));
+            l.lines.forEach((lineText, i) => {
+                const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                const yOff = l.lines.length === 2 ? (i === 0 ? -5 : 5) : 0;
+                t.setAttribute('x', lx.toFixed(2));
+                t.setAttribute('y', (ly + yOff).toFixed(2));
+                t.setAttribute('text-anchor', 'middle');
+                t.setAttribute('dominant-baseline', 'middle');
+                t.setAttribute('font-size', '8');
+                t.setAttribute('font-family', 'Inter,system-ui,sans-serif');
+                t.setAttribute('font-weight', '700');
+                t.setAttribute('fill', l.color);
+                t.setAttribute('opacity', '0.9');
+                t.textContent = lineText;
+                labelsEl.appendChild(t);
+            });
+        });
+    }
+
+    // Needle — points from center toward the arc
+    const needleEl = document.getElementById('fngNeedle');
+    if (needleEl) {
+        needleEl.innerHTML = '';
+        const angle = _fngValToAngle(v);
+        const rad = (angle * Math.PI) / 180;
+        const NL = R - 10;
+        const nx = (CX + NL * Math.cos(rad)).toFixed(2);
+        const ny = (CY + NL * Math.sin(rad)).toFixed(2);
+        // Shadow
+        const shadow = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        shadow.setAttribute('x1', CX + 1); shadow.setAttribute('y1', CY + 1);
+        shadow.setAttribute('x2', parseFloat(nx) + 1); shadow.setAttribute('y2', parseFloat(ny) + 1);
+        shadow.setAttribute('stroke', 'rgba(0,0,0,0.35)');
+        shadow.setAttribute('stroke-width', '4');
+        shadow.setAttribute('stroke-linecap', 'round');
+        needleEl.appendChild(shadow);
+        // Needle
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('x1', CX); line.setAttribute('y1', CY);
+        line.setAttribute('x2', nx); line.setAttribute('y2', ny);
+        line.setAttribute('stroke', '#f1f5f9');
+        line.setAttribute('stroke-width', '2.5');
+        line.setAttribute('stroke-linecap', 'round');
+        needleEl.appendChild(line);
+        // Center cap
+        const cap = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        cap.setAttribute('cx', CX); cap.setAttribute('cy', CY); cap.setAttribute('r', '7');
+        cap.setAttribute('fill', '#0f172a'); cap.setAttribute('stroke', '#f1f5f9'); cap.setAttribute('stroke-width', '2');
+        needleEl.appendChild(cap);
+    }
+
+    // Zone color for value text
+    const zone = v >= 75 ? { lbl: 'Extreme Greed', color: '#f87171' }
+               : v >= 55 ? { lbl: 'Greed',          color: '#fb923c' }
+               : v >= 45 ? { lbl: 'Neutral',         color: '#facc15' }
+               : v >= 25 ? { lbl: 'Fear',            color: '#a3e635' }
+               :             { lbl: 'Extreme Fear',   color: '#4ade80' };
+
+    const valText = document.getElementById('fngValueText');
+    const lblText = document.getElementById('fngLabelText');
+    if (valText) { valText.textContent = v; valText.setAttribute('fill', zone.color); }
+    if (lblText) { lblText.textContent = fearGreedData?.value_classification || zone.lbl; }
+
+    // Last update timestamp
+    const subEl = document.getElementById('fngLastUpdate');
+    if (subEl && fearGreedData?.timestamp) {
+        const d = new Date(parseInt(fearGreedData.timestamp) * 1000);
+        subEl.textContent = 'Diperbarui: ' + d.toLocaleDateString('id-ID', { day:'numeric', month:'short', year:'numeric' });
+    }
+
+    // Distribution stats
+    _fngUpdateDist(window._fngHistory || []);
+}
+
+function _fngUpdateDist(slice) {
+    const total = slice.length || 1;
+    const counts = { ef: 0, f: 0, n: 0, g: 0, eg: 0 };
+    slice.forEach(d => {
+        const v = parseInt(d.value) || 0;
+        if (v < 25) counts.ef++;
+        else if (v < 45) counts.f++;
+        else if (v < 55) counts.n++;
+        else if (v < 75) counts.g++;
+        else counts.eg++;
+    });
+    Object.entries(counts).forEach(([key, cnt]) => {
+        const el = document.getElementById(`fngD-${key}`);
+        if (!el) return;
+        const pct = ((cnt / total) * 100).toFixed(2);
+        el.innerHTML = `${cnt} hari &nbsp;<span style="color:var(--text3)">${pct}%</span>`;
+    });
+}
+
+function fngSelectPeriod(period, btn) {
+    document.querySelectorAll('.fng-tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const hist = window._fngHistory || [];
+    const limit = period === 'week' ? 7 : period === 'month' ? 30 : period === 'year' ? 365 : 9999;
+    _fngUpdateDist(hist.slice(0, limit));
 }
 
 async function fetchMacroAgenda() {
@@ -647,63 +901,543 @@ function formatCountdown(diffMs) {
 
 async function updateWhaleAlerts() {
     const alertContent = document.getElementById('alertContent');
-    const alertStatus = document.getElementById('alertStatus');
+    const alertStatus  = document.getElementById('alertStatus');
     if (!alertContent || !alertStatus) return;
 
-    alertStatus.textContent = 'Scanning...';
-    alertContent.innerHTML = `<div class="whale-scanning"><span class="g-spinner"></span> Sedang scan whale activity…</div>`;
+    alertStatus.textContent = 'Scanning…';
+    alertContent.innerHTML = `<div class="whale-scanning" style="grid-column:1/-1;text-align:center;padding:32px 16px;color:#475569;font-size:.82rem;"><span class="g-spinner"></span>&nbsp; Scanning whale activity…</div>`;
+
     const alerts = await buildWhaleAlerts();
+
     if (!alerts.length) {
         alertStatus.textContent = 'No alerts';
-        alertContent.innerHTML = `
-            <div class="no-signal">
-                <div class="pulse-dot"></div>
-                <p>Belum ada whale spike kuat saat ini.</p>
-            </div>
-        `;
+        alertContent.innerHTML = `<div class="no-signal" style="grid-column:1/-1"><div class="pulse-dot"></div><p>Belum ada whale spike kuat saat ini.</p></div>`;
         return;
     }
 
-    alertStatus.textContent = `${alerts.length} alert`; 
-    alertContent.innerHTML = alerts.map(alert => `
-        <div class="alert-card ${alert.intradaySpike ? 'intraday-spike' : ''}" data-coin-id="${alert.coinId}">
-            <div class="alert-title">
-                ${alert.name} (${alert.symbol})
-                ${alert.intradaySpike ? '<span class="spike-badge">⚡ Intraday Spike</span>' : ''}
+    const buyCount   = alerts.filter(a => a.action === 'BUY').length;
+    const sellCount  = alerts.filter(a => a.action === 'SELL').length;
+    const watchCount = alerts.filter(a => a.action === 'WATCH').length;
+    alertStatus.textContent = `${alerts.length} signals · ${buyCount}↑ ${sellCount}↓ ${watchCount}~`;
+
+    const maxScore = Math.max(...alerts.map(a => Math.max(a.buyScore, a.sellScore)), 1);
+
+    alertContent.innerHTML = alerts.map(alert => {
+        const isBuy   = alert.action === 'BUY';
+        const isSell  = alert.action === 'SELL';
+        const actionColor = isBuy ? '#4ade80' : isSell ? '#f87171' : '#fbbf24';
+        const badgeCls    = isBuy ? 'buy' : isSell ? 'sell' : 'watch';
+        const actionIcon  = isBuy ? '▲' : isSell ? '▼' : '◆';
+        const dirText     = isBuy  ? '📈 Akumulasi Whale'
+                          : isSell ? '📉 Distribusi Whale'
+                          : '👁 Aktivitas Tinggi';
+        const ch24h  = alert.ch24h ?? 0;
+        const ch1h   = alert.ch1h  ?? 0;
+        const ch7d   = alert.ch7d  ?? 0;
+        const volPct = ((alert.volRatio ?? 0) * 100).toFixed(1);
+        const score  = isBuy ? alert.buyScore : isSell ? alert.sellScore : Math.max(alert.buyScore, alert.sellScore);
+        const scoreBarW  = Math.min(100, Math.round((score / 60) * 100));
+        const scoreColor = score >= 40 ? '#4ade80' : score >= 25 ? '#fbbf24' : '#94a3b8';
+        const ch24hFmt = (v => (v >= 0 ? '+' : '') + v.toFixed(2) + '%')(ch24h);
+        const ch1hFmt  = (v => (v >= 0 ? '+' : '') + v.toFixed(2) + '%')(ch1h);
+        const ch7dFmt  = (v => (v >= 0 ? '+' : '') + v.toFixed(2) + '%')(ch7d);
+        const c24 = ch24h >= 0 ? '#4ade80' : '#f87171';
+        const c1h = ch1h  >= 0 ? '#4ade80' : '#f87171';
+        const c7d = ch7d  >= 0 ? '#4ade80' : '#f87171';
+        const reasonsHtml = (alert.reasons || []).slice(0, 4).map(r =>
+            `<span class="wa-reason-tag">${r}</span>`).join('');
+        const spikeBadge = alert.intradaySpike ? `<span class="spike-badge">⚡ Spike</span>` : '';
+        const imgHtml = alert.image
+            ? `<img src="${alert.image}" class="wa-coin-img" alt="" onerror="this.style.visibility='hidden'">`
+            : `<div class="wa-coin-img" style="background:#1e293b;display:flex;align-items:center;justify-content:center;font-size:14px">${(alert.symbol||'?')[0]}</div>`;
+
+        return `
+<div class="wa-card" data-action="${alert.action}" data-coin-id="${alert.coinId}">
+    <div class="wa-card-header">
+        <div class="wa-coin-info">
+            ${imgHtml}
+            <div class="wa-coin-text">
+                <span class="wa-coin-name">${alert.name}</span>
+                <span class="wa-coin-sym">${(alert.symbol||'').toUpperCase()}</span>
             </div>
-            <div class="alert-reason">${alert.reason}</div>
-            <div class="alert-meta">Volume ratio: ${(alert.volumeRatio * 100).toFixed(2)}% • 24h: ${formatPercentage(alert.change24h)} • Intraday: ${alert.intradaySpike ? '🔥 Spike' : 'Normal'}</div>
         </div>
-    `).join('');
+        <span class="wa-action-badge ${badgeCls}">${actionIcon} ${alert.action}</span>
+    </div>
+    <div class="wa-dir-label" style="color:${actionColor}">${dirText}</div>
+    <div class="wa-score-row">
+        <div class="wa-score-bar-bg">
+            <div class="wa-score-bar-fill" style="width:${scoreBarW}%;background:${scoreColor}"></div>
+        </div>
+        <span class="wa-score-label" style="color:${scoreColor}">Score ${score}/60</span>
+    </div>
+    <div class="wa-stats-row">
+        <div class="wa-stat">
+            <span class="wa-stat-label">1H</span>
+            <span class="wa-stat-val" style="color:${c1h}">${ch1hFmt}</span>
+        </div>
+        <div class="wa-stat">
+            <span class="wa-stat-label">24H</span>
+            <span class="wa-stat-val" style="color:${c24}">${ch24hFmt}</span>
+        </div>
+        <div class="wa-stat">
+            <span class="wa-stat-label">7D</span>
+            <span class="wa-stat-val" style="color:${c7d}">${ch7dFmt}</span>
+        </div>
+        <div class="wa-stat">
+            <span class="wa-stat-label">Vol/MCap</span>
+            <span class="wa-stat-val" style="color:#f0b429">${volPct}%</span>
+        </div>
+    </div>
+    <div class="wa-reasons">${reasonsHtml}${spikeBadge}</div>
+</div>`;
+    }).join('');
+}
+
+/* ── Whale alert filter (filter buttons in wap-header) ── */
+function wapFilter(btn, filter) {
+    document.querySelectorAll('.wap-filter').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+    document.querySelectorAll('#alertContent .wa-card').forEach(card => {
+        const action = (card.dataset.action || 'WATCH').toUpperCase();
+        card.style.display = (filter === 'all' || action === filter.toUpperCase()) ? '' : 'none';
+    });
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   MARKET BUBBLE GRAPH — D3.js Force Simulation
+   Data source: cryptoData (CoinGecko, no extra API)
+   Bubble size  = market cap (log scale)
+   Bubble color = 24H price change
+   Bubble ring  = whale signal (distribusi/akumulasi)
+   ═══════════════════════════════════════════════════════════════════════ */
+let _bubbleMode = 'mcap';
+let _bubbleSim  = null;
+
+function bubbleSetMode(btn, mode) {
+    document.querySelectorAll('.bub-ctrl').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+    _bubbleMode = mode;
+    renderBubbleGraph();
+}
+
+function renderBubbleGraph() {
+    const canvas = document.getElementById('bubbleCanvas');
+    const tooltip = document.getElementById('bubbleTooltip');
+    if (!canvas) return;
+
+    // Stop previous simulation
+    if (_bubbleSim) { _bubbleSim.stop(); _bubbleSim = null; }
+
+    // Guard: D3 must be loaded
+    if (typeof d3 === 'undefined') {
+        canvas.innerHTML = '<div class="bubble-placeholder">D3.js belum dimuat.</div>';
+        return;
+    }
+
+    // ── Pakai filteredCryptoData (coin yang tampil di tabel scanner) ──
+    // Fallback ke cryptoData jika filter belum jalan
+    const sourceData = (filteredCryptoData && filteredCryptoData.length > 0)
+        ? filteredCryptoData
+        : (cryptoData || []);
+
+    let data = sourceData.filter(c => c.market_cap > 0 && c.current_price > 0);
+
+    if (_bubbleMode === 'whale') {
+        data = data.filter(c => {
+            const vr = c.market_cap > 0 ? c.total_volume / c.market_cap : 0;
+            return vr > 0.10 || Math.abs(c.price_change_percentage_24h || 0) > 5;
+        });
+    }
+
+    // Batasi tampilan: max 80 coin (sudah mengikuti filter tabel)
+    data = data.slice(0, 80);
+
+    if (!data.length) {
+        canvas.innerHTML = '<div class="bubble-placeholder">Tidak ada coin yang tampil di scanner.<br><small>Ubah filter atau coba refresh data.</small></div>';
+        return;
+    }
+
+    // Update counter di header
+    const bubbleCount = document.getElementById('bubbleCount');
+    if (bubbleCount) bubbleCount.textContent = `${data.length} coins`;
+
+    // ── Clear & setup SVG ─────────────────────────────────────
+    canvas.innerHTML = '';
+    const W = canvas.clientWidth  || 900;
+    const H = canvas.clientHeight || 480;
+
+    const svg = d3.select(canvas)
+        .append('svg')
+        .attr('width', W)
+        .attr('height', H);
+
+    // Defs: glow filter
+    const defs = svg.append('defs');
+    ['green','red','amber','indigo'].forEach((c, i) => {
+        const colors = ['#22c55e','#ef4444','#f59e0b','#818cf8'];
+        const f = defs.append('filter').attr('id', `glow-${c}`).attr('x','-30%').attr('y','-30%').attr('width','160%').attr('height','160%');
+        f.append('feGaussianBlur').attr('stdDeviation','3').attr('result','blur');
+        const merge = f.append('feMerge');
+        merge.append('feMergeNode').attr('in','blur');
+        merge.append('feMergeNode').attr('in','SourceGraphic');
+    });
+
+    // ── Scales ────────────────────────────────────────────────
+    const mcaps = data.map(d => d.market_cap);
+    const rScale = d3.scaleSqrt()
+        .domain([d3.min(mcaps), d3.max(mcaps)])
+        .range([14, 68]);
+
+    // Color by 24H
+    const colorFn = ch => {
+        if (ch > 10)  return '#4ade80';
+        if (ch > 3)   return '#86efac';
+        if (ch > 0)   return '#a3e635';
+        if (ch > -3)  return '#fca5a5';
+        if (ch > -10) return '#f87171';
+        return '#ef4444';
+    };
+
+    // ── Build node data ───────────────────────────────────────
+    const nodes = data.map(c => {
+        const ch24h    = c.price_change_percentage_24h || 0;
+        const ch1h     = c.price_change_percentage_1h_in_currency || 0;
+        const ch7d     = c.price_change_percentage_7d_in_currency || 0;
+        const volRatio = c.market_cap > 0 ? c.total_volume / c.market_cap : 0;
+        const r        = rScale(c.market_cap);
+
+        // Whale signal detection (same logic as scorer)
+        let whaleSignal = null;
+        if (volRatio > 0.15 && ch24h > 3 && ch1h >= 0 && ch7d < 150) whaleSignal = 'accum';
+        if (volRatio > 0.15 && ch24h > 5 && ch1h < -1.5)              whaleSignal = 'distrib';
+        if (ch7d > 200 && ch1h < 0)                                     whaleSignal = 'exhausted';
+
+        return {
+            id: c.id,
+            name: c.name,
+            symbol: (c.symbol || '').toUpperCase(),
+            price: c.current_price,
+            ch24h, ch1h, ch7d, volRatio,
+            mcap: c.market_cap,
+            r,
+            color: colorFn(ch24h),
+            whaleSignal,
+            image: c.image,
+            x: W / 2 + (Math.random() - 0.5) * W * 0.4,
+            y: H / 2 + (Math.random() - 0.5) * H * 0.4,
+        };
+    });
+
+    // ── D3 Force Simulation ───────────────────────────────────
+    _bubbleSim = d3.forceSimulation(nodes)
+        .force('charge',   d3.forceManyBody().strength(d => -d.r * 1.5))
+        .force('center',   d3.forceCenter(W / 2, H / 2).strength(0.08))
+        .force('collide',  d3.forceCollide(d => d.r + 3).strength(0.85).iterations(3))
+        .force('x',        d3.forceX(W / 2).strength(0.04))
+        .force('y',        d3.forceY(H / 2).strength(0.04))
+        .alphaDecay(0.025)
+        .velocityDecay(0.4);
+
+    // ── Draw bubbles ──────────────────────────────────────────
+    const nodeG = svg.selectAll('.bub-node')
+        .data(nodes)
+        .join('g')
+        .attr('class', 'bub-node')
+        .call(d3.drag()
+            .on('start', (ev, d) => { if (!ev.active) _bubbleSim.alphaTarget(0.15).restart(); d.fx = d.x; d.fy = d.y; })
+            .on('drag',  (ev, d) => { d.fx = ev.x; d.fy = ev.y; })
+            .on('end',   (ev, d) => { if (!ev.active) _bubbleSim.alphaTarget(0); d.fx = null; d.fy = null; })
+        );
+
+    // Outer ring for whale signal
+    nodeG.append('circle')
+        .attr('r', d => d.r + 4)
+        .attr('fill', 'none')
+        .attr('stroke', d => {
+            if (d.whaleSignal === 'accum')     return 'rgba(129,140,248,0.6)';
+            if (d.whaleSignal === 'distrib')   return 'rgba(251,191,36,0.6)';
+            if (d.whaleSignal === 'exhausted') return 'rgba(248,113,113,0.5)';
+            return 'none';
+        })
+        .attr('stroke-width', 2)
+        .attr('stroke-dasharray', d => d.whaleSignal ? '4,3' : '0');
+
+    // Main bubble
+    nodeG.append('circle')
+        .attr('r', d => d.r)
+        .attr('fill', d => d.color + '28')
+        .attr('stroke', d => d.color)
+        .attr('stroke-width', 1.5)
+        .attr('filter', d => {
+            const ch = d.ch24h;
+            if (ch > 5)  return 'url(#glow-green)';
+            if (ch < -5) return 'url(#glow-red)';
+            if (d.whaleSignal === 'distrib') return 'url(#glow-amber)';
+            if (d.whaleSignal === 'accum')   return 'url(#glow-indigo)';
+            return null;
+        });
+
+    // Symbol text (only if bubble big enough)
+    nodeG.filter(d => d.r >= 22)
+        .append('text')
+        .attr('dy', d => d.r >= 40 ? '-0.3em' : '0')
+        .attr('font-size', d => Math.max(9, Math.min(14, d.r * 0.38)))
+        .attr('fill', d => d.color)
+        .text(d => d.symbol.length > 5 ? d.symbol.slice(0,5) : d.symbol);
+
+    // % text for large bubbles
+    nodeG.filter(d => d.r >= 40)
+        .append('text')
+        .attr('dy', '1em')
+        .attr('font-size', d => Math.max(8, Math.min(12, d.r * 0.28)))
+        .attr('fill', d => d.ch24h >= 0 ? '#4ade80' : '#f87171')
+        .attr('font-weight', '600')
+        .text(d => (d.ch24h >= 0 ? '+' : '') + d.ch24h.toFixed(1) + '%');
+
+    // Whale badge
+    nodeG.filter(d => d.whaleSignal === 'accum' || d.whaleSignal === 'distrib')
+        .append('text')
+        .attr('dy', d => -(d.r + 8))
+        .attr('font-size', 10)
+        .attr('fill', d => d.whaleSignal === 'accum' ? '#818cf8' : '#fbbf24')
+        .text(d => d.whaleSignal === 'accum' ? '🐋' : '⚠');
+
+    // ── Tooltip ───────────────────────────────────────────────
+    nodeG
+        .on('mousemove', function(ev, d) {
+            const fmt = (v, d2=2) => (v >= 0 ? '+' : '') + v.toFixed(d2) + '%';
+            const fmtM = v => v >= 1e9 ? '$' + (v/1e9).toFixed(2) + 'B'
+                             : v >= 1e6 ? '$' + (v/1e6).toFixed(1) + 'M'
+                             : '$' + v.toLocaleString();
+            const sigLabel = d.whaleSignal === 'accum'     ? '<span style="color:#818cf8">🐋 Akumulasi</span>'
+                           : d.whaleSignal === 'distrib'   ? '<span style="color:#fbbf24">⚠ Distribusi</span>'
+                           : d.whaleSignal === 'exhausted' ? '<span style="color:#f87171">🚨 Pump Exhausted</span>'
+                           : '';
+            const c24cls = d.ch24h >= 0 ? 'btt-up' : 'btt-down';
+            const c1cls  = d.ch1h  >= 0 ? 'btt-up' : 'btt-down';
+
+            tooltip.innerHTML = `
+                <div class="btt-name">${d.name} <span style="color:#475569;font-size:.72rem">${d.symbol}</span></div>
+                <div class="btt-row"><span>Harga</span><span class="btt-val">$${d.price < 0.01 ? d.price.toPrecision(4) : d.price.toLocaleString()}</span></div>
+                <div class="btt-row"><span>Market Cap</span><span class="btt-val">${fmtM(d.mcap)}</span></div>
+                <div class="btt-row"><span>24H</span><span class="${c24cls}">${fmt(d.ch24h)}</span></div>
+                <div class="btt-row"><span>1H</span><span class="${c1cls}">${fmt(d.ch1h)}</span></div>
+                <div class="btt-row"><span>7D</span><span class="btt-val">${fmt(d.ch7d)}</span></div>
+                <div class="btt-row"><span>Vol/MCap</span><span class="btt-val" style="color:#f0b429">${(d.volRatio*100).toFixed(1)}%</span></div>
+                ${sigLabel ? `<div style="margin-top:5px">${sigLabel}</div>` : ''}
+            `;
+            tooltip.style.display = 'block';
+
+            const rect  = canvas.getBoundingClientRect();
+            let tx = ev.clientX - rect.left + 14;
+            let ty = ev.clientY - rect.top  + 14;
+            if (tx + 200 > W) tx -= 210;
+            if (ty + 200 > H) ty -= 170;
+            tooltip.style.left = tx + 'px';
+            tooltip.style.top  = ty + 'px';
+        })
+        .on('mouseleave', () => { tooltip.style.display = 'none'; });
+
+    // ── Tick ──────────────────────────────────────────────────
+    _bubbleSim.on('tick', () => {
+        nodeG.attr('transform', d => {
+            d.x = Math.max(d.r + 2, Math.min(W - d.r - 2, d.x));
+            d.y = Math.max(d.r + 2, Math.min(H - d.r - 2, d.y));
+            return `translate(${d.x},${d.y})`;
+        });
+    });
 }
 
 async function buildWhaleAlerts() {
-    const candidates = cryptoData
-        .filter(coin => {
-            const volumeRatio = coin.market_cap ? coin.total_volume / coin.market_cap : 0;
-            return volumeRatio > 0.18 && Math.abs(coin.price_change_percentage_24h || 0) > 3;
+    // ═══════════════════════════════════════════════════════════════════
+    //  SMART WHALE SCORING ENGINE v3
+    //  Filosofi:
+    //   • High volume alone ≠ BUY — bisa distribusi
+    //   • 7D pump besar + 1H negatif = late entry / distribusi
+    //   • Deteksi 3 pola: Akumulasi, Distribusi, Pump-exhaustion
+    //   • Score final: kombinasi teknikal + volume + momentum decay
+    // ═══════════════════════════════════════════════════════════════════
+
+    const scored = cryptoData
+        .filter(c => c.current_price > 0 && c.total_volume > 0)
+        .map(coin => {
+            const ch24h    = coin.price_change_percentage_24h || 0;
+            const ch1h     = coin.price_change_percentage_1h_in_currency || 0;
+            const ch7d     = coin.price_change_percentage_7d_in_currency || 0;
+            const volRatio = coin.market_cap > 0 ? coin.total_volume / coin.market_cap : 0;
+            const price    = coin.current_price || 0;
+            const ath      = coin.ath || price;
+            const mcap     = coin.market_cap || 0;
+            const athDist  = ath > 0 ? ((price - ath) / ath * 100) : 0;
+            const low24h   = coin.low_24h  || price;
+            const high24h  = coin.high_24h || price;
+            const rangePos = (high24h - low24h) > 0 ? (price - low24h) / (high24h - low24h) : 0.5;
+
+            let buyScore  = 0;
+            let sellScore = 0;
+            const reasons = [];
+            let flags = [];   // internal risk flags
+
+            // ── [A] DISTRIBUSI DETECTION ─────────────────────────────
+            // Sinyal distribusi: volume tinggi TAPI harga mulai turun
+            const isDistributing = volRatio > 0.15 && ch24h > 5 && ch1h < -1.5;
+            const isPumpExhausted = ch7d > 200 && ch1h < 0;   // pump besar, 1h sudah negatif
+            const isLateEntry     = ch7d > 100 && ch24h > 15; // sudah naik jauh, masih overbought
+            const isSelloff       = ch24h < -5 && ch1h < -2 && volRatio > 0.10;
+            const isDumpingFast   = ch1h < -5 && volRatio > 0.20;
+
+            if (isDistributing) {
+                sellScore += 35;
+                flags.push('distribusi');
+                reasons.push(`⚠️ Distribusi: Vol tinggi tapi 1H turun ${ch1h.toFixed(1)}%`);
+            }
+            if (isPumpExhausted) {
+                sellScore += 30;
+                flags.push('pump_exhausted');
+                reasons.push(`🚨 Pump exhausted: +${ch7d.toFixed(0)}% 7D tapi 1H sudah negatif`);
+            }
+            if (isLateEntry) {
+                flags.push('late_entry');
+                // Kurangi buy score secara agresif — sudah terlambat
+                buyScore -= 20;
+                reasons.push(`⛔ Late entry: sudah +${ch7d.toFixed(0)}% 7D`);
+            }
+            if (isSelloff) {
+                sellScore += 28;
+                flags.push('selloff');
+                reasons.push(`� Sell-off: ${ch24h.toFixed(1)}% 24H + ${ch1h.toFixed(1)}% 1H`);
+            }
+            if (isDumpingFast) {
+                sellScore += 20;
+                reasons.push(`� Dump cepat: ${ch1h.toFixed(1)}% dalam 1 jam`);
+            }
+
+            // ── [B] AKUMULASI DETECTION ──────────────────────────────
+            // Volume tinggi + harga naik stabil + belum overbought
+            const isAccumulating    = volRatio > 0.15 && ch24h > 3 && ch1h >= 0 && ch7d < 150;
+            const isFreshBreakout   = ch1h > 3 && ch24h > 5 && rangePos > 0.80 && ch7d < 100;
+            const isReversal        = ch7d < -20 && ch24h > 5 && ch1h > 1 && volRatio > 0.12;
+            const isBounceFromLow   = rangePos < 0.20 && ch1h > 1.5 && ch24h > 0;
+            const isQuietAccum      = volRatio > 0.20 && Math.abs(ch24h) < 3 && Math.abs(ch1h) < 1;
+
+            if (isAccumulating && !flags.includes('late_entry')) {
+                buyScore += 35;
+                reasons.push(`📈 Akumulasi: Vol ${(volRatio*100).toFixed(1)}% + price naik stabil`);
+            }
+            if (isFreshBreakout) {
+                buyScore += 25;
+                reasons.push(`🚀 Breakout fresh: +${ch1h.toFixed(1)}% 1H di high range`);
+            }
+            if (isReversal) {
+                buyScore += 28;
+                reasons.push(`� Reversal: -${Math.abs(ch7d).toFixed(0)}% 7D, sekarang balik +${ch24h.toFixed(1)}%`);
+            }
+            if (isBounceFromLow) {
+                buyScore += 18;
+                reasons.push(`📌 Bounce dari low — range pos ${(rangePos*100).toFixed(0)}%`);
+            }
+            if (isQuietAccum) {
+                buyScore += 15;
+                reasons.push(`🤫 Akumulasi diam: Vol ${(volRatio*100).toFixed(1)}% tanpa spike harga`);
+            }
+
+            // ── [C] VOLUME BONUS (kontekstual) ───────────────────────
+            if (volRatio > 0.40 && !isDistributing && !isPumpExhausted) {
+                buyScore += 15; reasons.push(`🔥 Vol/MCap ${(volRatio*100).toFixed(1)}% (ekstrem)`);
+            } else if (volRatio > 0.25 && !isDistributing) {
+                buyScore += 10; reasons.push(`🔥 Vol/MCap ${(volRatio*100).toFixed(1)}% (tinggi)`);
+            } else if (volRatio > 0.12) {
+                buyScore += 5; reasons.push(`📊 Vol/MCap ${(volRatio*100).toFixed(1)}%`);
+            }
+
+            // Volume tinggi saat harga turun = distribusi bonus
+            if (volRatio > 0.20 && ch24h < -3) {
+                sellScore += 15;
+            }
+
+            // ── [D] MOMENTUM DECAY PENALTY ───────────────────────────
+            // Jika momentum mulai mati (7D besar tapi 24H kecil)
+            const momentumDecay = ch7d > 50 && Math.abs(ch24h) < 3;
+            if (momentumDecay) {
+                buyScore  -= 10;
+                reasons.push(`� Momentum melambat setelah +${ch7d.toFixed(0)}% 7D`);
+            }
+
+            // ── [E] ATH PROXIMITY ────────────────────────────────────
+            const isNearATH = athDist > -10;
+            const isFarATH  = athDist < -70;
+            if (isNearATH && ch24h > 3 && !flags.includes('pump_exhausted')) {
+                buyScore += 12; reasons.push(`🎯 Dekat ATH — breakout momentum`);
+            }
+            if (isNearATH && ch1h < 0) {
+                sellScore += 10; // dekat ATH tapi sudah balik = resistance kuat
+            }
+            if (isFarATH && ch24h > 5 && ch7d < 50) {
+                buyScore += 10; reasons.push(`💎 Far from ATH — reversal potential`);
+            }
+
+            // ── [F] MARKET CAP FILTER (small cap = lebih volatile) ──
+            const isSmallCap = mcap > 0 && mcap < 100_000_000; // < $100M
+            if (isSmallCap && buyScore > sellScore) {
+                buyScore += 5; // small cap pump lebih berpotensi
+                reasons.push(`🔬 Small cap — high risk/reward`);
+            }
+
+            // ── [G] RANGE POSITION ───────────────────────────────────
+            if (rangePos > 0.90 && ch1h < 0) {
+                sellScore += 12; // di puncak range harian, sudah balik
+            }
+            if (rangePos < 0.10 && ch1h >= 0) {
+                buyScore += 10; // di bawah range harian, mulai naik
+            }
+
+            // ── FINAL: Pastikan score tidak negatif ──────────────────
+            buyScore  = Math.max(0, buyScore);
+            sellScore = Math.max(0, sellScore);
+
+            // ── DETERMINE ACTION ─────────────────────────────────────
+            let action = 'WATCH';
+            const scoreDiff = buyScore - sellScore;
+
+            // Override ke AVOID jika ada flag kritis
+            if (flags.includes('pump_exhausted') || flags.includes('distribusi')) {
+                if (sellScore > 30) action = 'SELL';
+                else action = 'WATCH';
+            } else if (scoreDiff >= 15 && buyScore >= 30) {
+                action = 'BUY';
+            } else if (scoreDiff <= -15 && sellScore >= 30) {
+                action = 'SELL';
+            } else {
+                action = 'WATCH';
+            }
+
+            const totalScore = Math.max(buyScore, sellScore);
+
+            return {
+                coinId: coin.id,
+                name:   coin.name,
+                symbol: coin.symbol.toUpperCase(),
+                price,
+                ch24h, ch1h, ch7d,
+                volRatio,
+                buyScore,
+                sellScore,
+                totalScore,
+                action,
+                reasons: [...new Set(reasons)].slice(0, 4),
+                intradaySpike: volRatio > 0.20 && Math.abs(ch1h) > 2,
+                flags,
+                isNearATH,
+                rangePos,
+                image: coin.image,
+                mcap,
+            };
         })
-        .slice(0, 3); // ── max 3, hemat rate-limit CoinGecko
+        .filter(c => c.totalScore >= 25 && (c.volRatio > 0.08 || Math.abs(c.ch24h) > 4))
+        .sort((a, b) => b.totalScore - a.totalScore)
+        .slice(0, 10);
 
-    const alerts = await Promise.all(candidates.map(async coin => {
-        const volumeRatio = coin.market_cap ? coin.total_volume / coin.market_cap : 0;
-        const change24h = coin.price_change_percentage_24h || 0;
-        const direction = change24h >= 0 ? 'Akumulasi' : 'Distribusi';
-        const intradaySpike = await fetchIntradayVolumeSpike(coin.id);
-        const spikeNote = intradaySpike ? 'dengan lonjakan volume intraday' : 'tanpa spike intraday';
-
-        return {
-            coinId: coin.id,
-            name: coin.name,
-            symbol: coin.symbol.toUpperCase(),
-            volumeRatio,
-            change24h,
-            intradaySpike,
-            reason: `Volume tinggi + harga ${change24h >= 0 ? 'naik' : 'turun'} → indikasi ${direction} (${spikeNote})`
-        };
-    }));
-
-    return alerts;
+    return scored;
 }
 
 async function fetchIntradayVolumeSpike(coinId) {
@@ -1041,21 +1775,35 @@ async function loadCryptoData() {
     try {
         showLoading('cryptoTableBody');
 
-        // ── Cache 90 detik — ambil 200 koin via proxy lokal (CoinPaprika, tanpa rate limit) ──
-        const CACHE_KEY = 'cryptoMarkets_v3';  // v3 = CoinPaprika via proxy
+        // ── Cache 90 detik — ambil 200 koin via proxy lokal (CoinGecko, tanpa rate limit) ──
+        const CACHE_KEY = 'cryptoMarkets_v4';  // v4 = includes 1h/7d fields
         const TTL = 90_000;
         let coins = cacheGet(CACHE_KEY);
 
         if (!coins) {
             const PROXY = 'http://127.0.0.1:3001/api/markets';
             // Fetch halaman 1 & 2 paralel → total 200 koin
-            const [res1, res2] = await Promise.all([
-                fetchWithTimeout(`${PROXY}?per_page=100&page=1`, 15000),
-                fetchWithTimeout(`${PROXY}?per_page=100&page=2`, 15000),
+            const [res1, res2] = await Promise.allSettled([
+                fetchWithTimeout(`${PROXY}?per_page=100&page=1`, 20000),
+                fetchWithTimeout(`${PROXY}?per_page=100&page=2`, 20000),
             ]);
-            const [page1, page2] = await Promise.all([res1.json(), res2.json()]);
-            coins = [...(Array.isArray(page1) ? page1 : []), ...(Array.isArray(page2) ? page2 : [])];
-            cacheSet(CACHE_KEY, coins, TTL);
+            const parse = async (r) => {
+                if (r.status === 'rejected') return [];
+                try {
+                    const d = await r.value.json();
+                    if (d && d.error) return [];
+                    return Array.isArray(d) ? d : [];
+                } catch { return []; }
+            };
+            const [page1, page2] = await Promise.all([parse(res1), parse(res2)]);
+            coins = [...page1, ...page2];
+            if (coins.length > 0) cacheSet(CACHE_KEY, coins, TTL);
+        }
+
+        if (!coins || coins.length === 0) {
+            showError('⚠ Market data unavailable — proxy may be rate-limited. Try refreshing in 30s.');
+            _busy = false;
+            return;
         }
 
         cryptoData = coins;
@@ -1068,6 +1816,9 @@ async function loadCryptoData() {
 
         // Whale alert butuh extra API call → defer 5 detik agar tidak blokir render awal
         setTimeout(() => updateWhaleAlerts(), 5000);
+
+        // Bubble graph render setelah data siap (slight delay agar DOM ready)
+        setTimeout(() => renderBubbleGraph(), 3000);
 
         updateLastUpdate();
         console.log(`✅ Loaded ${cryptoData.length} cryptocurrencies`);
@@ -1419,6 +2170,13 @@ function _applyAllFilters() {
     currentPage = 1;
     displayCryptoData();
     _updateActiveChips();
+
+    // Bubble graph selalu sinkron dengan coin yang ditampilkan di tabel
+    // Debounce 300ms agar tidak render ulang terlalu sering saat typing search
+    clearTimeout(_bubbleRenderTimer);
+    _bubbleRenderTimer = setTimeout(() => {
+        if (document.getElementById('bubbleCanvas')) renderBubbleGraph();
+    }, 300);
 }
 
 /** Update sort arrow indicators in thead */
@@ -1648,9 +2406,15 @@ async function analyzeCoin(coinId) {
                     if (d?.prices?.length) return d;
                 }
             } catch (_) {}
-            // Fallback ke /api/chart (CoinPaprika atau synthetic)
-            const r2 = await fetchWithTimeout(chartFallbackUrl, 12000);
-            return r2.json();
+            // Fallback ke /api/chart
+            try {
+                const r2 = await fetchWithTimeout(chartFallbackUrl, 12000);
+                if (!r2.ok) throw new Error('Fallback chart HTTP ' + r2.status);
+                const d2 = await r2.json();
+                if (d2?.prices) return d2;
+            } catch (_) {}
+            // Last resort: return empty structure agar tidak crash
+            return { prices: [], total_volumes: [], market_caps: [] };
         }
 
         // Fetch detail — pakai fallback endpoint jika CoinGecko error/429
@@ -1663,8 +2427,13 @@ async function analyzeCoin(coinId) {
                 }
             } catch (_) {}
             // Fallback ke /api/coin-detail
-            const r2 = await fetchWithTimeout(detailFallbackUrl, 10000);
-            return r2.json();
+            try {
+                const r2 = await fetchWithTimeout(detailFallbackUrl, 10000);
+                if (!r2.ok) throw new Error('Fallback detail HTTP ' + r2.status);
+                return await r2.json();
+            } catch (_) {}
+            // Last resort: return stub minimal agar tidak crash
+            return { id: coinId, symbol: coinId, name: coinId, market_data: null, description: { en: '' }, links: {}, image: {} };
         }
 
         const [detailedData, marketChart] = await Promise.all([
@@ -3300,7 +4069,8 @@ function updateLastUpdate() {
     const timeString = now.toLocaleTimeString('id-ID');
     const lastUpdateElement = document.getElementById('lastUpdate');
     if (lastUpdateElement) {
-        lastUpdateElement.textContent = `Last Update: ${timeString}`;
+        lastUpdateElement.textContent = timeString;
+        lastUpdateElement.title = `Last Update: ${timeString}`;
     }
 }
 
@@ -5459,7 +6229,7 @@ const walletTracker = (() => {
                     ? `<span class="wt-preview-tracked-note">✅ Wallet ini sudah ada di tracker kamu</span>`
                     : `<button class="wt-add-btn" onclick="walletTracker.confirmAddFromPreview('${chain}','${address}')">+ Track Wallet Ini</button>`
                 }
-                ${(chain === 'ethereum' || chain === 'solana')
+                ${(chain === 'ethereum' || chain === 'solana' || chain === 'eth' || chain === 'sol')
                     ? `<button class="wt-graph-btn" onclick="walletGraph.loadGraph('${address}','${chain}')">🕸 Flow Graph</button>`
                     : ''}
                 <button class="wt-preview-dismiss" onclick="document.getElementById('wtPreviewPanel').style.display='none'">Tutup</button>
@@ -5717,7 +6487,7 @@ const walletTracker = (() => {
                 <div class="wt-card-actions">
                     <button class="wt-refresh-btn" onclick="walletTracker.refreshSingle('${w.id}')">↻ Refresh</button>
                     <a class="wt-explorer-btn" href="${explorerUrl(w)}" target="_blank">🔗 Explorer</a>
-                    ${(w.chain === 'ethereum' || w.chain === 'solana')
+                    ${(w.chain === 'ethereum' || w.chain === 'solana' || w.chain === 'eth' || w.chain === 'sol')
                         ? `<button class="wt-graph-btn" onclick="walletGraph.loadGraph('${w.address}','${w.chain}')">🕸 Flow Graph</button>`
                         : ''}
                 </div>

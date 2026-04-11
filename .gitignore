@@ -1,25 +1,64 @@
-# Environment & secrets
+# ════════════════════════════════════════════════
+#  CRYPTO SCANNER — .gitignore
+# ════════════════════════════════════════════════
+
+# ── Secrets & Environment ────────────────────────
 .env
 .env.*
+*.secret
+*.key
 
-# Dependencies
+# ── Dependencies ─────────────────────────────────
 node_modules/
 
-# Runtime state — jangan di-commit (berubah terus)
+# ── Server-side files (API keys, trading logic) ──
+# Jangan di-publish — mengandung integrasi exchange API
+proxy-server.js
+binance-proxy.js
+dex-trader-proxy.js
+hyperliquid-proxy.js
+okx-trading.js
+telegram-notify.js
+twitter-bot.js
+twitter-posted.json
+
+# ── Auto-trader backend (server-only, bukan frontend) ──
+auto-trader.js
+auto-trader-complete.js
+signal-bot.js
+
+# ── Runtime state (berubah terus, bukan source code) ──
 auto-trader-state.json
 adaptive-weights.json
 signals.json
+memecoin-state.json
+engine-stats.json
 dex-sim-results.json
-dex-sim.log
+dex-backtest-results.json
+backtest-results.json
+batch-pairs.json
 trade-journal.csv
 
-# Proxy server (berisi API keys logic, di-exclude dari repo publik)
-proxy-server.js
-
-# Logs
+# ── Log files ────────────────────────────────────
 *.log
+*.log.*
+dex-sim.log
 
-# macOS
+# ── Backup files ─────────────────────────────────
+*.bak.js
+*.bak
+*.backup
+
+# ── Test & dev-only scripts ───────────────────────
+test-*.js
+pre-launch-check.js
+chart-screenshot.js
+cleanup.sh
+real-trading-start.sh
+AUTO_TRADER_CHEATSHEET.sh
+
+# ── macOS ─────────────────────────────────────────
 .DS_Store
-
-
+.DS_Store?
+._*
+Thumbs.db

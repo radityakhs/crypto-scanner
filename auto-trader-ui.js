@@ -1,14 +1,12 @@
 /**
- * auto-trader-ui.js — Dashboard panel untuk Auto Trader
- * Berkomunikasi dengan auto-trader.js via proxy-server.js di :3001/trader/*
- * Refresh state tiap 5 detik secara otomatis
+ * auto-trader-ui.js — Trading Robot dashboard
+ * Komunikasi dengan auto-trader.js via proxy-server.js di :3001/trader/*
  */
 
 const autoTraderUI = (() => {
     'use strict';
 
     const PROXY  = 'http://127.0.0.1:3001';
-    let _timer   = null;
     let _lastState = null;
 
     // ── Helpers ────────────────────────────────────────────────────────────
@@ -59,105 +57,143 @@ const autoTraderUI = (() => {
         }
     }
 
-    // ── Render: status bar ──────────────────────────────────────────────────
+    // ── Render: full state ──────────────────────────────────────────────────
     function render(s) {
-        // Status badge
-        const badge = document.getElementById('at-status-badge');
-        if (badge) {
-            if (s.circuitBreaker) {
-                badge.textContent = '⛔ CIRCUIT BREAKER';
-                badge.className = 'at-badge at-badge-error';
-            } else if (!s.running) {
-                badge.textContent = '⏸ STOPPED';
-                badge.className = 'at-badge at-badge-warn';
-            } else if (s.dryRun) {
-                badge.textContent = '📋 DRY RUN';
-                badge.className = 'at-badge at-badge-info';
-            } else {
-                badge.textContent = '🔴 LIVE';
-                badge.className = 'at-badge at-badge-live';
-            }
+        // Hero status ring + pills
+        const ring  = document.getElementById('botStatusRing');
+        const pill  = document.getElementById('botStatusPill');
+        const sub   = document.getElementById('botSubtitle');
+        const cbBtn = document.getElementById('botResetCB');
+
+        if (s.circuitBreaker) {
+            if (ring) ring.className = 'bot-status-ring error';
+            if (pill) { pill.className = 'bot-pill bot-pill-error'; pill.innerHTML = '<span class="bot-dot"></span>CIRCUIT BREAKER'; }
+            if (sub) sub.textContent = '⛔ Circuit breaker aktif — reset untuk melanjutkan';
+            if (cbBtn) cbBtn.style.display = 'inline-block';
+            _botLog('warn', '⛔ Circuit breaker aktif!');
+        } else if (!s.running) {
+            if (ring) ring.className = 'bot-status-ring paused';
+            if (pill) { pill.className = 'bot-pill bot-pill-warn'; pill.innerHTML = '<span class="bot-dot"></span>PAUSED'; }
+            if (sub) sub.textContent = 'Bot terhubung tapi sedang dijeda';
+            if (cbBtn) cbBtn.style.display = 'none';
+        } else if (s.dryRun) {
+            if (ring) ring.className = 'bot-status-ring running';
+            if (pill) { pill.className = 'bot-pill bot-pill-paper'; pill.innerHTML = '<span class="bot-dot"></span>PAPER TRADING'; }
+            if (sub) sub.textContent = '📄 Mode paper trading — tidak ada dana nyata';
+            if (cbBtn) cbBtn.style.display = 'none';
+        } else {
+            if (ring) ring.className = 'bot-status-ring running';
+            if (pill) { pill.className = 'bot-pill bot-pill-live'; pill.innerHTML = '<span class="bot-dot"></span>LIVE'; }
+            if (sub) sub.textContent = '🔴 Mode LIVE — menggunakan dana nyata!';
+            if (cbBtn) cbBtn.style.display = 'none';
         }
 
-        // Equity & PnL cards
-        _setText('at-equity',       `$${_fmt(s.totalEquity)}`);
-        _setText('at-peak',         `$${_fmt(s.peakEquity)}`);
-        _setText('at-daily-pnl',    _fmtUsd(s.dailyPnl));
-        _setText('at-total-pnl',    _fmtUsd(s.totalPnl));
-        _setText('at-drawdown',     `${_fmt(s.drawdownPct)}%`);
+        // KPI
+        _setText('at-equity',    `$${_fmt(s.totalEquity)}`);
+        _setText('at-peak',      `$${_fmt(s.peakEquity)}`);
+        _setText('at-daily-pnl', _fmtUsd(s.dailyPnl));
+        _setText('at-total-pnl', _fmtUsd(s.totalPnl));
+        _setText('at-drawdown',  `${_fmt(s.drawdownPct)}%`);
 
-        // Color PnL
-        _setColor('at-daily-pnl',   _pnlColor(s.dailyPnl));
-        _setColor('at-total-pnl',   _pnlColor(s.totalPnl));
-        _setColor('at-drawdown',    parseFloat(s.drawdownPct) > 0 ? '#f87171' : '#22c55e');
+        _setColor('at-daily-pnl', _pnlColor(s.dailyPnl));
+        _setColor('at-total-pnl', _pnlColor(s.totalPnl));
+        _setColor('at-drawdown',  parseFloat(s.drawdownPct) > 0 ? '#f87171' : '#4ade80');
 
-        // Stats
         const ws = s.stats || {};
-        const winRate = ws.totalTrades > 0 ? (ws.wins / ws.totalTrades * 100).toFixed(1) : '—';
-        _setText('at-winrate',      `${winRate}%`);
-        _setText('at-trades',       `${ws.wins || 0}W / ${ws.losses || 0}L`);
-        _setText('at-best',         _fmtUsd(ws.bestTrade));
-        _setText('at-worst',        _fmtUsd(ws.worstTrade));
-        _setColor('at-best',  '#22c55e');
+        const winRate = ws.totalTrades > 0
+            ? (ws.wins / ws.totalTrades * 100).toFixed(1) : '—';
+        _setText('at-winrate', `${winRate}%`);
+        _setText('at-trades',  `${ws.wins || 0}W / ${ws.losses || 0}L`);
+        _setText('at-best',    _fmtUsd(ws.bestTrade));
+        _setText('at-worst',   _fmtUsd(ws.worstTrade));
+        _setColor('at-best',  '#4ade80');
         _setColor('at-worst', '#f87171');
 
-        // Config
+        // Config summary
         if (s.config) {
-            _setText('at-cfg-risk',  `${s.config.riskPct}%`);
+            _setText('at-cfg-risk',    `${s.config.riskPct}%`);
             _setText('at-cfg-max-pos', s.config.maxPositions);
             _setText('at-cfg-maxloss', `${s.config.maxDailyLoss}%`);
         }
 
-        // Posisi terbuka
-        renderPositions(s.positions || []);
+        // Positions
+        const positions = s.positions || [];
+        _setText('botPosCount', `${positions.length} posisi`);
+        renderPositions(positions);
 
-        // Recent trades
-        renderTrades(s.recentTrades || []);
+        // Trade history
+        const trades = s.recentTrades || [];
+        _setText('botHistCount', `${trades.length} trade`);
+        renderTrades(trades);
 
-        // Circuit breaker button
-        const cbBtn = document.getElementById('at-btn-reset-cb');
-        if (cbBtn) cbBtn.style.display = s.circuitBreaker ? 'inline-flex' : 'none';
+        // Log position change
+        const prevPosCnt = (_lastState?.positions || []).length;
+        if (_lastState && positions.length > prevPosCnt) {
+            _botLog('buy', `📌 Posisi baru dibuka — total ${positions.length} posisi`);
+        } else if (_lastState && positions.length < prevPosCnt) {
+            const pnl = parseFloat(s.dailyPnl) || 0;
+            _botLog(pnl >= 0 ? 'profit' : 'loss',
+                `${pnl >= 0 ? '✅' : '❌'} Posisi ditutup — daily P&L: ${_fmtUsd(s.dailyPnl)}`);
+        }
+
+        // Legacy badge (kept for compatibility)
+        const badge = document.getElementById('at-status-badge');
+        if (badge) {
+            if (s.circuitBreaker)       { badge.textContent = '⛔ CIRCUIT BREAKER'; badge.className = 'at-badge at-badge-error'; }
+            else if (!s.running)        { badge.textContent = '⏸ STOPPED'; badge.className = 'at-badge at-badge-warn'; }
+            else if (s.dryRun)          { badge.textContent = '📋 DRY RUN'; badge.className = 'at-badge at-badge-info'; }
+            else                        { badge.textContent = '🔴 LIVE'; badge.className = 'at-badge at-badge-live'; }
+        }
+
+        // Circuit breaker legacy button
+        const cbBtnLeg = document.getElementById('at-btn-reset-cb');
+        if (cbBtnLeg) cbBtnLeg.style.display = s.circuitBreaker ? 'inline-flex' : 'none';
     }
 
     function renderOffline() {
-        const badge = document.getElementById('at-status-badge');
-        if (badge) { badge.textContent = '🔌 OFFLINE'; badge.className = 'at-badge at-badge-offline'; }
-        _setText('at-equity', '—');
+        const ring = document.getElementById('botStatusRing');
+        const pill = document.getElementById('botStatusPill');
+        const sub  = document.getElementById('botSubtitle');
+        if (ring) ring.className = 'bot-status-ring offline';
+        if (pill) { pill.className = 'bot-pill bot-pill-offline'; pill.innerHTML = '<span class="bot-dot"></span>OFFLINE'; }
+        if (sub) sub.textContent = 'Tidak dapat terhubung ke server bot';
+
+        ['at-equity','at-peak','at-daily-pnl','at-total-pnl','at-drawdown','at-winrate','at-best','at-worst']
+            .forEach(id => _setText(id, '—'));
+
         const posEl = document.getElementById('at-positions-body');
-        if (posEl) posEl.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#475569;padding:20px">Auto Trader tidak aktif.<br><small>Jalankan: <code>node auto-trader.js</code></small></td></tr>';
+        if (posEl) posEl.innerHTML = '<tr class="empty-row"><td colspan="8">Auto Trader tidak aktif — jalankan <code>node auto-trader.js</code></td></tr>';
         const trdEl = document.getElementById('at-trades-body');
-        if (trdEl) trdEl.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#475569;padding:20px">—</td></tr>';
+        if (trdEl) trdEl.innerHTML = '<tr class="empty-row"><td colspan="7">—</td></tr>';
     }
 
     function renderPositions(positions) {
         const el = document.getElementById('at-positions-body');
         if (!el) return;
         if (!positions.length) {
-            el.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#475569;padding:16px">Tidak ada posisi terbuka</td></tr>';
+            el.innerHTML = '<tr class="empty-row"><td colspan="8">Tidak ada posisi terbuka</td></tr>';
             return;
         }
         el.innerHTML = positions.map(p => {
             const pnl      = parseFloat(p.pnlUsd || 0);
-            const pnlPct   = p.entryPrice ? ((pnl / p.sizeUsd) * 100) : 0;
+            const pnlPct   = p.sizeUsd ? ((pnl / p.sizeUsd) * 100) : 0;
             const pnlColor = _pnlColor(pnl);
-            const side     = p.side === 'buy'
-                ? '<span style="color:#22c55e;font-weight:700">LONG</span>'
-                : '<span style="color:#f87171;font-weight:700">SHORT</span>';
-            const trail    = p.trailActive
-                ? '<span title="Trailing stop aktif" style="color:#a78bfa">🔄</span>' : '';
-            const tp1Badge = p.tp1Hit ? '<span style="color:#22c55e;font-size:10px"> TP1✓</span>' : '';
-            const tp2Badge = p.tp2Hit ? '<span style="color:#22c55e;font-size:10px"> TP2✓</span>' : '';
+            const sideClass = p.side === 'buy' ? 'pos-long' : 'pos-short';
+            const sideLabel = p.side === 'buy' ? 'LONG' : 'SHORT';
+            const trail    = p.trailActive ? ' 🔄' : '';
+            const tp1Badge = p.tp1Hit ? '<span style="font-size:9px;color:#4ade80"> TP1✓</span>' : '';
+            const tp2Badge = p.tp2Hit ? '<span style="font-size:9px;color:#4ade80"> TP2✓</span>' : '';
             return `<tr>
-                <td><b>${p.coinSymbol?.toUpperCase()}</b></td>
-                <td>${side}</td>
+                <td><b>${p.coinSymbol?.toUpperCase() || '?'}</b></td>
+                <td class="${sideClass}">${sideLabel}</td>
                 <td>$${_fmt(p.entryPrice, 6)}</td>
                 <td>$${_fmt(p.currentPrice || p.entryPrice, 6)}</td>
                 <td style="color:${pnlColor};font-weight:700">${_fmtUsd(pnl)} (${pnlPct.toFixed(2)}%)${tp1Badge}${tp2Badge}</td>
-                <td>$${_fmt(p.stopLoss, 6)} ${trail}</td>
+                <td>$${_fmt(p.stopLoss, 6)}${trail}</td>
                 <td>$${_fmt(p.tp1, 6)}</td>
                 <td>
                     <button onclick="autoTraderUI.closePosition('${p.coinId}')"
-                        style="padding:3px 8px;border-radius:4px;border:1px solid #f87171;background:transparent;color:#f87171;cursor:pointer;font-size:11px">
+                        style="padding:3px 10px;border-radius:5px;border:1px solid #f87171;background:transparent;color:#f87171;cursor:pointer;font-size:11px;font-weight:600">
                         Close
                     </button>
                 </td>
@@ -169,26 +205,30 @@ const autoTraderUI = (() => {
         const el = document.getElementById('at-trades-body');
         if (!el) return;
         if (!trades.length) {
-            el.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#475569;padding:16px">Belum ada riwayat trade</td></tr>';
+            el.innerHTML = '<tr class="empty-row"><td colspan="7">Belum ada riwayat trade</td></tr>';
             return;
         }
         el.innerHTML = trades.map(t => {
             const pnl      = parseFloat(t.pnlUsd || 0);
             const pnlColor = _pnlColor(pnl);
-            const side     = t.side === 'buy'
-                ? '<span style="color:#22c55e">LONG</span>'
-                : '<span style="color:#f87171">SHORT</span>';
-            const resultIcon = pnl > 0 ? '✅' : '🔴';
+            const sideClass = t.side === 'buy' ? 'pos-long' : 'pos-short';
+            const sideLabel = t.side === 'buy' ? 'LONG' : 'SHORT';
+            const icon = pnl > 0 ? '✅' : '❌';
             return `<tr>
-                <td>${resultIcon} <b>${t.coinSymbol?.toUpperCase()}</b></td>
-                <td>${side}</td>
+                <td>${icon} <b>${t.coinSymbol?.toUpperCase() || '?'}</b></td>
+                <td class="${sideClass}">${sideLabel}</td>
                 <td>$${_fmt(t.entryPrice, 6)}</td>
                 <td>$${_fmt(t.exitPrice, 6)}</td>
                 <td style="color:${pnlColor};font-weight:700">${_fmtUsd(pnl)} (${t.pnlPct}%)</td>
-                <td style="color:#64748b;font-size:11px">${t.reason || '—'}</td>
-                <td style="color:#64748b;font-size:11px">${_timeSince(t.closedAt)}</td>
+                <td style="color:var(--text3);font-size:11px">${t.reason || '—'}</td>
+                <td style="color:var(--text3);font-size:11px">${_timeSince(t.closedAt)}</td>
             </tr>`;
         }).join('');
+    }
+
+    // ── Internal log bridge ──────────────────────────────────────────────────
+    function _botLog(type, msg) {
+        if (typeof botLog === 'function') botLog(type, msg);
     }
 
     // ── DOM helpers ────────────────────────────────────────────────────────
@@ -205,8 +245,6 @@ const autoTraderUI = (() => {
     async function closePosition(coinId) {
         if (!confirm(`Yakin tutup posisi ${coinId}?`)) return;
         try {
-            // Kirim close-all sementara karena belum ada endpoint per-coin
-            // TODO: tambah endpoint /trader/close/:coinId
             await _post('/trader/close-all');
             fetchState();
         } catch (e) {
@@ -217,6 +255,7 @@ const autoTraderUI = (() => {
     async function resetCircuitBreaker() {
         try {
             await _post('/trader/reset-circuit');
+            _botLog('info', '⚡ Circuit breaker di-reset');
             fetchState();
         } catch (e) {
             alert('Gagal reset circuit breaker: ' + e.message);
@@ -227,6 +266,7 @@ const autoTraderUI = (() => {
         if (!confirm('Tutup SEMUA posisi terbuka?')) return;
         try {
             await _post('/trader/close-all');
+            _botLog('warn', '🛑 Semua posisi ditutup manual');
             fetchState();
         } catch (e) {
             alert('Gagal close all: ' + e.message);
@@ -234,13 +274,9 @@ const autoTraderUI = (() => {
     }
 
     function startPolling(intervalMs = 5000) {
-        fetchState(); // langsung fetch
-        _timer = setInterval(fetchState, intervalMs);
+        fetchState();
     }
-
-    function stopPolling() {
-        if (_timer) { clearInterval(_timer); _timer = null; }
-    }
+    function stopPolling() {}
 
     return { startPolling, stopPolling, fetchState, closePosition, resetCircuitBreaker, closeAll };
 })();
