@@ -1,0 +1,416 @@
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                   🚀 LIVE TRADING - VISUAL REFERENCE GUIDE                     ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+
+════════════════════════════════════════════════════════════════════════════════
+  1️⃣  SYSTEM ARCHITECTURE
+════════════════════════════════════════════════════════════════════════════════
+
+    ┌─────────────────────────────────────────────────────────────┐
+    │                      BROWSER DASHBOARD                       │
+    │              http://localhost:8000                           │
+    │  • Shows connected wallet                                    │
+    │  • Displays real SOL balance                                 │
+    │  • Live P&L updates                                          │
+    │  • Activity log                                              │
+    └──────────────────────┬──────────────────────────────────────┘
+                           │ Updates every 30s
+    ┌──────────────────────▼──────────────────────────────────────┐
+    │              AUTO-TRADER BOT (port 3000)                     │
+    │  • Monitors signal-bot output                                │
+    │  • Evaluates entry filters                                   │
+    │  • Manages positions & risk                                  │
+    │  • DRY_RUN ↔ LIVE toggle                                     │
+    │  ┌─────────────────────────────────────────────────┐         │
+    │  │ LINE 50: DRY_RUN: true → false to go LIVE       │         │
+    │  └─────────────────────────────────────────────────┘         │
+    └───┬─────────────┬──────────────────────┬──────────────────┬──┘
+        │             │                      │                  │
+   reads from    sends orders via       tracks state in    logs to
+   signals.json  proxy-server (3001)    JSON file         auto-trader.log
+        │             │                      │                  │
+    ┌───▼──┐   ┌──────▼─────┐   ┌───────────▼──────┐   ┌────────▼────┐
+    │Signal│   │  PROXY      │   │  State Files     │   │  Logs       │
+    │ Bot  │   │  SERVER     │   │ (JSON)           │   │             │
+    │      │   │             │   │                  │   │ Real-time   │
+    │ Gen  │   │ Executes    │   │ Tracks:          │   │ debugging   │
+    │ erates   │ REAL Trades │   │ • Positions      │   │             │
+    │ signals  │ via         │   │ • Equity         │   │             │
+    └──────┘   │ Jupiter     │   │ • P&L            │   └─────────────┘
+               └──────┬──────┘   └──────────────────┘
+                      │
+                      │ Real trades (if DRY_RUN=false)
+                      │ Paper trades (if DRY_RUN=true)
+                      │
+               ┌──────▼──────────────┐
+               │  JUPITER SOLANA     │
+               │  Mainnet            │
+               │                     │
+               │ Your real wallet    │
+               │ Real SOL balance    │
+               │ Real transactions   │
+               └─────────────────────┘
+
+
+════════════════════════════════════════════════════════════════════════════════
+  2️⃣  DECISION TREE: SHOULD I GO LIVE?
+════════════════════════════════════════════════════════════════════════════════
+
+                        ⏹️ START HERE
+                            │
+                            ▼
+                  ┌─────────────────────┐
+                  │ Wallet >= 2 SOL?    │
+                  └─────────────────────┘
+                    YES ✅    NO ❌
+                     │         │
+                     │         └──────► FIX: Add SOL to wallet
+                     │                  Then return to START
+                     ▼
+                  ┌─────────────────────┐
+                  │ Read QUICK_START    │
+                  │ and understand      │
+                  │ the risk?           │
+                  └─────────────────────┘
+                    YES ✅    NO ❌
+                     │         │
+                     │         └──────► READ: LIVE_MODE_SWITCH.md
+                     │                  Then return to START
+                     ▼
+                  ┌─────────────────────┐
+                  │ Backup created?     │
+                  │ auto-trader.js.bak  │
+                  └─────────────────────┘
+                    YES ✅    NO ❌
+                     │         │
+                     │         └──────► RUN: cp auto-trader.js auto-trader.js.backup
+                     │                  Then return to START
+                     ▼
+                  ┌─────────────────────┐
+                  │ Dashboard shows     │
+                  │ REAL balance        │
+                  │ (not $1000)?        │
+                  └─────────────────────┘
+                    YES ✅    NO ❌
+                     │         │
+                     │         └──────► FIX: Connect Jupiter wallet
+                     │                  Refresh dashboard
+                     │                  Then return to START
+                     ▼
+                  ┌─────────────────────┐
+                  │ Ready to GO LIVE?   │
+                  └─────────────────────┘
+                    YES ✅    NO ❌
+                     │         │
+                     │         └──────► WAIT: More prep needed
+                     │                  Review docs again
+                     ▼
+        ✅ SWITCH TO LIVE (see step-by-step below)
+
+
+════════════════════════════════════════════════════════════════════════════════
+  3️⃣  STEP-BY-STEP: SWITCH TO LIVE (5 MINUTES)
+════════════════════════════════════════════════════════════════════════════════
+
+    STEP 1: BACKUP (30 seconds)
+    ─────────────────────────────────────────────────────────────
+    $ cp auto-trader.js auto-trader.js.backup.$(date +%s)
+    ✓ File backed up
+
+
+    STEP 2: EDIT FILE (1 minute)
+    ─────────────────────────────────────────────────────────────
+    Open: auto-trader.js
+    Find Line 50:
+        BEFORE:  DRY_RUN: true,
+        AFTER:   DRY_RUN: false,
+    Save: Ctrl+S (Windows/Linux) or Cmd+S (Mac)
+
+
+    STEP 3: RESTART BOT (1 minute)
+    ─────────────────────────────────────────────────────────────
+    $ pkill -f "node auto-trader"
+    $ sleep 2
+    $ node auto-trader.js
+
+
+    STEP 4: VERIFY LIVE (1 minute)
+    ─────────────────────────────────────────────────────────────
+    Look for in console:
+    ✓ [LIVE] LIVE MODE ENABLED - REAL TRADING ACTIVE
+    ✓ Connected to Proxy
+    ✓ Wallet address shown
+
+
+    STEP 5: CHECK DASHBOARD (1 minute)
+    ─────────────────────────────────────────────────────────────
+    Open: http://localhost:8000
+    Check:
+    ✓ Real SOL balance displays
+    ✓ Status = "LIVE MODE ENABLED"
+    ✓ Connected wallet address shows
+
+
+    ✅ YOU'RE LIVE! Monitor first 24 hours
+
+
+════════════════════════════════════════════════════════════════════════════════
+  4️⃣  RISK PARAMETERS QUICK GUIDE
+════════════════════════════════════════════════════════════════════════════════
+
+    WALLET SIZE → RECOMMENDED RISK LEVEL
+    ─────────────────────────────────────────────────────────────
+    
+    < 2 SOL              →  0.3% per trade  (ULTRA SAFE)
+    2-5 SOL              →  0.5% per trade  (SAFE) ⭐ YOU ARE HERE
+    5-10 SOL             →  0.75-1.0%       (CONSERVATIVE)
+    10-50 SOL            →  1.0-1.5%        (MODERATE)
+    > 50 SOL             →  1.5-2.0%        (AGGRESSIVE)
+
+
+    WHAT DOES THIS MEAN IN DOLLARS?
+    ─────────────────────────────────────────────────────────────
+    
+    For your ~$15.86 wallet:
+    
+    0.5% per trade  = $0.08 max loss per trade
+    1.0% per trade  = $0.16 max loss per trade
+    1.5% per trade  = $0.24 max loss per trade (current config)
+    
+    Recommendation: START AT 0.5% FOR SAFETY
+
+
+════════════════════════════════════════════════════════════════════════════════
+  5️⃣  WHAT HAPPENS WHEN SIGNAL ARRIVES (LIVE)
+════════════════════════════════════════════════════════════════════════════════
+
+    TIMELINE: 30 seconds from signal → execution
+    
+    T+0 seconds
+    ┌─────────────────────────────────────────┐
+    │ Signal Bot generates signal              │
+    │ (E.g., "LONG DOGE 2.5:1 RR, 60% bull")  │
+    └────────────────────┬────────────────────┘
+                         │
+    T+2 seconds          ▼
+    ┌─────────────────────────────────────────┐
+    │ Auto Trader evaluates filters            │
+    │ • Confidence >= MIN_CONFIDENCE?          │
+    │ • Bullish% >= MIN_BULLISH?               │
+    │ • RR ratio >= MIN_RR?                    │
+    │ • EV positive?                           │
+    └────────────────┬──────────────────────┬──┘
+                     │                      │
+    REJECTED ❌      │      ACCEPTED ✅     │
+    Log shows        │                      │
+    "Rejected: ..."  │                      ▼
+    No trade         │         ┌────────────────────────┐
+                     │         │ Calculate position size│
+                     │         │ Based on wallet balance│
+                     │         │ and risk per trade     │
+                     │         └───────┬────────────────┘
+                     │                 ▼
+                     │         ┌────────────────────────┐
+                     │         │ Send to Proxy Server   │
+                     │         │ Proxy validates params │
+                     │         └───────┬────────────────┘
+                     │                 ▼
+                     │         ┌────────────────────────┐
+    T+10 seconds     │         │ Execute on Jupiter     │
+                     │         │ • Send transaction     │
+                     │         │ • Wait confirmation    │
+                     │         │ • 2-5 sec on mainnet   │
+                     │         └───────┬────────────────┘
+                     │                 ▼
+    T+15 seconds     │         ┌────────────────────────┐
+                     │         │ Trade Executed! ✅     │
+                     │         │ • Position size: X     │
+                     │         │ • Entry price: $Y      │
+                     │         │ • Stop loss: $SL       │
+                     │         │ • Take profit: $TP     │
+                     │         └───────┬────────────────┘
+                     │                 ▼
+    T+20 seconds     │         ┌────────────────────────┐
+                     │         │ Update Dashboard       │
+                     │         │ Add trade to journal   │
+                     │         │ Update P&L             │
+                     │         └────────────────────────┘
+                     │
+                     └──────► Then enters MONITORING phase
+
+
+════════════════════════════════════════════════════════════════════════════════
+  6️⃣  MONITORING PHASE: During Open Position
+════════════════════════════════════════════════════════════════════════════════
+
+    Every 10 seconds:
+    ─────────────────────────────────────────────────────────────
+    
+    ✓ Check current price vs entry
+    ✓ Evaluate stop loss (SL) price
+    ✓ Evaluate take profit (TP) price
+    ✓ Update P&L in real-time
+    ✓ Monitor trailing stop (if activated)
+    
+
+    P&L Timeline Example (LONG trade):
+    ─────────────────────────────────────────────────────────────
+    
+    Entry: $10
+    SL: $9.50 (max loss: $0.50)
+    TP1: $11.00 (first profit target)
+    
+    Price $9.70     Price $11.00    Price $11.50
+    P&L = -$0.30    P&L = +$1.00    (trailing stop
+    Position: OPEN  Exit 50% here   activates)
+                    P&L on exit: +$0.50
+    
+
+    EXIT OPTIONS:
+    ─────────────────────────────────────────────────────────────
+    1. HIT STOP LOSS  → Auto exit, realize loss ❌
+    2. HIT TP1        → Exit 50%, keep rest open
+    3. HIT TP2        → Exit 30%, keep rest
+    4. HIT TP3        → Exit final 20% ✅ All out
+    5. TRAILING STOP  → Auto exit when profit drops
+    6. MANUAL CLOSE   → You close in dashboard
+
+
+════════════════════════════════════════════════════════════════════════════════
+  7️⃣  EMERGENCY PROCEDURES
+════════════════════════════════════════════════════════════════════════════════
+
+    SCENARIO 1: Bot Stops Responding
+    ─────────────────────────────────────────────────────────────
+    $ pkill -f "node auto-trader"         ← Kill bot
+    $ node auto-trader.js                 ← Restart
+    
+    Check if positions still open in Jupiter
+
+
+    SCENARIO 2: Unexpected Large Loss
+    ─────────────────────────────────────────────────────────────
+    $ pkill -f "node auto-trader"         ← Halt immediately
+    Review: tail -200 auto-trader.log
+    Verify: SL/TP prices are correct
+    Fix: Adjust risk parameters if needed
+    Resume: node auto-trader.js
+
+
+    SCENARIO 3: Proxy Server Down
+    ─────────────────────────────────────────────────────────────
+    $ ps aux | grep proxy-server          ← Check if running
+    $ pkill -f "node proxy-server"        ← Kill
+    $ node proxy-server.js                ← Restart
+    Bot will reconnect automatically
+
+
+    SCENARIO 4: Wallet Locked/Frozen
+    ─────────────────────────────────────────────────────────────
+    Do NOT force trade
+    $ pkill -f "node auto-trader"         ← Stop bot
+    Wait 5 minutes
+    Check: https://solscan.io with wallet address
+    Restart: node auto-trader.js
+
+
+════════════════════════════════════════════════════════════════════════════════
+  8️⃣  EXPECTED RESULTS - FIRST 24 HOURS
+════════════════════════════════════════════════════════════════════════════════
+
+    REALISTIC BASELINE (0.5-1.5% risk per trade):
+    ─────────────────────────────────────────────────────────────
+    
+    Win Rate:           40-50%        (2-3 wins out of 5)
+    Average Win:        +0.5-1.0%     per trade
+    Average Loss:       -0.5-1.0%     per trade
+    Best Day:           +2-3%
+    Worst Day:          -2-3%
+    Max Drawdown:       3-8%
+    
+    ⚠️  NOT every day will be profitable
+    ⚠️  Some days will have losses
+    ⚠️  Consistency matters over 30+ days
+
+
+    GOOD SIGNS ✅:
+    ─────────────────────────────────────────────────────────────
+    ✓ Mix of winners and losers (not all wins)
+    ✓ SL and TP working correctly
+    ✓ P&L matches actual trades
+    ✓ No system errors or crashes
+
+
+    BAD SIGNS ⚠️:
+    ─────────────────────────────────────────────────────────────
+    ✗ All winning or all losing (unrealistic)
+    ✗ Dashboard P&L doesn't match trades
+    ✗ SL not triggering when price hit
+    ✗ Multiple system crashes
+
+
+════════════════════════════════════════════════════════════════════════════════
+  9️⃣  COMMON MISTAKES TO AVOID
+════════════════════════════════════════════════════════════════════════════════
+
+    ❌ Switching to LIVE without backup
+    ✅ Always: cp auto-trader.js auto-trader.js.backup
+
+    ❌ Using too high risk on small wallet
+    ✅ Always: Use risk-calculator.js to determine safe %
+
+    ❌ Not reading logs when something fails
+    ✅ Always: tail -f auto-trader.log
+
+    ❌ Not verifying DRY_RUN: false changed
+    ✅ Always: grep "DRY_RUN: false" auto-trader.js
+
+    ❌ Panic closing positions
+    ✅ Always: Let system work, close only if critical
+
+    ❌ Forgetting to restart bot after config change
+    ✅ Always: pkill && sleep 2 && node auto-trader.js
+
+    ❌ Using testnet wallet instead of mainnet
+    ✅ Always: Verify Jupiter shows Solana MAINNET
+
+
+════════════════════════════════════════════════════════════════════════════════
+  🔟  QUICK REFERENCE: MOST IMPORTANT COMMANDS
+════════════════════════════════════════════════════════════════════════════════
+
+    Kill auto-trader:
+    $ pkill -f "node auto-trader"
+
+    Start auto-trader:
+    $ node auto-trader.js
+
+    View logs:
+    $ tail -f auto-trader.log
+
+    Search logs for errors:
+    $ grep ERROR auto-trader.log
+
+    Check if DRY_RUN is false:
+    $ grep "DRY_RUN: false" auto-trader.js
+
+    Check running processes:
+    $ ps aux | grep node
+
+    Open dashboard:
+    http://localhost:8000
+
+    Check Jupiter wallet:
+    https://jup.ag/
+
+
+════════════════════════════════════════════════════════════════════════════════
+                             🎉 READY TO TRADE! 🎉
+════════════════════════════════════════════════════════════════════════════════
+
+See documentation for more details:
+    • QUICK_START_LIVE.txt     ← 2-min checklist
+    • LIVE_MODE_SWITCH.md      ← 10-min detailed guide
+    • LAUNCH_CHECKLIST.md      ← Complete verification checklist
+    • risk-calculator.js       ← Calculate safe parameters
+

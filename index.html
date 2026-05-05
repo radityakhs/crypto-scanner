@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Crypto Scanner & Trading History</title>
     <link rel="icon" type="image/svg+xml" href="images/ic_logo.png">
-    <link rel="stylesheet" href="style.css?v=46">
+    <link rel="stylesheet" href="style.css?v=48">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@2.2.1"></script>
     <!-- D3.js untuk Wallet Flow Graph -->
@@ -147,6 +147,14 @@
 
             <div class="nav-group">
                 <div class="nav-group-label">Tools</div>
+                <button class="tab-btn" data-tab="auto-screener">
+                    <span class="nav-icon">🎯</span>
+                    <span class="nav-label">Auto-Screener</span>
+                </button>
+                <button class="tab-btn" data-tab="whale-monitor">
+                    <span class="nav-icon">🐋</span>
+                    <span class="nav-label">Whale Monitor</span>
+                </button>
                 <button class="tab-btn" data-tab="alerts">
                     <span class="nav-icon"><img src="images/ic_monitoring.svg" alt="Alerts" style="width:18px;height:18px;"></span>
                     <span class="nav-label">Alerts</span>
@@ -229,6 +237,9 @@
                     </div>
                 </div>
             </div>
+
+            <!-- ── AI Daily Brief Panel ── -->
+            <div id="aiDailyBriefPanel" style="margin-bottom:22px;"></div>
 
             <!-- ── Main 2-col layout ── -->
             <div class="home-body">
@@ -740,8 +751,18 @@
 
         </div><!-- /.home-root -->
 
-        <!-- AUTO-TRADER DASHBOARD -->
-        <div id="autoTraderDashboardContainer" style="margin-top: 1.5rem"></div>
+        <!-- ╔══════════════════════════════════════════════════════╗
+             ║         ECOSYSTEM MOMENTUM DETECTOR                 ║
+             ║  Ketika SOL/TON/ETH pump → lihat ecosystem tokens   ║
+             ╚══════════════════════════════════════════════════════╝ -->
+        <div class="eco-pump-section" style="padding:0 12px 32px;">
+            <div id="ecosystemPumpPanel">
+                <div style="padding:40px;text-align:center;color:#64748b;">
+                    <span style="font-size:1.5rem">🔗</span><br>
+                    <span style="font-size:.88rem">Ecosystem Momentum loading...</span>
+                </div>
+            </div>
+        </div>
 
         </div><!-- /#home -->
 
@@ -1390,61 +1411,333 @@
 
             <!-- ── DEX CANDIDATES TABLE (ALL, INCLUDING PENDING) ── -->
             <div class="dex-table-wrap" style="margin-top:32px">
-                <h3 style="margin-bottom:8px;font-size:1.1rem;color:#38bdf8">🦾 DEX Hunter Candidates (All Scanned Tokens)</h3>
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+                    <h3 style="margin:0;font-size:1.1rem;color:#38bdf8">🦾 DEX Hunter — Open Positions</h3>
+                    <button onclick="renderDexCandidatesTable()" style="background:rgba(56,189,248,.12);border:1px solid rgba(56,189,248,.25);color:#38bdf8;border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer">🔄 Refresh Live</button>
+                    <button onclick="clearDeadPositions()" id="dexClearDeadBtn" style="display:none;background:rgba(248,113,113,.12);border:1px solid rgba(248,113,113,.25);color:#f87171;border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer">🗑 Clear Posisi Mati</button>
+                    <button onclick="startHunter()" id="dexStartHunterBtn" style="background:rgba(74,222,128,.1);border:1px solid rgba(74,222,128,.25);color:#4ade80;border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer">▶ Start Hunter</button>
+                    <span id="dexHunterStatus" style="font-size:10px;color:#334155"></span>
+                    <span id="dexLastRefresh" style="font-size:10px;color:#334155;margin-left:auto"></span>
+                </div>
+                <!-- STALE warning banner -->
+                <div id="dexStaleWarning" style="display:none;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:8px 14px;margin-bottom:10px;font-size:12px;color:#fbbf24;gap:8px;align-items:center">
+                </div>
                 <table class="dex-table" id="dexCandidatesTable">
                     <thead>
                         <tr>
                             <th>#</th>
                             <th>Token</th>
-                            <th>Mint</th>
+                            <th>Change (vs Entry)</th>
                             <th>Status</th>
                             <th>Score</th>
-                            <th>Reasons</th>
-                            <th>Tags</th>
+                            <th>PnL / TP</th>
+                            <th>Vol 24h</th>
+                            <th>Signals</th>
                         </tr>
                     </thead>
                     <tbody id="dexCandidatesTableBody">
-                        <tr><td colspan="7" class="dex-loading">Loading DEX candidates...</td></tr>
+                        <tr><td colspan="8" class="dex-loading">Loading DEX positions...</td></tr>
                     </tbody>
                 </table>
             </div>
 
             <script>
-            // Patch: Render all DEX candidates (including pending) in the new table
+            // ── DEX Candidates Table ─────────────────────────────────────────
+            // Cache live prices {pairAddress: {priceUsd, priceChange24h, ..., fetchedAt}}
+            const _dexLivePriceCache = {};
+            const _DEX_PROXY = 'http://localhost:3001';
+
+            // Fetch semua pair sekaligus via batch endpoint di proxy (no CORS issues)
+            async function _fetchLivePriceBatch(pairs) {
+                // pairs = [{chain, pairAddress}, ...]
+                try {
+                    const r = await fetch(`${_DEX_PROXY}/api/dex/pairs-batch`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ pairs }),
+                        signal: AbortSignal.timeout(8000),
+                    });
+                    if (!r.ok) return {};
+                    const d = await r.json();
+                    const map = {};
+                    (d.results || []).forEach(p => {
+                        if (p.ok && p.pairAddress) {
+                            map[p.pairAddress.toLowerCase()] = p;
+                        }
+                    });
+                    return map;
+                } catch(e) { console.warn('batch fetch error:', e); return {}; }
+            }
+
+            // Single-pair fetch via proxy (fallback)
+            async function _fetchLivePrice(pairAddress, chain) {
+                if (!pairAddress) return null;
+                const key    = pairAddress.toLowerCase();
+                const cached = _dexLivePriceCache[key];
+                if (cached && (Date.now() - cached.fetchedAt) < 30000) return cached;
+                try {
+                    const r = await fetch(`${_DEX_PROXY}/api/dex/pair/${chain || 'solana'}/${pairAddress}`, {
+                        signal: AbortSignal.timeout(6000),
+                    });
+                    if (!r.ok) return null;
+                    const d = await r.json();
+                    if (!d.ok) return null;
+                    _dexLivePriceCache[key] = d;
+                    return d;
+                } catch { return null; }
+            }
+
+            // Hitung berapa hari sejak timestamp
+            function _daysSince(isoStr) {
+                if (!isoStr) return null;
+                return Math.floor((Date.now() - new Date(isoStr).getTime()) / 86400000);
+            }
+
+            // Render DEX candidates dari memecoin-state.json positions
             async function renderDexCandidatesTable() {
-                let candidates = [];
-                if (window.StrategyIntegrator && window.StrategyIntegrator.getDexSignals) {
-                    try {
-                        candidates = await window.StrategyIntegrator.getDexSignals();
-                    } catch {}
-                }
                 const tbody = document.getElementById('dexCandidatesTableBody');
                 if (!tbody) return;
-                if (!Array.isArray(candidates) || candidates.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="7" class="dex-empty-hint">No DEX candidates found.</td></tr>';
+
+                tbody.innerHTML = '<tr><td colspan="8" class="dex-loading" style="color:#475569">⟳ Fetching live prices…</td></tr>';
+
+                // Baca posisi dari memecoin-state.json
+                let rawPositions = [];
+                let lastScanAt   = null;
+                try {
+                    const r = await fetch('./memecoin-state.json?_=' + Date.now());
+                    if (r.ok) {
+                        const st = await r.json();
+                        rawPositions = Object.values(st.positions || {});
+                        lastScanAt   = st.lastScanAt || null;
+                    }
+                } catch(e) { console.warn('state fetch:', e); }
+
+                // Cek stale
+                const staleMs    = lastScanAt ? Date.now() - new Date(lastScanAt).getTime() : Infinity;
+                const staleHours = Math.floor(staleMs / 3600000);
+                const isStale    = staleMs > 3600000;
+                const staleEl    = document.getElementById('dexStaleWarning');
+                if (staleEl) {
+                    if (isStale) {
+                        const label = staleHours >= 24 ? `${Math.floor(staleHours/24)}d ${staleHours%24}h yang lalu` : `${staleHours} jam yang lalu`;
+                        staleEl.innerHTML = `⚠️ <b>Bot tidak scan</b> sejak <b>${lastScanAt ? new Date(lastScanAt).toLocaleString('id-ID') : 'N/A'}</b> (${label}). Jalankan <code>node memecoin-hunter.js</code> untuk update.`;
+                        staleEl.style.display = 'flex';
+                    } else {
+                        staleEl.style.display = 'none';
+                    }
+                }
+
+                if (!rawPositions.length) {
+                    tbody.innerHTML = '<tr><td colspan="8" class="dex-empty-hint">Tidak ada posisi aktif.</td></tr>';
                     return;
                 }
-                tbody.innerHTML = candidates.map((c, i) => {
-                    const status = c._status ? c._status.toUpperCase() : 'UNKNOWN';
-                    const statusColor = status === 'PENDING' ? '#fbbf24' : status === 'OPEN' ? '#4ade80' : status === 'CLOSED' ? '#94a3b8' : '#64748b';
-                    const score = c._compositeScore != null ? c._compositeScore : (c.score != null ? c.score : '—');
-                    const reasons = Array.isArray(c._reasons) ? c._reasons.join(' | ') : (c._reasons || '—');
-                    const tags = c._dexSignals || '—';
-                    return `<tr>
-                        <td>${i+1}</td>
-                        <td><b>${c.coinSymbol || c.coinId || '?'}</b></td>
-                        <td style="font-size:10px;color:#64748b">${(c.mint||'').slice(0,8)}…</td>
-                        <td style="color:${statusColor};font-weight:700">${status}</td>
-                        <td>${score}</td>
-                        <td style="font-size:11px;color:#64748b">${reasons}</td>
-                        <td style="font-size:11px;color:#38bdf8">${tags}</td>
+
+                // Batch fetch harga live via proxy (no CORS)
+                const pairList = rawPositions
+                    .filter(p => p.pairAddress)
+                    .map(p => ({ chain: p.chain || 'solana', pairAddress: p.pairAddress }));
+                let liveMap = await _fetchLivePriceBatch(pairList);
+
+                // Fallback per-pair jika batch kosong
+                if (!Object.keys(liveMap).length && pairList.length) {
+                    const singles = await Promise.all(
+                        rawPositions.map(p => _fetchLivePrice(p.pairAddress, p.chain || 'solana'))
+                    );
+                    rawPositions.forEach((p, i) => {
+                        if (singles[i]?.ok) liveMap[(p.pairAddress||'').toLowerCase()] = singles[i];
+                    });
+                }
+
+                // Tampilkan tombol Clear jika ada posisi mati
+                let deadCount = 0;
+
+                tbody.innerHTML = rawPositions.map((p, i) => {
+                    const pa       = (p.pairAddress || '').toLowerCase();
+                    const live     = liveMap[pa] || null;
+                    const dexUrl   = p.url || (p.pairAddress ? `https://dexscreener.com/solana/${p.pairAddress}` : '#');
+                    const sym      = p.coinSymbol || p.coinName || '?';
+
+                    // Apakah pair sudah hilang dari DexScreener?
+                    const isGone   = live?.gone === true;
+                    const isLive   = !isGone && live?.ok && (live?.priceUsd > 0);
+                    if (isGone) deadCount++;
+
+                    // Harga
+                    const ep        = p.entryPrice || 0;
+                    const livePrice = isLive ? live.priceUsd : null;
+                    const cp        = livePrice || p.currentPrice || ep;
+                    const pct       = ep > 0 ? ((cp - ep) / ep * 100) : 0;
+                    const pctColor  = pct >= 0 ? '#4ade80' : '#f87171';
+
+                    const priceTag  = isGone
+                        ? `<span style="font-size:9px;color:#f87171;font-weight:700">💀GONE</span>`
+                        : isLive
+                            ? `<span style="font-size:9px;color:#22c55e;font-weight:700">●LIVE</span>`
+                            : `<span style="font-size:9px;color:#f59e0b;font-weight:700">●STALE</span>`;
+
+                    // Kesehatan token
+                    const liq       = live?.liquidityUsd || 0;
+                    const isLowLiq  = isLive && liq >= 500 && liq < 5000;
+                    const healthTag = isGone    ? ''
+                                   : isLowLiq  ? ` <span style="color:#f59e0b;font-size:9px">⚠️LOW LIQ</span>`
+                                   : isLive    ? ` <span style="color:#4ade80;font-size:9px">✓</span>` : '';
+
+                    // Change 5m / 1h / 24h
+                    const chg = (v, label) => v != null
+                        ? `<span style="color:${v>=0?'#4ade80':'#f87171'};font-size:9px">${label}:${v>=0?'+':''}${v.toFixed(1)}%</span>`
+                        : '';
+                    const changeHtml = isGone ? '<span style="font-size:9px;color:#f87171">Token delisted/rug</span>'
+                        : [chg(live?.priceChange5m,'5m'), chg(live?.priceChange1h,'1h'), chg(live?.priceChange24h,'24h')].filter(Boolean).join(' ');
+
+                    // Vol & Liq
+                    const vol24h  = live?.volume24h || 0;
+                    const volHtml = isGone ? '<span style="color:#f87171;font-size:10px">—</span>'
+                        : vol24h > 0
+                            ? `<span style="color:#64748b;font-size:10px">Vol $${vol24h >= 1000 ? (vol24h/1000).toFixed(0)+'K' : vol24h.toFixed(0)}</span>`
+                            : '<span style="color:#334155;font-size:10px">No data</span>';
+                    const liqHtml = isGone ? ''
+                        : liq > 0
+                            ? `<span style="color:${liq<5000?'#f59e0b':'#475569'};font-size:10px"> Liq $${liq >= 1000 ? (liq/1000).toFixed(1)+'K' : liq.toFixed(0)}</span>`
+                            : '';
+
+                    // Hari buka
+                    const daysOpen  = _daysSince(p.openedAt);
+                    const daysColor = daysOpen > 7 ? '#f59e0b' : '#475569';
+                    const daysTag   = daysOpen != null ? `<span style="color:${daysColor};font-size:9px">${daysOpen}d</span>` : '';
+
+                    // PnL & TP
+                    const pnl     = p.partialPnlUsd || 0;
+                    const pnlHtml = pnl ? `<b style="color:${pnl>0?'#4ade80':'#f87171'}">${pnl>0?'+':''}$${pnl.toFixed(2)}</b>` : '';
+                    const tpHtml  = [p.tp1Hit && '✅TP1', p.tp2Hit && '✅TP2', p.tp3Hit && '✅TP3'].filter(Boolean).join(' ');
+
+                    // Score & signals
+                    const score      = p.score || '—';
+                    const scoreColor = score >= 75 ? '#4ade80' : score >= 60 ? '#fbbf24' : '#94a3b8';
+                    const sigs       = Array.isArray(p.signals) ? p.signals.slice(0,3).join(' ') : '';
+
+                    // Harga tampilan
+                    const priceDisplay = isGone
+                        ? `<span style="color:#f87171;font-size:11px">—</span>`
+                        : `<div style="display:flex;align-items:center;gap:4px">
+                            <span style="color:${pctColor};font-weight:700;font-size:13px">${pct>=0?'+':''}${pct.toFixed(1)}%</span>
+                            ${priceTag}
+                          </div>
+                          <div style="font-size:9px;color:#64748b">now $${cp > 0 ? cp.toExponential(3) : '?'} | entry $${ep.toExponential(2)}</div>`;
+
+                    return `<tr style="${isGone?'opacity:0.35;':''}cursor:pointer" data-pair="${p.pairAddress||''}" data-gone="${isGone}" onclick="window.open('${dexUrl}','_blank')">
+                        <td style="color:#334155;font-size:11px">${i+1}</td>
+                        <td>
+                            <b style="color:${isGone?'#6b7280':'#e2e8f0'}">${sym}</b>${healthTag}<br>
+                            <span style="font-size:9px;color:#334155;font-family:monospace">${(p.pairAddress||'').slice(0,8)}…</span>
+                        </td>
+                        <td>${priceDisplay}<div style="margin-top:2px">${changeHtml}</div></td>
+                        <td style="color:${isGone?'#6b7280':'#4ade80'};font-weight:700;font-size:11px">${isGone?'DEAD':'OPEN'} ${daysTag}</td>
+                        <td style="color:${scoreColor};font-weight:700">${score}</td>
+                        <td style="font-size:11px">${tpHtml} ${pnlHtml}</td>
+                        <td style="font-size:10px">${volHtml}${liqHtml}</td>
+                        <td style="font-size:10px;color:#38bdf8;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${sigs}">${sigs}</td>
                     </tr>`;
                 }).join('');
+
+                const tsEl = document.getElementById('dexLastRefresh');
+                if (tsEl) tsEl.textContent = 'Updated: ' + new Date().toLocaleTimeString('id-ID');
+
+                // Tampilkan / sembunyikan tombol Clear berdasarkan apakah ada token gone
+                const clearBtn = document.getElementById('dexClearDeadBtn');
+                if (clearBtn) clearBtn.style.display = deadCount > 0 ? 'inline-block' : 'none';
             }
-            // Auto-refresh every 10s
-            setInterval(renderDexCandidatesTable, 10000);
-            // Initial render
-            renderDexCandidatesTable();
+
+            // Hapus posisi mati (gone dari DexScreener) via proxy endpoint
+            async function clearDeadPositions() {
+                const btn = document.getElementById('dexClearDeadBtn');
+                const confirmed = confirm(
+                    '⚠️ Hapus SEMUA posisi mati (💀GONE)?\n\n' +
+                    'Token-token ini sudah tidak ada di DexScreener (rugged/delisted).\n\n' +
+                    '🛑 Memecoin-hunter akan DIHENTIKAN agar state tidak tertimpa lagi.\n\n' +
+                    'Lanjutkan?'
+                );
+                if (!confirmed) return;
+                if (btn) { btn.textContent = '⟳ Clearing...'; btn.disabled = true; }
+                try {
+                    const r = await fetch('http://localhost:3001/api/dex/clear-dead', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ force: true, stopHunter: true })
+                    });
+                    const d = await r.json();
+                    if (d.ok) {
+                        const names = d.removed.length ? d.removed.join(', ') : '(none)';
+                        const hunterMsg = d.hunterStopped ? '\n🛑 Memecoin-hunter dihentikan.' : '';
+                        alert(`✅ Berhasil dihapus!\n\nToken: ${names}\nSisa posisi: ${d.remaining}${hunterMsg}`);
+                        await renderDexCandidatesTable();
+                    } else {
+                        alert('❌ Error: ' + (d.error || 'unknown'));
+                    }
+                } catch(e) {
+                    alert('❌ Gagal konek proxy: ' + e.message + '\n\nPastikan proxy (port 3001) aktif.');
+                } finally {
+                    if (btn) { btn.textContent = '🗑 Clear Posisi Mati'; btn.disabled = false; }
+                }
+            }
+
+            // ── Hunter start/status ────────────────────────────────
+            async function _updateHunterStatus() {
+                try {
+                    const r   = await fetch('http://localhost:3001/api/hunter/status');
+                    const d   = await r.json();
+                    const btn = document.getElementById('dexStartHunterBtn');
+                    const lbl = document.getElementById('dexHunterStatus');
+                    if (d.running) {
+                        if (btn) { btn.textContent = '⏹ Stop Hunter'; btn.style.color = '#f87171'; btn.style.borderColor = 'rgba(248,113,113,.25)'; btn.style.background = 'rgba(248,113,113,.1)'; btn.onclick = stopHunter; }
+                        if (lbl) lbl.innerHTML = '<span style="color:#4ade80">●</span> Hunter aktif';
+                    } else {
+                        if (btn) { btn.textContent = '▶ Start Hunter'; btn.style.color = '#4ade80'; btn.style.borderColor = 'rgba(74,222,128,.25)'; btn.style.background = 'rgba(74,222,128,.1)'; btn.onclick = startHunter; }
+                        if (lbl) lbl.innerHTML = '<span style="color:#334155">○</span> Hunter off';
+                    }
+                } catch (_) {}
+            }
+
+            async function startHunter() {
+                const btn = document.getElementById('dexStartHunterBtn');
+                if (btn) { btn.textContent = '⟳ Starting...'; btn.disabled = true; }
+                try {
+                    const r = await fetch('http://localhost:3001/api/hunter/start', { method: 'POST' });
+                    const d = await r.json();
+                    if (d.ok) {
+                        const msg = d.alreadyRunning ? '⚠️ Hunter sudah berjalan (PID ' + d.pid + ')' : '✅ Hunter dimulai! (PID ' + d.pid + ')\n\nPositions baru akan muncul dalam ~2 menit.';
+                        alert(msg);
+                        await _updateHunterStatus();
+                    } else { alert('❌ Error: ' + (d.error || 'unknown')); }
+                } catch(e) { alert('❌ Gagal: ' + e.message); }
+                finally { if (btn) btn.disabled = false; }
+            }
+
+            async function stopHunter() {
+                if (!confirm('🛑 Hentikan memecoin-hunter?\n\nPositions tidak akan di-scan sampai distart lagi.')) return;
+                const btn = document.getElementById('dexStartHunterBtn');
+                if (btn) { btn.textContent = '⟳ Stopping...'; btn.disabled = true; }
+                try {
+                    const r = await fetch('http://localhost:3001/api/dex/clear-dead', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ force: false, stopHunter: true })
+                    });
+                    const d = await r.json();
+                    if (d.ok) { alert('🛑 Hunter dihentikan.'); await _updateHunterStatus(); }
+                } catch(e) { alert('❌ Gagal: ' + e.message); }
+                finally { if (btn) btn.disabled = false; }
+            }
+
+            // Cek status hunter tiap 15 detik
+            _updateHunterStatus();
+            setInterval(_updateHunterStatus, 15000);
+
+            // Auto-refresh tiap 30 detik
+            setInterval(renderDexCandidatesTable, 30000);
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', renderDexCandidatesTable);
+            } else {
+                renderDexCandidatesTable();
+            }
             </script>
 
             <!-- Pagination -->
@@ -1575,37 +1868,142 @@
             </section>
 
             <!-- ── MARKET BUBBLE GRAPH ──────────────────────────── -->
-            <section class="bubble-section" id="bubbleSection">
-                <div class="bubble-panel">
-                    <div class="bubble-header">
-                        <div class="bubble-header-left">
-                            <span class="bubble-icon">🫧</span>
-                            <span class="bubble-title">Market Bubble Graph</span>
-                            <span id="bubbleCount" style="font-size:0.68rem;color:#475569;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:2px 8px;margin-left:4px">—</span>
-                            <span class="bubble-subtitle">Ukuran = Market Cap &nbsp;·&nbsp; Warna = 24H Change &nbsp;·&nbsp; Mengikuti filter scanner</span>
+            <!-- ── WALLET FLOW ANALYZER ─────────────────────────── -->
+            <section class="wallet-flow-section" id="walletFlowSection">
+                <div class="wf-panel">
+
+                    <!-- Search Header -->
+                    <div class="wf-search-header">
+                        <div class="wf-title-row">
+                            <span class="wf-icon">🕸️</span>
+                            <span class="wf-title">Wallet Flow Analyzer</span>
+                            <span class="wf-badge">Arkham-style</span>
+                            <span class="wf-subtitle">Visualisasi distribusi &amp; aliran transaksi antar wallet, exchange, dan DeFi protocol</span>
                         </div>
-                        <div class="bubble-controls">
-                            <button class="bub-ctrl active" data-mode="mcap"   onclick="bubbleSetMode(this,'mcap')">By MCap</button>
-                            <button class="bub-ctrl" data-mode="volume"         onclick="bubbleSetMode(this,'volume')">By Volume</button>
-                            <button class="bub-ctrl" data-mode="change"         onclick="bubbleSetMode(this,'change')">By 24H</button>
-                            <button class="bub-ctrl" data-mode="whale"          onclick="bubbleSetMode(this,'whale')">Whale Only</button>
-                            <button class="bub-refresh" onclick="renderBubbleGraph()">↻</button>
+                        <div class="wf-search-row">
+                            <select id="wfChainSelect" class="wf-chain-select">
+                                <option value="ethereum">⟠ Ethereum</option>
+                                <option value="solana">◎ Solana</option>
+                            </select>
+                            <input type="text" id="wfAddressInput" class="wf-address-input"
+                                placeholder="Masukkan wallet address atau ENS (contoh: vitalik.eth, 0x1234...abcd)..."
+                                onkeydown="if(event.key==='Enter') wfAnalyze()">
+                            <button class="wf-analyze-btn" onclick="wfAnalyze()">
+                                <span class="wf-btn-icon">🔍</span> Analisa
+                            </button>
+                        </div>
+                        <div class="wf-examples">
+                            <span class="wf-ex-label">Contoh cepat:</span>
+                            <button class="wf-ex-btn" onclick="wfLoadExample('vitalik')">Vitalik.eth</button>
+                            <button class="wf-ex-btn" onclick="wfLoadExample('binance')">Binance Hot</button>
+                            <button class="wf-ex-btn" onclick="wfLoadExample('coinbase')">Coinbase</button>
+                            <button class="wf-ex-btn" onclick="wfLoadExample('uniswap')">Uniswap V3</button>
                         </div>
                     </div>
-                    <div class="bubble-legend">
-                        <span class="bleg bleg-up">▲ Naik</span>
-                        <span class="bleg bleg-down">▼ Turun</span>
-                        <span class="bleg bleg-neu">◆ Flat</span>
-                        <span class="bleg bleg-whale">🐋 Whale Vol</span>
-                        <span class="bleg bleg-dist">⚠ Distribusi</span>
-                    </div>
-                    <div id="bubbleCanvas" class="bubble-canvas">
-                        <div class="bubble-placeholder">
-                            <span class="g-spinner"></span><br>Loading bubble data…
+
+                    <!-- Graph Area -->
+                    <div class="wf-graph-area" id="wfGraphArea">
+
+                        <!-- Empty State -->
+                        <div class="wf-empty-state" id="wfEmptyState">
+                            <div class="wf-empty-icon">🕸️</div>
+                            <div class="wf-empty-title">Masukkan alamat wallet untuk memulai</div>
+                            <div class="wf-empty-desc">
+                                Visualisasi node graph aliran dana — siapa kirim ke siapa, berapa nilai, kapan waktunya.<br>
+                                Support: <b>Ethereum</b> (via Etherscan) &amp; <b>Solana</b> (via Helius / public RPC)
+                            </div>
+                            <div class="wf-empty-legend">
+                                <span class="wfl-item wfl-root">⬡ Wallet Anda</span>
+                                <span class="wfl-item wfl-exchange">● Exchange</span>
+                                <span class="wfl-item wfl-defi">● DeFi Protocol</span>
+                                <span class="wfl-item wfl-contract">● Smart Contract</span>
+                                <span class="wfl-item wfl-wallet">● Wallet Biasa</span>
+                                <span class="wfl-item wfl-in">→ Dana Masuk</span>
+                                <span class="wfl-item wfl-out">← Dana Keluar</span>
+                            </div>
                         </div>
-                    </div>
-                    <div id="bubbleTooltip" class="bubble-tooltip" style="display:none"></div>
-                </div>
+
+                        <!-- Graph Panel v2.0 — Arkham Intelligence-style UI -->
+                        <div class="wg-panel" id="walletGraphPanel" style="display:none">
+
+                            <!-- ── TOP HEADER ────────────────────────────────── -->
+                            <div class="wg-header">
+                                <div class="wg-header-left">
+                                    <span class="wg-title">⬡ Transaction Flow Graph</span>
+                                    <span class="wg-address-label" id="wgAddressLabel">—</span>
+                                </div>
+                                <div class="wg-header-right">
+                                    <label class="wg-filter-label">Min USD:</label>
+                                    <input type="number" id="wgFilterUsd" class="wg-filter-input"
+                                        placeholder="0" min="0" value="0"
+                                        onchange="walletGraph.applyFilter()">
+                                    <button class="wg-ctrl-btn" title="Reset zoom" onclick="walletGraph.resetZoom()">⊙ Reset Zoom</button>
+                                    <button class="wg-ctrl-btn wg-close-btn" onclick="wfCloseGraph()">✕ Tutup</button>
+                                </div>
+                            </div>
+
+                            <!-- ── STATS BAR ──────────────────────────────────── -->
+                            <div class="wg-stats" id="wgStats"></div>
+
+                            <!-- ── BODY: 2-column (Explorer | Graph + Filter) ─── -->
+                            <div class="wg-body-grid">
+
+                                <!-- LEFT: Explorer panel -->
+                                <div class="wg-explorer" id="wgExplorer">
+                                    <div class="wge-empty">Click a node or transfer<br>to inspect</div>
+                                </div>
+
+                                <!-- RIGHT: Graph canvas + Filter overlay -->
+                                <div class="wg-graph-col">
+                                    <!-- Filter Transfers (floating top-right) -->
+                                    <div class="wg-filter-panel" id="wgFilterPanel"></div>
+                                    <!-- D3 canvas -->
+                                    <div class="wg-canvas-wrap" id="walletGraphSvg"></div>
+                                </div>
+
+                            </div><!-- /wg-body-grid -->
+
+                            <!-- ── BOTTOM: Transfers table ────────────────────── -->
+                            <div class="wg-transfers-bar">
+                                <div class="wgt-header">
+                                    <span class="wgt-title">TRANSFERS</span>
+                                    <button class="wgt-page-btn" onclick="wgTxPagePrev()">&#8249;</button>
+                                    <span class="wgt-count" id="wgTxCount">1 / 1</span>
+                                    <button class="wgt-page-btn" onclick="wgTxPageNext()">&#8250;</button>
+                                    <span class="wgt-count" id="wgTxTotal" style="color:#475569"></span>
+                                </div>
+                                <table class="wgt-table">
+                                    <thead>
+                                        <tr>
+                                            <th>TIME</th>
+                                            <th>FROM</th>
+                                            <th>TO</th>
+                                            <th>VALUE</th>
+                                            <th>TOKEN</th>
+                                            <th>USD</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="wgTransfersTable"></tbody>
+                                </table>
+                            </div>
+
+                            <!-- loading overlay -->
+                            <div class="wg-loading-overlay" id="wgLoadingOverlay" style="display:none">
+                                <span class="g-spinner"></span>
+                                <span>Memuat transaksi…</span>
+                            </div>
+                            <!-- Helius hint -->
+                            <div class="wg-helius-hint" id="wgHeliusHint">
+                                💡 Untuk data Solana lebih detail, tambahkan
+                                <b>Helius API Key</b> gratis di
+                                <a href="https://dev.helius.xyz" target="_blank">dev.helius.xyz</a>
+                                — simpan di <b>⚙ Set API Keys</b> &rarr; field <code>heliusApiKey</code>.
+                            </div>
+
+                        </div><!-- /walletGraphPanel -->
+
+                    </div><!-- /wf-graph-area -->
+                </div><!-- /wf-panel -->
             </section>
 
             <!-- ── ANALYSIS + EXIT STRATEGY (hidden until triggered) -->
@@ -1787,6 +2185,11 @@
 
             <!-- IDX Stock Scanner -->
             <section class="idx-scanner-section">
+
+            <!-- ── IPO Calendar & Corporate Actions ── -->
+            <div id="idxCorpActionsPanel" style="margin-bottom:28px;">
+                <!-- injected by JS -->
+            </div>
                 <h3>🔍 IDX Stock Scanner</h3>
                 <div class="scanner-toolbar">
                     <input type="text" id="idxSearchStock" placeholder="🔍 Search stock (e.g., BBCA, BMRI)">
@@ -1809,11 +2212,11 @@
                                 <th>Sector</th>
                                 <th>Price</th>
                                 <th>Change</th>
-                                <th>Volume</th>
-                                <th>Value</th>
-                                <th>Foreign</th>
-                                <th>Market Cap</th>
-                                <th>📊 Technical</th>
+                                <th>RSI</th>
+                                <th>MACD</th>
+                                <th>52W Range</th>
+                                <th>Foreign Flow</th>
+                                <th>Score</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -1952,6 +2355,9 @@
                 </div>
             </section>
 
+            <!-- US Corporate Actions Panel -->
+            <div id="usCorpActionsPanel" style="margin-bottom:28px;"></div>
+
             <!-- US Stock Scanner -->
             <section class="us-scanner-section">
                 <h3>🔍 US Stock Scanner</h3>
@@ -1985,7 +2391,7 @@
                                 <th>Volume</th>
                                 <th>Market Cap</th>
                                 <th>📊 Technical</th>
-                                <th>💹 Options</th>
+                                <th>RSI</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -2181,57 +2587,6 @@
                     </div>
                 </div>
 
-                <!-- ── Flow Graph Panel (Arkham-style) ─────────────── -->
-                <div class="wg-panel" id="walletGraphPanel" style="display:none">
-                    <!-- Header -->
-                    <div class="wg-header">
-                        <div class="wg-header-left">
-                            <span class="wg-title">[LINK] Transaction Flow Graph</span>
-                            <span class="wg-address-label" id="wgAddressLabel">—</span>
-                        </div>
-                        <div class="wg-header-right">
-                            <!-- Filter USD -->
-                            <label class="wg-filter-label">USD ≥</label>
-                            <input type="number" id="wgFilterUsd" class="wg-filter-input"
-                                placeholder="0" min="0" value="0"
-                                onchange="walletGraph.applyFilter()">
-                            <!-- Helius API key hint -->
-                            <button class="wg-ctrl-btn" title="Reset zoom" onclick="walletGraph.resetZoom()">⊙ Reset</button>
-                            <button class="wg-ctrl-btn wg-close-btn" onclick="walletGraph.closeGraph()">✕ Tutup</button>
-                        </div>
-                    </div>
-
-                    <!-- Legend -->
-                    <div class="wg-legend">
-                        <span class="wg-legend-item root">⬡ Wallet Anda</span>
-                        <span class="wg-legend-item exchange">● Exchange</span>
-                        <span class="wg-legend-item defi">● DeFi Protocol</span>
-                        <span class="wg-legend-item contract">● Smart Contract</span>
-                        <span class="wg-legend-item wallet">● Wallet Biasa</span>
-                        <span class="wg-legend-item in">→ IN</span>
-                        <span class="wg-legend-item out">→ OUT</span>
-                    </div>
-
-                    <!-- Stats bar -->
-                    <div class="wg-stats" id="wgStats"></div>
-
-                    <!-- SVG canvas -->
-                    <div class="wg-canvas-wrap" id="walletGraphSvg"></div>
-
-                    <!-- Loading overlay -->
-                    <div class="wg-loading-overlay" id="wgLoadingOverlay" style="display:none">
-                        <span class="g-spinner"></span>
-                        <span>Memuat transaksi…</span>
-                    </div>
-
-                    <!-- Helius key hint for Solana -->
-                    <div class="wg-helius-hint" id="wgHeliusHint">
-                        💡 Untuk data Solana lebih detail (nilai transfer, counterparty), tambahkan
-                        <b>Helius API Key</b> gratis di
-                        <a href="https://dev.helius.xyz" target="_blank">dev.helius.xyz</a>
-                        → simpan di <b>⚙ Set API Keys</b> dengan nama field <code>heliusApiKey</code>.
-                    </div>
-                </div>
 
             </section>
         </div>
@@ -3185,6 +3540,32 @@
                     <div class="pt-empty-icon">📂</div>
                     <div class="pt-empty-title">Portfolio kosong</div>
                     <div class="pt-empty-sub">Tambahkan holdings di form di atas.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ╔══════════════════════════════════════════════════════╗
+         ║              AUTO SCREENER TAB                      ║
+         ╚══════════════════════════════════════════════════════╝ -->
+    <div id="auto-screener" class="tab-content">
+        <div class="pt-wrap">
+            <div id="autoScreenerContainer">
+                <div class="screener-loading" style="padding:60px 0">
+                    <span class="g-spinner"></span><span>Memuat Auto-Screener…</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ╔══════════════════════════════════════════════════════╗
+         ║              WHALE MONITOR TAB                      ║
+         ╚══════════════════════════════════════════════════════╝ -->
+    <div id="whale-monitor" class="tab-content">
+        <div class="pt-wrap">
+            <div id="whalePanelContainer">
+                <div class="screener-loading" style="padding:60px 0">
+                    <span class="g-spinner"></span><span>Memuat Whale Monitor…</span>
                 </div>
             </div>
         </div>
@@ -4660,6 +5041,54 @@
     </main><!-- /.app-main -->
     </div><!-- /.app-shell -->
 
+    <style>
+    /* ── Auto-Screener & Whale Panel shared styles ── */
+    .screener-wrap, .whale-wrap { padding: 0 0 40px; }
+    .screener-header, .whale-header { display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;flex-wrap:wrap;gap:12px; }
+    .screener-title, .whale-title { font-size:22px;font-weight:800;color:#f1f5f9;margin:0 0 4px; }
+    .screener-subtitle, .whale-subtitle { font-size:13px;color:#64748b;margin:0; }
+    .screener-refresh-btn { padding:7px 16px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;background:#1e293b;border:1px solid #334155;color:#94a3b8;transition:background .15s; }
+    .screener-refresh-btn:hover { background:#334155;color:#e2e8f0; }
+
+    /* Strategy buttons */
+    .screener-strategy-row { display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px; }
+    .strategy-btn { display:flex;align-items:center;gap:6px;padding:8px 16px;border-radius:10px;border:1.5px solid #1e293b;background:#0f172a;color:#64748b;font-size:12px;font-weight:600;cursor:pointer;transition:all .2s; }
+    .strategy-btn:hover { border-color:var(--sc,#3b82f6);color:#e2e8f0; }
+    .strategy-btn--active { background:color-mix(in srgb, var(--sc,#3b82f6) 15%, #0f172a);border-color:var(--sc,#3b82f6);color:var(--sc,#3b82f6); }
+    .strat-icon { font-size:16px; }
+    .strat-name { white-space:nowrap; }
+
+    .screener-desc { font-size:12px;color:#94a3b8;background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:10px 14px;margin-bottom:16px; }
+    .screener-loading { display:flex;align-items:center;justify-content:center;gap:12px;color:#475569;font-size:14px; }
+
+    /* Screener table */
+    .screener-table { width:100%;border-collapse:collapse;font-size:12px; }
+    .screener-table thead th { background:#0f172a;color:#475569;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:10px 12px;text-align:left;white-space:nowrap;border-bottom:1px solid #1e293b; }
+    .screener-row { cursor:pointer;transition:background .15s;border-bottom:1px solid #0f172a; }
+    .screener-row:hover { background:#0f172a; }
+    .screener-row td { padding:10px 12px;vertical-align:middle; }
+    .screener-rank { display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;background:#1e293b;color:#64748b;font-size:11px;font-weight:700; }
+    .screener-signal { display:inline-block;padding:2px 7px;border-radius:5px;background:#1e293b;color:#94a3b8;font-size:10px;white-space:nowrap; }
+    .screener-act-btn { padding:4px 8px;border-radius:6px;background:#1e293b;border:1px solid #334155;color:#94a3b8;cursor:pointer;font-size:12px;text-decoration:none;display:inline-flex;align-items:center;transition:background .15s; }
+    .screener-act-btn:hover { background:#334155;color:#e2e8f0; }
+
+    /* Whale table */
+    .whale-table { width:100%;border-collapse:collapse;font-size:12px; }
+    .whale-table thead th { background:#0f172a;color:#475569;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:10px 12px;text-align:left;white-space:nowrap;border-bottom:1px solid #1e293b; }
+    .whale-row { cursor:pointer;transition:background .15s;border-bottom:1px solid #0f172a; }
+    .whale-row:hover { background:#0f172a; }
+    .whale-row td { padding:10px 12px;vertical-align:middle; }
+    .whale-level-badge { padding:3px 9px;border-radius:6px;font-size:11px;font-weight:700;white-space:nowrap; }
+    .whale-kpi-row { display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px; }
+    .whale-kpi-card { background:#0f172a;border:1px solid #1e293b;border-radius:12px;padding:16px;text-align:center; }
+    .whale-kpi-val { font-size:22px;font-weight:800;color:#f1f5f9;margin-bottom:4px; }
+    .whale-kpi-label { font-size:11px;color:#475569; }
+    .whale-filter-btn { padding:5px 12px;border-radius:8px;border:1px solid #1e293b;background:#0f172a;color:#64748b;font-size:11px;font-weight:600;cursor:pointer;transition:all .15s; }
+    .whale-filter-btn:hover { border-color:#334155;color:#94a3b8; }
+    .whale-filter-btn--active { background:#172554;border-color:#3b82f6;color:#93c5fd; }
+    .whale-note { background:#0f172a;border:1px solid #1e293b;border-radius:10px;padding:14px;margin-top:20px; }
+    </style>
+
     <!-- External Scripts -->
     <script src="analysis-utils.js"></script>
     <script src="app.js"></script>
@@ -4682,9 +5111,13 @@
     <script src="macro-bar.js"></script>
     <script src="pt-simple.js"></script>
     <script src="ai-alerts.js"></script>
+    <script src="auto-screener.js"></script>
+    <script src="whale-panel.js"></script>
+    <script src="ai-daily-brief.js"></script>
     <script src="auto-trader-ui.js"></script>
     <script src="dex-hunter-ui.js"></script>
     <script src="wallet-graph.js"></script>
+    <script src="ecosystem-pump.js"></script>
     <script src="home-matrix-bg.js?v=36"></script>
     <script src="home-epic-animations.js?v=36"></script>
     <script src="home-hologram-3d.js?v=36"></script>
@@ -6064,10 +6497,12 @@ ${rnd(CAT_OUTROS)}`,
             });
         })();
 
-        // Init P&L Tracker + Alerts saat tab pertama kali dibuka
+        // Init P&L Tracker + Alerts + Screener + Whale saat tab pertama kali dibuka
         (function () {
-            let _ptInited    = false;
-            let _alertInited = false;
+            let _ptInited       = false;
+            let _alertInited    = false;
+            let _screenerInited = false;
+            let _whaleInited    = false;
             document.addEventListener('tabchange', function (e) {
                 if (e.detail === 'pt-tracker' && !_ptInited) {
                     _ptInited = true;
@@ -6077,9 +6512,24 @@ ${rnd(CAT_OUTROS)}`,
                     _alertInited = true;
                     aiAlerts.init();
                 }
+                if (e.detail === 'auto-screener' && !_screenerInited) {
+                    _screenerInited = true;
+                    autoScreener.init();
+                }
+                if (e.detail === 'whale-monitor' && !_whaleInited) {
+                    _whaleInited = true;
+                    whalePanel.init();
+                }
             });
         })();
 
+        // Init Ecosystem Pump panel saat halaman siap
+        document.addEventListener('DOMContentLoaded', function() {
+            if (typeof EcosystemPump !== 'undefined') EcosystemPump.init();
+        });
+        if (document.readyState !== 'loading') {
+            if (typeof EcosystemPump !== 'undefined') EcosystemPump.init();
+        }
         // Init Signal Terminal saat tab diklik — lazy init
         (function () {
             var _stermDone = false;

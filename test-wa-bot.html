@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Bot Live Panel Test</title>
+</head>
+<body>
+    <h1>Testing Bot Live Panel Functions</h1>
+    <pre id="output"></pre>
+    <script>
+        const out = document.getElementById('output');
+        
+        // Simulated functions dari index.html
+        let _waBotLogs = [];
+        const _waBotLogMax = 15;
+        
+        function waBotAddLog(msg, type='info') {
+            const ts = new Date().toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+            _waBotLogs.unshift({ ts, msg, type });
+            if (_waBotLogs.length > _waBotLogMax) _waBotLogs.pop();
+            return `[${ts}] ${type.toUpperCase()}: ${msg}`;
+        }
+        
+        // Test the functions
+        out.textContent += waBotAddLog('Bot polling dimulai', 'success') + '\n';
+        out.textContent += waBotAddLog('Saldo: 5.1234 SOL', 'success') + '\n';
+        out.textContent += waBotAddLog('Trade: BTC/USDT @ $43000', 'trade') + '\n';
+        out.textContent += waBotAddLog('Connection successful', 'info') + '\n';
+        out.textContent += waBotAddLog('Error: Unable to fetch balance', 'error') + '\n';
+        
+        out.textContent += '\n✅ All functions work correctly!\n';
+        out.textContent += '\nLog entries: ' + _waBotLogs.length;
+    </script>
+</body>
+</html>

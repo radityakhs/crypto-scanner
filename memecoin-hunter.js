@@ -54,17 +54,17 @@ const CFG = {
 
     // ── FILTER EARLY ENTRY ───────────────────────────────────────────────────
     // Kunci: masuk SEBELUM pump besar, bukan sesudah
-    MAX_AGE_HOURS    : 6,         // token maks 6 jam (fresh launch)
-    MIN_VOL_24H      : 5000,      // min $5k (cukup liquid tapi masih early)
-    MIN_VOL_1H       : 200,       // min $200 vol 1h (ada aktivitas)
-    MIN_TXNS_1H      : 20,        // min 20 txn 1h (bukan zombie)
-    MIN_BUYS_1H      : 10,        // min 10 buy txn 1h
+    MAX_AGE_HOURS    : 12,        // token maks 12 jam (lebih longgar)
+    MIN_VOL_24H      : 2000,      // min $2k (lebih longgar)
+    MIN_VOL_1H       : 100,       // min $100 vol 1h (lebih longgar)
+    MIN_TXNS_1H      : 10,        // min 10 txn 1h (lebih longgar)
+    MIN_BUYS_1H      : 5,         // min 5 buy txn 1h (lebih longgar)
     MAX_CHG_24H      : 800,       // BATAS ATAS — jika sudah +800%, terlambat
     MIN_CHG_24H      : 0,         // tidak ada minimum (bisa token baru < 24h)
     MAX_FDV          : 5000000,   // maks $5M FDV (masih early)
 
     // ── SCORING ──────────────────────────────────────────────────────────────
-    MIN_SCORE        : 62,        // minimum skor untuk BUY (0-100)
+    MIN_SCORE        : 55,        // minimum skor untuk BUY (lebih longgar)
 
     // ── POSITION SIZING (Kelly-based) ────────────────────────────────────────
     BASE_ENTRY_USD   : 20,        // base size $20
@@ -615,7 +615,12 @@ async function runScan() {
             if (STATE.scannedSet.has(t.pairAddress) && !STATE.positions[t.pairAddress]) continue;
 
             const filt = passesFilter(t);
-            if (!filt.ok) { filtered++; STATE.scannedSet.add(t.pairAddress); continue; }
+            if (!filt.ok) {
+                log('⏸️  SKIP ' + t.baseSymbol + ' (' + (filt.r || 'filter') + ')');
+                filtered++;
+                STATE.scannedSet.add(t.pairAddress);
+                continue;
+            }
 
             const rug = isRug(t);
             if (rug.rug) {

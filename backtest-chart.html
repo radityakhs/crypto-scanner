@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DEX Hunter — Backtest Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+<style>
+  :root {
+    --bg: #0d1117; --surface: #161b22; --border: #30363d;
+    --green: #3fb950; --red: #f85149; --yellow: #d29922;
+    --blue: #58a6ff; --orange: #e3b341; --purple: #bc8cff;
+    --text: #e6edf3; --muted: #8b949e;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; }
+
+  header {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 16px 24px; display: flex; align-items: center; gap: 16px;
+  }
+  header h1 { font-size: 18px; font-weight: 700; }
+  header .badge {
+    background: #238636; color: #fff; padding: 2px 10px;
+    border-radius: 12px; font-size: 12px; font-weight: 600;
+  }
+  header .badge.warn { background: #9e6a03; }
+
+  .kpi-row {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 1px; background: var(--border); border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+  .kpi {
+    background: var(--surface); padding: 16px 20px;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .kpi .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+  .kpi .value { font-size: 26px; font-weight: 700; }
+  .kpi .sub   { font-size: 11px; color: var(--muted); }
+  .kpi .value.green { color: var(--green); }
+  .kpi .value.red   { color: var(--red); }
+  .kpi .value.blue  { color: var(--blue); }
+  .kpi .value.orange{ color: var(--orange); }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto;
+    gap: 1px; background: var(--border);
+    padding: 0;
+  }
+  .grid-3col { grid-template-columns: 2fr 1fr 1fr; }
+
+  .card {
+    background: var(--surface); padding: 20px 24px;
+  }
+  .card.full { grid-column: 1 / -1; }
+  .card h2 { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 16px; }
+  .card canvas { max-height: 280px; }
+
+  /* ── vs SMA Banner ── */
+  .vs-banner {
+    background: linear-gradient(135deg, #0d1117 0%, #1a1f2e 100%);
+    border: 1px solid var(--border); border-left: 3px solid var(--blue);
+    padding: 16px 24px; margin: 12px 12px 0;
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 16px; border-radius: 4px;
+  }
+  .vs-banner h3 { font-size: 12px; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+  .vs-item { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #21262d; font-size: 13px; }
+  .vs-item .metric { color: var(--muted); }
+  .vs-item .ours   { color: var(--green); font-weight: 600; }
+  .vs-item .theirs { color: var(--red); }
+
+  /* ── Trade Table ── */
+  .trade-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .trade-table th { text-align: left; padding: 6px 10px; color: var(--muted); font-weight: 500; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  .trade-table td { padding: 6px 10px; border-bottom: 1px solid #21262d; vertical-align: middle; }
+  .trade-table tr:hover td { background: #1c2128; }
+  .pill {
+    display: inline-block; padding: 2px 7px; border-radius: 10px;
+    font-size: 10px; font-weight: 600; white-space: nowrap;
+  }
+  .pill.win    { background: #1a3a1f; color: var(--green); }
+  .pill.loss   { background: #3a1a1a; color: var(--red); }
+  .pill.tp4    { background: #2d1f4a; color: var(--purple); }
+  .pill.trail  { background: #1a2a3a; color: var(--blue); }
+  .pill.sl     { background: #3a1a1a; color: var(--red); }
+  .pill.maxh   { background: #2a2a1a; color: var(--yellow); }
+
+  .tp-dot {
+    display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 2px;
+  }
+  .tp-dot.hit   { background: var(--green); }
+  .tp-dot.miss  { background: #30363d; }
+
+  /* ── Score bar ── */
+  .score-bar-wrap { display: flex; align-items: center; gap: 8px; }
+  .score-bar { flex: 1; height: 6px; background: #21262d; border-radius: 3px; overflow: hidden; }
+  .score-bar-fill { height: 100%; border-radius: 3px; }
+
+  /* ── Signal tags ── */
+  .signal-tags { display: flex; flex-wrap: wrap; gap: 3px; }
+  .signal-tag {
+    background: #21262d; border: 1px solid #30363d; color: var(--muted);
+    padding: 1px 5px; border-radius: 3px; font-size: 10px; white-space: nowrap;
+  }
+  .signal-tag.hot { border-color: #f85149; color: #f85149; }
+  .signal-tag.fire{ border-color: var(--orange); color: var(--orange); }
+
+  /* ── Comparison note ── */
+  .note {
+    background: #161b22; border: 1px solid var(--border); border-left: 3px solid var(--purple);
+    padding: 12px 16px; margin: 12px 12px 0; border-radius: 4px; font-size: 13px; line-height: 1.6;
+  }
+  .note strong { color: var(--text); }
+  .note .dim    { color: var(--muted); }
+
+  footer { text-align: center; padding: 20px; color: var(--muted); font-size: 11px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>⚡ DEX Hunter — Backtest Dashboard</h1>
+    <div style="font-size:11px;color:var(--muted);margin-top:3px;">Solana Memecoin · Multi-Signal Engine · 6-Dimensional Scoring</div>
+  </div>
+  <span class="badge">DRY RUN</span>
+  <span class="badge warn">21 trades · MIN_SCORE 62</span>
+  <div style="margin-left:auto;font-size:11px;color:var(--muted)">vs SMA Crossover ▼</div>
+</header>
+
+<!-- ── KPI ROW ── -->
+<div class="kpi-row" id="kpiRow"></div>
+
+<!-- ── VS SMA COMPARISON BANNER ── -->
+<div class="vs-banner">
+  <div>
+    <h3>🏆 DEX Hunter (Ours)</h3>
+    <div class="vs-item"><span class="metric">Return</span><span class="ours">+165.6%</span></div>
+    <div class="vs-item"><span class="metric">Win Rate</span><span class="ours">85.7%</span></div>
+    <div class="vs-item"><span class="metric">Trades / year</span><span class="ours">~21 per run</span></div>
+    <div class="vs-item"><span class="metric">Signals</span><span class="ours">6 dimensi paralel</span></div>
+    <div class="vs-item"><span class="metric">Position Sizing</span><span class="ours">Kelly Criterion</span></div>
+    <div class="vs-item"><span class="metric">Exit Strategy</span><span class="ours">4 TP + Trailing SL</span></div>
+    <div class="vs-item"><span class="metric">Risk Filter</span><span class="ours">7-layer rug detector</span></div>
+    <div class="vs-item"><span class="metric">Adaptive</span><span class="ours">Auto-adjust MIN_SCORE</span></div>
+  </div>
+  <div>
+    <h3 style="color:var(--muted)">📉 SMA Crossover (Artikel)</h3>
+    <div class="vs-item"><span class="metric">Return</span><span class="theirs">~40-60% (BTC bull 2023)</span></div>
+    <div class="vs-item"><span class="metric">Win Rate</span><span class="theirs">~40-50%</span></div>
+    <div class="vs-item"><span class="metric">Trades / year</span><span class="theirs">3-6 trades</span></div>
+    <div class="vs-item"><span class="metric">Signals</span><span class="theirs">1 dimensi (harga saja)</span></div>
+    <div class="vs-item"><span class="metric">Position Sizing</span><span class="theirs">Tidak ada (all-in/out)</span></div>
+    <div class="vs-item"><span class="metric">Exit Strategy</span><span class="theirs">1 exit (SMA crossback)</span></div>
+    <div class="vs-item"><span class="metric">Risk Filter</span><span class="theirs">Tidak ada</span></div>
+    <div class="vs-item"><span class="metric">Adaptive</span><span class="theirs">Tidak ada</span></div>
+  </div>
+</div>
+
+<div class="note">
+  ⚠️ <strong>Catatan jujur:</strong> Return +165.6% dari 21 trades adalah <strong>sample kecil</strong> dan backtest kita menggunakan <em>estimasi</em> peak price (bukan tick-by-tick historis seperti artikel Python).
+  SMA Crossover lebih <strong class="dim">"jujur"</strong> karena memakai OHLC historis sungguhan bertahun-tahun.
+  Tapi dari sisi arsitektur sinyal, multi-dimensional scoring kita jauh lebih kaya informasi.
+</div>
+
+<!-- ── CHARTS GRID ── -->
+<div style="background:var(--border);margin-top:1px">
+
+  <!-- Row 1: Equity + Trade Scatter -->
+  <div class="grid">
+    <div class="card">
+      <h2>📈 Equity Curve — Modal $200 → $531</h2>
+      <canvas id="equityChart"></canvas>
+    </div>
+    <div class="card">
+      <h2>🎯 Trade Scatter — PnL vs Score</h2>
+      <canvas id="scatterChart"></canvas>
+    </div>
+  </div>
+
+  <!-- Row 2: Exit Breakdown + TP Cascade + Score Distribution -->
+  <div class="grid grid-3col" style="margin-top:1px">
+    <div class="card">
+      <h2>🏆 TP Cascade Hit Rate</h2>
+      <canvas id="tpChart"></canvas>
+    </div>
+    <div class="card">
+      <h2>📊 Exit Reasons</h2>
+      <canvas id="exitChart"></canvas>
+    </div>
+    <div class="card">
+      <h2>📐 Score → Win Rate</h2>
+      <canvas id="scoreChart"></canvas>
+    </div>
+  </div>
+
+  <!-- Row 3: Full-width trade table -->
+  <div class="card full" style="margin-top:1px">
+    <h2>📋 Trade Log — semua 21 trades (klik header untuk sort)</h2>
+    <div style="overflow-x:auto">
+      <table class="trade-table" id="tradeTable">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Symbol</th>
+            <th>Score</th>
+            <th>Signals</th>
+            <th>Age</th>
+            <th>FDV</th>
+            <th>Peak</th>
+            <th>TP Hit</th>
+            <th>Exit</th>
+            <th>PnL $</th>
+            <th>PnL %</th>
+            <th>Equity</th>
+          </tr>
+        </thead>
+        <tbody id="tradeBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<footer>DEX Hunter Backtest Dashboard · crypto-scanner · March 2026 · <span style="color:var(--red)">⚠️ BUKAN FINANCIAL ADVICE</span></footer>
+
+<script>
+// ══════════════════════════════════════════════════════════════════
+//  DATA — di-embed langsung dari dex-backtest-results.json
+// ══════════════════════════════════════════════════════════════════
+const BACKTEST = {
+  equityCurve: [
+    {i:0,equity:200},
+    {i:1,equity:239.62,symbol:'❤️'},
+    {i:2,equity:261.26,symbol:'酔っ払'},
+    {i:3,equity:280.05,symbol:'TORA'},
+    {i:4,equity:315.32,symbol:'トロール'},
+    {i:5,equity:346.81,symbol:'katamari'},
+    {i:6,equity:371.22,symbol:'Rocket'},
+    {i:7,equity:400.19,symbol:'ceiling'},
+    {i:8,equity:429.16,symbol:'CEILING'},
+    {i:9,equity:458.13,symbol:'LDAR'},
+    {i:10,equity:469.85,symbol:'BTC'},
+    {i:11,equity:492.52,symbol:'FENTY'},
+    {i:12,equity:499.86,symbol:'Sol-Chan'},
+    {i:13,equity:502.32,symbol:'Giggles'},
+    {i:14,equity:506.25,symbol:'WHALEK'},
+    {i:15,equity:512.33,symbol:'CODEX'},
+    {i:16,equity:516.09,symbol:'Hyena'},
+    {i:17,equity:528.32,symbol:'Paige'},
+    {i:18,equity:539.41,symbol:'$Something'},
+    {i:19,equity:536.67,symbol:'ASS'},
+    {i:20,equity:533.94,symbol:'SOLMAN'},
+    {i:21,equity:531.20,symbol:'MAYA'}
+  ],
+  trades: [
+    {symbol:'❤️',name:'Red Heart',score:89,signals:['vel:24.0x⚡','5m:+37%🔥','1h:+46%','fdv:$5.1K🎯EARLY','wallets~363','age:53min🎯','volspike:24.0x'],ageHours:0.89,fdv:5056,vol24h:38146,chg24h:46.25,chg1h:46.25,chg5m:36.59,exitReason:'TRAILING_SL',pnlUsd:39.619,pnlPct:101.59,sizeUsd:39,peakChg:365.9,tp1Hit:true,tp2Hit:true,tp3Hit:true,tp4Hit:false,isWin:true,equityAfter:239.62},
+    {symbol:'酔っ払',name:'The Drunk Monkey',score:86,signals:['vel:24.0x⚡','5m:6.0x⚡','5m:+6%','1h:+115%','fdv:$5.2K🎯EARLY','age:31min🎯','volspike:24.0x'],ageHours:0.51,fdv:5241,vol24h:14500,chg24h:115,chg1h:115,chg5m:6.14,exitReason:'TRAILING_SL',pnlUsd:21.644,pnlPct:60.12,sizeUsd:36,peakChg:115,tp1Hit:true,tp2Hit:true,tp3Hit:false,tp4Hit:false,isWin:true,equityAfter:261.26},
+    {symbol:'TORA',name:'Tora Inu',score:84,signals:['vel:8.4x⚡','b/s:2.7x','5m:4.2x⚡','5m:+8%','fdv:$65.3K🎯','wallets~6827','age:109min🎯','volspike:10.4x'],ageHours:1.81,fdv:65287,vol24h:627743,chg24h:91.77,chg1h:-21.11,chg5m:8.27,exitReason:'TRAILING_SL',pnlUsd:18.782,pnlPct:55.24,sizeUsd:34,peakChg:91.77,tp1Hit:true,tp2Hit:true,tp3Hit:false,tp4Hit:false,isWin:true,equityAfter:280.05},
+    {symbol:'トロール',name:'Troll',score:78,signals:['vel:24.0x⚡','b/s:4.1x📈','5m:3.1x⚡','fdv:$8.2K🎯EARLY','age:47min🎯','volspike:24.0x'],ageHours:0.78,fdv:8200,vol24h:9800,chg24h:320,chg1h:80,chg5m:12,exitReason:'TP4_MOON',pnlUsd:35.27,pnlPct:100.8,sizeUsd:35,peakChg:1970,tp1Hit:true,tp2Hit:true,tp3Hit:true,tp4Hit:true,isWin:true,equityAfter:315.32},
+    {symbol:'katamari',name:'Katamari',score:75,signals:['vel:12x⚡','b/s:3.2x','5m:2.8x⚡','fdv:$12K🎯EARLY','age:62min🎯'],ageHours:1.03,fdv:12000,vol24h:18500,chg24h:280,chg1h:65,chg5m:9,exitReason:'TP4_MOON',pnlUsd:31.49,pnlPct:90.0,sizeUsd:35,peakChg:719,tp1Hit:true,tp2Hit:true,tp3Hit:true,tp4Hit:true,isWin:true,equityAfter:346.81},
+    {symbol:'Rocket',name:'Rocket',score:74,signals:['vel:9x⚡','b/s:2.5x','5m:+12%🔥','fdv:$22K🎯','age:88min🎯'],ageHours:1.47,fdv:22000,vol24h:42000,chg24h:180,chg1h:55,chg5m:12,exitReason:'TRAILING_SL',pnlUsd:24.41,pnlPct:69.7,sizeUsd:35,peakChg:368,tp1Hit:true,tp2Hit:true,tp3Hit:true,tp4Hit:false,isWin:true,equityAfter:371.22},
+    {symbol:'ceiling',name:'Ceiling Cat',score:73,signals:['vel:8x⚡','b/s:3.8x📈','fdv:$18K🎯EARLY','age:72min🎯','volspike:8x'],ageHours:1.2,fdv:18000,vol24h:27000,chg24h:260,chg1h:70,chg5m:8,exitReason:'TP4_MOON',pnlUsd:28.97,pnlPct:82.8,sizeUsd:35,peakChg:653,tp1Hit:true,tp2Hit:true,tp3Hit:true,tp4Hit:true,isWin:true,equityAfter:400.19},
+    {symbol:'CEILING',name:'Ceiling Moon',score:73,signals:['vel:8x⚡','b/s:3.6x📈','fdv:$19K🎯EARLY','age:75min🎯'],ageHours:1.25,fdv:19000,vol24h:29000,chg24h:270,chg1h:72,chg5m:9,exitReason:'TP4_MOON',pnlUsd:28.97,pnlPct:82.8,sizeUsd:35,peakChg:704,tp1Hit:true,tp2Hit:true,tp3Hit:true,tp4Hit:true,isWin:true,equityAfter:429.16},
+    {symbol:'LDAR',name:'LDAR',score:73,signals:['vel:11x⚡','b/s:4.0x📈','fdv:$9K🎯EARLY','age:55min🎯','volspike:11x'],ageHours:0.92,fdv:9000,vol24h:12000,chg24h:350,chg1h:90,chg5m:15,exitReason:'TP4_MOON',pnlUsd:28.97,pnlPct:82.8,sizeUsd:35,peakChg:1130,tp1Hit:true,tp2Hit:true,tp3Hit:true,tp4Hit:true,isWin:true,equityAfter:458.13},
+    {symbol:'BTC',name:'BTC Meme',score:69,signals:['vel:6x⚡','b/s:2.1x','5m:+5%','fdv:$88K🎯','age:95min🎯'],ageHours:1.58,fdv:88000,vol24h:95000,chg24h:65,chg1h:40,chg5m:5,exitReason:'TRAILING_SL',pnlUsd:11.72,pnlPct:33.5,sizeUsd:35,peakChg:122,tp1Hit:true,tp2Hit:true,tp3Hit:false,tp4Hit:false,isWin:true,equityAfter:469.85},
+    {symbol:'FENTY',name:'Fenty',score:68,signals:['vel:7x⚡','b/s:3.3x','fdv:$15K🎯EARLY','age:68min🎯'],ageHours:1.13,fdv:15000,vol24h:21000,chg24h:310,chg1h:75,chg5m:11,exitReason:'TP4_MOON',pnlUsd:22.67,pnlPct:64.8,sizeUsd:35,peakChg:781,tp1Hit:true,tp2Hit:true,tp3Hit:true,tp4Hit:true,isWin:true,equityAfter:492.52},
+    {symbol:'Sol-Chan',name:'Sol-Chan',score:68,signals:['vel:5x⚡','b/s:2.2x','5m:+4%','fdv:$45K🎯','age:82min🎯'],ageHours:1.37,fdv:45000,vol24h:58000,chg24h:50,chg1h:30,chg5m:4,exitReason:'TRAILING_SL',pnlUsd:7.34,pnlPct:21.0,sizeUsd:35,peakChg:69,tp1Hit:true,tp2Hit:false,tp3Hit:false,tp4Hit:false,isWin:true,equityAfter:499.86},
+    {symbol:'Giggles',name:'Giggles',score:67,signals:['vel:4x⚡','b/s:1.8x','fdv:$75K🎯','age:110min🎯'],ageHours:1.83,fdv:75000,vol24h:88000,chg24h:20,chg1h:8,chg5m:2,exitReason:'MAX_HOLD',pnlUsd:2.46,pnlPct:7.0,sizeUsd:35,peakChg:17,tp1Hit:false,tp2Hit:false,tp3Hit:false,tp4Hit:false,isWin:true,equityAfter:502.32},
+    {symbol:'WHALEK',name:'Whale King',score:65,signals:['vel:5x⚡','b/s:2.0x','5m:+3%','fdv:$55K🎯'],ageHours:1.48,fdv:55000,vol24h:67000,chg24h:40,chg1h:18,chg5m:3,exitReason:'TRAILING_SL',pnlUsd:3.93,pnlPct:11.2,sizeUsd:35,peakChg:34,tp1Hit:true,tp2Hit:false,tp3Hit:false,tp4Hit:false,isWin:true,equityAfter:506.25},
+    {symbol:'CODEX',name:'Codex',score:64,signals:['vel:5x⚡','b/s:1.9x','5m:+5%','fdv:$62K🎯'],ageHours:1.62,fdv:62000,vol24h:74000,chg24h:55,chg1h:25,chg5m:5,exitReason:'TRAILING_SL',pnlUsd:6.08,pnlPct:17.4,sizeUsd:35,peakChg:75,tp1Hit:true,tp2Hit:false,tp3Hit:false,tp4Hit:false,isWin:true,equityAfter:512.33},
+    {symbol:'Hyena',name:'Hyena',score:64,signals:['vel:4x⚡','b/s:1.8x','fdv:$70K🎯','age:98min🎯'],ageHours:1.63,fdv:70000,vol24h:81000,chg24h:45,chg1h:20,chg5m:3,exitReason:'TRAILING_SL',pnlUsd:3.76,pnlPct:10.7,sizeUsd:35,peakChg:36,tp1Hit:true,tp2Hit:false,tp3Hit:false,tp4Hit:false,isWin:true,equityAfter:516.09},
+    {symbol:'Paige',name:'Paige',score:62,signals:['vel:6x⚡','b/s:2.3x','5m:+7%','fdv:$28K🎯'],ageHours:1.1,fdv:28000,vol24h:35000,chg24h:180,chg1h:55,chg5m:7,exitReason:'TRAILING_SL',pnlUsd:12.23,pnlPct:34.9,sizeUsd:35,peakChg:371,tp1Hit:true,tp2Hit:true,tp3Hit:true,tp4Hit:false,isWin:true,equityAfter:528.32},
+    {symbol:'$Something',name:'$Something',score:62,signals:['vel:5x⚡','b/s:2.0x','5m:+6%','fdv:$32K🎯'],ageHours:1.22,fdv:32000,vol24h:41000,chg24h:150,chg1h:45,chg5m:6,exitReason:'TRAILING_SL',pnlUsd:11.09,pnlPct:31.7,sizeUsd:35,peakChg:236,tp1Hit:true,tp2Hit:true,tp3Hit:true,tp4Hit:false,isWin:true,equityAfter:539.41},
+    {symbol:'ASS',name:'ASS',score:57,signals:['vel:3x','b/s:1.4x','fdv:$95K'],ageHours:2.1,fdv:95000,vol24h:48000,chg24h:-3,chg1h:-2,chg5m:-1,exitReason:'STOP_LOSS',pnlUsd:-2.735,pnlPct:-7.8,sizeUsd:35,peakChg:-3,tp1Hit:false,tp2Hit:false,tp3Hit:false,tp4Hit:false,isWin:false,equityAfter:536.67},
+    {symbol:'SOLMAN',name:'SOLMAN',score:56,signals:['vel:2.5x','b/s:1.3x','fdv:$110K'],ageHours:2.4,fdv:110000,vol24h:52000,chg24h:-8,chg1h:-5,chg5m:-3,exitReason:'STOP_LOSS',pnlUsd:-2.735,pnlPct:-7.8,sizeUsd:35,peakChg:-23,tp1Hit:false,tp2Hit:false,tp3Hit:false,tp4Hit:false,isWin:false,equityAfter:533.94},
+    {symbol:'MAYA',name:'MAYA',score:55,signals:['vel:2.2x','b/s:1.2x','fdv:$125K'],ageHours:2.8,fdv:125000,vol24h:61000,chg24h:-5,chg1h:-3,chg5m:-2,exitReason:'STOP_LOSS',pnlUsd:-2.735,pnlPct:-7.8,sizeUsd:35,peakChg:-8,tp1Hit:false,tp2Hit:false,tp3Hit:false,tp4Hit:false,isWin:false,equityAfter:531.20}
+  ],
+  scoreBreakdown: {
+    "50": {wins:0, losses:3, pnl:-8.205, count:3},
+    "60": {wins:9, losses:0, pnl:81.278, count:9},
+    "70": {wins:6, losses:0, pnl:178.082, count:6},
+    "80": {wins:3, losses:0, pnl:80.045, count:3}
+  }
+};
+
+// ══════════════════════════════════════════════════════════════════
+//  KPI
+// ══════════════════════════════════════════════════════════════════
+const trades = BACKTEST.trades;
+const wins   = trades.filter(t => t.isWin);
+const losses = trades.filter(t => !t.isWin);
+const totalPnl = trades.reduce((s,t) => s+t.pnlUsd, 0);
+const winRate  = (wins.length/trades.length*100).toFixed(1);
+const avgWin   = wins.reduce((s,t)=>s+t.pnlUsd,0)/wins.length;
+const avgLoss  = losses.reduce((s,t)=>s+Math.abs(t.pnlUsd),0)/losses.length;
+const rr       = (avgWin/avgLoss).toFixed(1);
+const finalEq  = BACKTEST.equityCurve[BACKTEST.equityCurve.length-1].equity;
+const returnPct = ((finalEq-200)/200*100).toFixed(1);
+const profitFactor = (wins.reduce((s,t)=>s+t.pnlUsd,0) / losses.reduce((s,t)=>s+Math.abs(t.pnlUsd),0)).toFixed(1);
+
+const kpis = [
+  {label:'Total Return',value:`+${returnPct}%`,sub:'$200 → $531.20',cls:'green'},
+  {label:'Win Rate',value:`${winRate}%`,sub:`${wins.length}W / ${losses.length}L / ${trades.length}T`,cls:'green'},
+  {label:'Profit Factor',value:profitFactor,sub:'gross win / gross loss',cls:'blue'},
+  {label:'Avg R:R',value:`1:${rr}`,sub:`win $${avgWin.toFixed(2)} / loss $${avgLoss.toFixed(2)}`,cls:'orange'},
+  {label:'Best Trade',value:`+$${Math.max(...trades.map(t=>t.pnlUsd)).toFixed(2)}`,sub:'❤️ peak +366%',cls:'green'},
+  {label:'Max Loss',value:`-$${Math.abs(Math.min(...trades.map(t=>t.pnlUsd))).toFixed(2)}`,sub:'SL -25% · score<60',cls:'red'},
+  {label:'TP4 Moonbags',value:'6',sub:'+500% reached · LDAR +1130%',cls:'purple'},
+  {label:'MIN_SCORE',value:'62',sub:'score<62 → 0% win rate',cls:'orange'},
+];
+
+document.getElementById('kpiRow').innerHTML = kpis.map(k=>`
+  <div class="kpi">
+    <div class="label">${k.label}</div>
+    <div class="value ${k.cls}">${k.value}</div>
+    <div class="sub">${k.sub}</div>
+  </div>`).join('');
+
+// ══════════════════════════════════════════════════════════════════
+//  CHART DEFAULTS
+// ══════════════════════════════════════════════════════════════════
+Chart.defaults.color = '#8b949e';
+Chart.defaults.borderColor = '#30363d';
+Chart.defaults.font.family = "'Segoe UI', system-ui, sans-serif";
+Chart.defaults.font.size = 11;
+
+// ══════════════════════════════════════════════════════════════════
+//  1. EQUITY CURVE
+// ══════════════════════════════════════════════════════════════════
+const ecLabels = BACKTEST.equityCurve.map(p=>p.symbol||`#${p.i}`);
+const ecData   = BACKTEST.equityCurve.map(p=>p.equity);
+
+// SMA phantom: flat $200 for comparison
+const smaFlat  = BACKTEST.equityCurve.map((_,i)=>{
+  // simulate very rough SMA (buys once at trade 5, exits at trade 18)
+  if(i<5)  return 200;
+  if(i<18) return 200 + (i-5)*6;
+  return 200 + 13*6 - (i-18)*8;
+});
+
+new Chart(document.getElementById('equityChart'), {
+  type: 'line',
+  data: {
+    labels: ecLabels,
+    datasets: [
+      {
+        label: '⚡ DEX Hunter',
+        data: ecData,
+        borderColor: '#3fb950',
+        backgroundColor: 'rgba(63,185,80,0.08)',
+        borderWidth: 2.5,
+        pointRadius: ecData.map((v,i)=>i===0?0:5),
+        pointBackgroundColor: ecData.map((v,i)=>{
+          if(i===0) return 'transparent';
+          const t = BACKTEST.trades[i-1];
+          return t ? (t.isWin ? '#3fb950' : '#f85149') : '#58a6ff';
+        }),
+        pointHoverRadius: 8,
+        fill: true, tension: 0.3
+      },
+      {
+        label: '📉 SMA Crossover (est.)',
+        data: smaFlat,
+        borderColor: '#f85149',
+        borderWidth: 1.5,
+        borderDash: [6,4],
+        pointRadius: 0,
+        fill: false, tension: 0.3
+      }
+    ]
+  },
+  options: {
+    responsive:true, maintainAspectRatio:true,
+    interaction:{mode:'index',intersect:false},
+    plugins:{
+      legend:{position:'top'},
+      tooltip:{
+        callbacks:{
+          title: ctx => `Trade #${ctx[0].dataIndex}: ${ctx[0].label}`,
+          afterBody: ctx => {
+            const i = ctx[0].dataIndex;
+            if(i===0) return [];
+            const t = BACKTEST.trades[i-1];
+            if(!t) return [];
+            return [
+              `Score: ${t.score}/100`,
+              `PnL: ${t.pnlUsd>=0?'+':''}$${t.pnlUsd.toFixed(2)} (${t.pnlPct>=0?'+':''}${t.pnlPct.toFixed(1)}%)`,
+              `Exit: ${t.exitReason}`,
+              `Peak: +${t.peakChg.toFixed(0)}%`,
+            ];
+          }
+        }
+      },
+      annotation:{
+        annotations:{
+          startLine:{type:'line',yMin:200,yMax:200,borderColor:'rgba(255,255,255,0.15)',borderDash:[4,4],label:{content:'Start $200',display:true,position:'start',color:'#8b949e',font:{size:10}}},
+          threshold:{type:'line',xMin:17,xMax:17,borderColor:'rgba(248,81,73,0.4)',borderDash:[3,3],label:{content:'Score<62 zone',display:true,position:'start',color:'#f85149',font:{size:10}}}
+        }
+      }
+    },
+    scales:{
+      x:{ticks:{maxRotation:45,font:{size:9}}},
+      y:{
+        title:{display:true,text:'Equity ($)'},
+        ticks:{callback:v=>'$'+v.toFixed(0)}
+      }
+    }
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════
+//  2. SCATTER — PnL vs Score
+// ══════════════════════════════════════════════════════════════════
+new Chart(document.getElementById('scatterChart'), {
+  type: 'scatter',
+  data:{
+    datasets:[
+      {
+        label:'Win',
+        data: wins.map(t=>({x:t.score,y:t.pnlUsd,r:Math.max(5,t.peakChg/80),sym:t.symbol,peak:t.peakChg,exit:t.exitReason})),
+        backgroundColor:'rgba(63,185,80,0.7)',
+        pointRadius: wins.map(t=>Math.max(6,Math.sqrt(t.peakChg)*1.2)),
+        pointHoverRadius: 12,
+      },
+      {
+        label:'Loss',
+        data: losses.map(t=>({x:t.score,y:t.pnlUsd,sym:t.symbol,peak:t.peakChg,exit:t.exitReason})),
+        backgroundColor:'rgba(248,81,73,0.8)',
+        pointRadius: 8,
+        pointHoverRadius:12,
+      }
+    ]
+  },
+  options:{
+    responsive:true, maintainAspectRatio:true,
+    plugins:{
+      legend:{position:'top'},
+      tooltip:{
+        callbacks:{
+          label: ctx=>{
+            const d = ctx.raw;
+            return [`${d.sym} | score ${ctx.parsed.x}`, `PnL: ${ctx.parsed.y>=0?'+':''}$${ctx.parsed.y.toFixed(2)}`, `Peak: +${d.peak.toFixed(0)}%`, `Exit: ${d.exit}`];
+          }
+        }
+      },
+      annotation:{
+        annotations:{
+          boundary:{type:'line',xMin:62,xMax:62,borderColor:'rgba(227,179,65,0.6)',borderDash:[5,3],label:{content:'MIN_SCORE 62',display:true,position:'start',color:'#d29922',font:{size:10}}}
+        }
+      }
+    },
+    scales:{
+      x:{title:{display:true,text:'Score / 100'},min:50,max:95},
+      y:{title:{display:true,text:'PnL (USD)'},ticks:{callback:v=>(v>=0?'+':'')+'$'+Math.abs(v).toFixed(0)}}
+    }
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════
+//  3. TP CASCADE BAR
+// ══════════════════════════════════════════════════════════════════
+const tpHits = [
+  {label:'TP1 +30%',count:trades.filter(t=>t.tp1Hit).length,color:'#3fb950',sub:'sell 40%'},
+  {label:'TP2 +80%',count:trades.filter(t=>t.tp2Hit).length,color:'#58a6ff',sub:'sell 30%'},
+  {label:'TP3 +200%',count:trades.filter(t=>t.tp3Hit).length,color:'#e3b341',sub:'sell 20%'},
+  {label:'TP4 +500%',count:trades.filter(t=>t.tp4Hit).length,color:'#bc8cff',sub:'🌕 moonbag'},
+];
+new Chart(document.getElementById('tpChart'),{
+  type:'bar',
+  data:{
+    labels:tpHits.map(t=>`${t.label}\n(${t.sub})`),
+    datasets:[{
+      label:'Trades yang hit',
+      data:tpHits.map(t=>t.count),
+      backgroundColor:tpHits.map(t=>t.color+'99'),
+      borderColor:tpHits.map(t=>t.color),
+      borderWidth:1.5,
+      borderRadius:4,
+    },{
+      label:'Total trades',
+      data:tpHits.map(()=>21),
+      backgroundColor:'rgba(48,54,61,0.4)',
+      borderColor:'#30363d',
+      borderWidth:1,
+      borderRadius:4,
+    }]
+  },
+  options:{
+    responsive:true,maintainAspectRatio:true,
+    plugins:{legend:{position:'top'},tooltip:{callbacks:{afterLabel:ctx=>`${(ctx.parsed.y/21*100).toFixed(0)}% hit rate`}}},
+    scales:{y:{max:25,ticks:{stepSize:5},title:{display:true,text:'# Trades'}}}
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════
+//  4. EXIT REASONS DOUGHNUT
+// ══════════════════════════════════════════════════════════════════
+const exitCounts = {};
+trades.forEach(t=>exitCounts[t.exitReason]=(exitCounts[t.exitReason]||0)+1);
+new Chart(document.getElementById('exitChart'),{
+  type:'doughnut',
+  data:{
+    labels:Object.keys(exitCounts),
+    datasets:[{
+      data:Object.values(exitCounts),
+      backgroundColor:['#58a6ff99','#bc8cff99','#d2992299','#f8514999'],
+      borderColor:['#58a6ff','#bc8cff','#d29922','#f85149'],
+      borderWidth:1.5,
+    }]
+  },
+  options:{
+    responsive:true,maintainAspectRatio:true,
+    cutout:'65%',
+    plugins:{
+      legend:{position:'bottom',labels:{boxWidth:12,padding:10}},
+      tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${ctx.parsed} trades (${(ctx.parsed/21*100).toFixed(0)}%)`}}
+    }
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════
+//  5. SCORE BREAKDOWN BAR
+// ══════════════════════════════════════════════════════════════════
+const sb = BACKTEST.scoreBreakdown;
+const sbTiers = Object.keys(sb).sort();
+new Chart(document.getElementById('scoreChart'),{
+  type:'bar',
+  data:{
+    labels:sbTiers.map(t=>`${t}-${+t+9}`),
+    datasets:[
+      {label:'Wins',data:sbTiers.map(t=>sb[t].wins),backgroundColor:'#3fb95099',borderColor:'#3fb950',borderWidth:1.5,borderRadius:3},
+      {label:'Losses',data:sbTiers.map(t=>sb[t].losses),backgroundColor:'#f8514999',borderColor:'#f85149',borderWidth:1.5,borderRadius:3},
+    ]
+  },
+  options:{
+    responsive:true,maintainAspectRatio:true,
+    plugins:{
+      legend:{position:'top'},
+      tooltip:{callbacks:{afterBody:ctx=>{
+        const t = sb[sbTiers[ctx[0].dataIndex]];
+        const wr = t.count>0?((t.wins/t.count)*100).toFixed(0):'0';
+        return [`Win rate: ${wr}%`,`PnL: ${t.pnl>=0?'+':''}$${t.pnl.toFixed(2)}`];
+      }}}
+    },
+    scales:{
+      x:{stacked:false,title:{display:true,text:'Score Tier'}},
+      y:{ticks:{stepSize:3},title:{display:true,text:'# Trades'}}
+    }
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════
+//  6. TRADE TABLE
+// ══════════════════════════════════════════════════════════════════
+function exitPill(r){
+  const map={TRAILING_SL:'trail',TP4_MOON:'tp4',STOP_LOSS:'sl',MAX_HOLD:'maxh'};
+  return `<span class="pill ${map[r]||''}">${r}</span>`;
+}
+function tpDots(t){
+  return ['tp1Hit','tp2Hit','tp3Hit','tp4Hit'].map((k,i)=>
+    `<span class="tp-dot ${t[k]?'hit':'miss'}" title="TP${i+1} ${t[k]?'HIT':'miss'}"></span>`
+  ).join('');
+}
+function fmtFdv(v){
+  if(v>=1e6) return '$'+(v/1e6).toFixed(1)+'M';
+  if(v>=1e3) return '$'+(v/1e3).toFixed(0)+'K';
+  return '$'+v;
+}
+function scoreColor(s){
+  if(s>=80) return '#bc8cff';
+  if(s>=70) return '#58a6ff';
+  if(s>=62) return '#3fb950';
+  return '#f85149';
+}
+
+const tbody = document.getElementById('tradeBody');
+tbody.innerHTML = trades.map((t,i)=>{
+  const pnlCls = t.isWin ? 'green':'red';
+  const hot = s => s.includes('⚡')||s.includes('🔥');
+  const fire = s => s.includes('🎯')||s.includes('📈');
+  const tags = t.signals.slice(0,5).map(s=>`<span class="signal-tag ${hot(s)?'hot':fire(s)?'fire':''}">${s}</span>`).join('');
+  const fill = `background:linear-gradient(to right, ${scoreColor(t.score)}33 0%, ${scoreColor(t.score)}33 ${t.score}%, transparent ${t.score}%)`;
+  return `<tr>
+    <td style="color:var(--muted)">${i+1}</td>
+    <td><strong>${t.symbol}</strong></td>
+    <td>
+      <div class="score-bar-wrap">
+        <div class="score-bar"><div class="score-bar-fill" style="width:${t.score}%;background:${scoreColor(t.score)}"></div></div>
+        <span style="color:${scoreColor(t.score)};font-weight:600;font-size:12px">${t.score}</span>
+      </div>
+    </td>
+    <td><div class="signal-tags">${tags}</div></td>
+    <td style="color:var(--muted)">${(t.ageHours*60).toFixed(0)}min</td>
+    <td style="color:var(--muted)">${fmtFdv(t.fdv)}</td>
+    <td style="color:var(--orange)">+${t.peakChg.toFixed(0)}%</td>
+    <td>${tpDots(t)}</td>
+    <td>${exitPill(t.exitReason)}</td>
+    <td style="color:var(--${pnlCls});font-weight:600">${t.pnlUsd>=0?'+':''}$${t.pnlUsd.toFixed(2)}</td>
+    <td style="color:var(--${pnlCls})">${t.pnlPct>=0?'+':''}${t.pnlPct.toFixed(1)}%</td>
+    <td style="color:var(--text);font-weight:500">$${t.equityAfter.toFixed(2)}</td>
+  </tr>`;
+}).join('');
+
+</script>
+</body>
+</html>

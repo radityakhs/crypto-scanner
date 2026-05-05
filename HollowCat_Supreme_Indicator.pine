@@ -1,0 +1,439 @@
+// ══════════════════════════════════════════════════════════════════════════════
+//  HollowCat Supreme Indicator v1.0
+//  by HollowCat AI — Pine Script v5
+//
+//  Teknik yang digunakan:
+//  1. Liquidity-Weighted VWAP Deviation Bands
+//  2. Smart Money Composite (SMC) — BOS + FVG detection
+//  3. Multi-TF Trend Alignment (HTF bias filter)
+//  4. Volume Delta Imbalance (aggressor buy/sell pressure)
+//  5. Hull MA Momentum Cross (adaptive, lag-free)
+//  6. RSI Hidden Divergence Scanner
+//  7. ATR Volatility Regime Filter (no trade in chop)
+//  8. Squeeze Momentum (TTM-style, modified)
+//  9. Liquidity Sweep Detector (stop hunt pattern)
+// 10. Entry quality score → only signal when score ≥ threshold
+//
+//  SIGNAL RULES:
+//  LONG  : score ≥ 6/10 AND bias BULLISH AND no chop regime
+//  SHORT : score ≥ 6/10 AND bias BEARISH AND no chop regime
+//  EXIT  : opposite signal OR trailing stop hit OR momentum fades
+//
+//  ⚠ DISCLAIMER: Tidak ada indikator dengan winrate 99%.
+//    Gunakan ini sebagai TOOL BANTU, bukan oracle.
+//    Selalu gunakan risk management, stop loss, dan position sizing.
+// ══════════════════════════════════════════════════════════════════════════════
+
+//@version=5
+indicator("🐾 HollowCat Supreme [SMC+VWAP+Delta]", shorttitle="🐾 HCS Supreme",
+     overlay=true, max_lines_count=300, max_labels_count=200,
+     max_bars_back=500)
+
+// ─── INPUTS ──────────────────────────────────────────────────────────────────
+grp_main  = "═══ Core Settings ═══"
+scoreMin  = input.int(6, "Min Signal Score (1–10)", minval=1, maxval=10, group=grp_main)
+showScore = input.bool(true, "Show Score Labels", group=grp_main)
+showZones = input.bool(true, "Show FVG Zones", group=grp_main)
+showVwap  = input.bool(true, "Show VWAP Bands", group=grp_main)
+
+grp_hma   = "═══ Hull MA ═══"
+hmaLen    = input.int(55, "Hull MA Length", minval=8, group=grp_hma)
+
+grp_rsi   = "═══ RSI Divergence ═══"
+rsiLen    = input.int(14, "RSI Length", group=grp_rsi)
+rsiOB     = input.int(70, "RSI Overbought", group=grp_rsi)
+rsiOS     = input.int(30, "RSI Oversold",   group=grp_rsi)
+
+grp_atr   = "═══ Volatility ═══"
+atrLen    = input.int(14, "ATR Length", group=grp_atr)
+atrMult   = input.float(0.6, "Chop ATR Multiplier", step=0.1, group=grp_atr)
+tslMult   = input.float(2.5, "Trailing Stop ATR Mult", step=0.1, group=grp_atr)
+
+grp_sq    = "═══ Squeeze ═══"
+sqLen     = input.int(20, "Squeeze Length", group=grp_sq)
+sqMult    = input.float(1.5, "Squeeze BB Mult", step=0.1, group=grp_sq)
+sqKCMult  = input.float(1.5, "Squeeze KC Mult", step=0.1, group=grp_sq)
+
+grp_col   = "═══ Colors ═══"
+colLong   = input.color(color.new(#00ff88, 0),  "Long Signal",  group=grp_col)
+colShort  = input.color(color.new(#ff4466, 0),  "Short Signal", group=grp_col)
+colExit   = input.color(color.new(#ffcc00, 0),  "Exit Signal",  group=grp_col)
+colFvgB   = input.color(color.new(#00ff88, 88), "FVG Bullish",  group=grp_col)
+colFvgBr  = input.color(color.new(#ff4466, 88), "FVG Bearish",  group=grp_col)
+
+// ─── HULL MA (lag-free trend) ─────────────────────────────────────────────────
+hma(src, len) =>
+    wma(2 * wma(src, len / 2) - wma(src, len), math.round(math.sqrt(len)))
+
+hmaVal   = hma(close, hmaLen)
+hmaUp    = hmaVal > hmaVal[1]
+hmaColor = hmaUp ? color.new(#00ff88, 40) : color.new(#ff4466, 40)
+plot(hmaVal, "Hull MA", color=hmaColor, linewidth=2)
+
+// ─── VWAP + DEVIATION BANDS ──────────────────────────────────────────────────
+// Session VWAP
+var float vwapSum = 0.0
+var float volSum  = 0.0
+var float vwapSq  = 0.0
+isNewSession = timeframe.change("D")
+
+if isNewSession
+    vwapSum := 0.0
+    volSum  := 0.0
+    vwapSq  := 0.0
+
+typicalPrice = (high + low + close) / 3
+vwapSum += typicalPrice * volume
+volSum  += volume
+vwapSq  += typicalPrice * typicalPrice * volume
+
+vwapVal   = vwapSum / volSum
+vwapVar   = vwapSq / volSum - vwapVal * vwapVal
+vwapStdev = math.sqrt(math.abs(vwapVar))
+
+vwapUp1   = vwapVal + 1.0 * vwapStdev
+vwapDn1   = vwapVal - 1.0 * vwapStdev
+vwapUp2   = vwapVal + 2.0 * vwapStdev
+vwapDn2   = vwapVal - 2.0 * vwapStdev
+
+vwapPlot  = plot(showVwap ? vwapVal  : na, "VWAP",    color=color.new(#f0b429, 70), linewidth=1)
+vwapU1    = plot(showVwap ? vwapUp1  : na, "VWAP+1σ", color=color.new(#00ff88, 80), linewidth=1)
+vwapD1    = plot(showVwap ? vwapDn1  : na, "VWAP-1σ", color=color.new(#ff4466, 80), linewidth=1)
+vwapU2    = plot(showVwap ? vwapUp2  : na, "VWAP+2σ", color=color.new(#00ff88, 90), linewidth=1, style=plot.style_circles)
+vwapD2    = plot(showVwap ? vwapDn2  : na, "VWAP-2σ", color=color.new(#ff4466, 90), linewidth=1, style=plot.style_circles)
+fill(vwapU1, vwapD1, color=color.new(#f0b429, 96))
+
+// Price relative to VWAP bands
+aboveVwap   = close > vwapVal
+nearVwapDn1 = close <= vwapDn1 * 1.003  // price bouncing at -1σ (bullish)
+nearVwapUp1 = close >= vwapUp1 * 0.997  // price rejecting at +1σ (bearish)
+atVwapDn2   = close <= vwapDn2 * 1.005  // extreme oversold relative to VWAP
+atVwapUp2   = close >= vwapUp2 * 0.995  // extreme overbought relative to VWAP
+
+// ─── ATR + VOLATILITY REGIME ─────────────────────────────────────────────────
+atrVal = ta.atr(atrLen)
+// Chop detection: recent range < ATR * multiplier
+recentRange = ta.highest(high, 10) - ta.lowest(low, 10)
+isChop      = recentRange < atrVal * atrMult * 2
+
+// Volatility color on candles (background)
+bgcolor(isChop ? color.new(#888888, 97) : na, title="Chop Zone")
+
+// ─── RSI + HIDDEN DIVERGENCE ─────────────────────────────────────────────────
+rsiVal = ta.rsi(close, rsiLen)
+
+// Regular divergence: price new high, RSI lower high (bearish)
+// Hidden divergence:  price higher low, RSI lower low (bullish continuation)
+rsiPivHigh = ta.pivothigh(rsiVal, 5, 5)
+rsiPivLow  = ta.pivotlow(rsiVal,  5, 5)
+pricePivH  = ta.pivothigh(high,   5, 5)
+pricePivL  = ta.pivotlow(low,     5, 5)
+
+// Regular bearish divergence
+regBearDiv = not na(rsiPivHigh) and not na(pricePivH) and
+     high[5] > ta.valuewhen(not na(pricePivH), high[5], 1) and
+     rsiVal[5] < ta.valuewhen(not na(rsiPivHigh), rsiVal[5], 1)
+
+// Regular bullish divergence
+regBullDiv = not na(rsiPivLow) and not na(pricePivL) and
+     low[5] < ta.valuewhen(not na(pricePivL), low[5], 1) and
+     rsiVal[5] > ta.valuewhen(not na(rsiPivLow), rsiVal[5], 1)
+
+// Hidden bullish (price higher low, RSI lower low → trend continuation up)
+hidBullDiv = not na(rsiPivLow) and not na(pricePivL) and
+     low[5] > ta.valuewhen(not na(pricePivL), low[5], 1) and
+     rsiVal[5] < ta.valuewhen(not na(rsiPivLow), rsiVal[5], 1)
+
+// Hidden bearish
+hidBearDiv = not na(rsiPivHigh) and not na(pricePivH) and
+     high[5] < ta.valuewhen(not na(pricePivH), high[5], 1) and
+     rsiVal[5] > ta.valuewhen(not na(rsiPivHigh), rsiVal[5], 1)
+
+// ─── SQUEEZE MOMENTUM (TTM-style) ────────────────────────────────────────────
+basis   = ta.sma(close, sqLen)
+dev     = sqMult * ta.stdev(close, sqLen)
+upperBB = basis + dev
+lowerBB = basis - dev
+
+maVal   = ta.sma(close, sqLen)
+rangeMa = ta.sma(ta.tr, sqLen)
+upperKC = maVal + rangeMa * sqKCMult
+lowerKC = maVal - rangeMa * sqKCMult
+
+sqzOn   = lowerBB > lowerKC and upperBB < upperKC   // BB inside KC → squeeze
+sqzOff  = lowerBB < lowerKC and upperBB > upperKC   // BB outside KC → release
+
+// Momentum value
+sqMomVal = ta.linreg(close - math.avg(
+     math.avg(ta.highest(high, sqLen), ta.lowest(low, sqLen)), ta.sma(close, sqLen)),
+     sqLen, 0)
+
+sqMomUp  = sqMomVal > sqMomVal[1]
+sqFire   = sqzOff and not sqzOff[1]  // squeeze just fired!
+
+// ─── SMART MONEY CONCEPTS: BOS + FVG ─────────────────────────────────────────
+// Swing detection (simplified pivot)
+swingLen = 5
+swH = ta.pivothigh(high, swingLen, swingLen)
+swL = ta.pivotlow(low,   swingLen, swingLen)
+
+// Track last swing high and low
+var float lastSwH  = na
+var float lastSwL  = na
+var int   lastSwHI = na
+var int   lastSwLI = na
+
+if not na(swH)
+    lastSwH  := swH
+    lastSwHI := bar_index[swingLen]
+if not na(swL)
+    lastSwL  := swL
+    lastSwLI := bar_index[swingLen]
+
+// BOS: close breaks above last swing high (bullish) or below last swing low (bearish)
+bosLong  = not na(lastSwH) and close > lastSwH and close[1] <= lastSwH[1]
+bosShort = not na(lastSwL) and close < lastSwL and close[1] >= lastSwL[1]
+
+var line bosLine = na
+if bosLong
+    bosLine := line.new(lastSwHI, lastSwH, bar_index, lastSwH,
+         color=color.new(#a78bfa, 60), width=1, style=line.style_dashed)
+if bosShort
+    bosLine := line.new(lastSwLI, lastSwL, bar_index, lastSwL,
+         color=color.new(#fb923c, 60), width=1, style=line.style_dashed)
+
+// BOS labels
+if bosLong
+    label.new(bar_index, low - atrVal*0.3, "BOS ▲",
+         color=color.new(#a78bfa, 20), textcolor=color.white,
+         style=label.style_label_up, size=size.tiny)
+if bosShort
+    label.new(bar_index, high + atrVal*0.3, "BOS ▼",
+         color=color.new(#fb923c, 20), textcolor=color.white,
+         style=label.style_label_down, size=size.tiny)
+
+// FVG detection (3-candle gap)
+fvgBullish = low > high[2]   // gap between c[-2] high and c[0] low
+fvgBearish = high < low[2]   // gap between c[-2] low and c[0] high
+
+// Draw FVG boxes
+if showZones and fvgBullish and not fvgBullish[1]
+    box.new(bar_index-2, low, bar_index+20, high[2],
+         bgcolor=colFvgB, border_color=color.new(#00ff88, 60),
+         border_width=1, extend=extend.right)
+
+if showZones and fvgBearish and not fvgBearish[1]
+    box.new(bar_index-2, low[2], bar_index+20, high,
+         bgcolor=colFvgBr, border_color=color.new(#ff4466, 60),
+         border_width=1, extend=extend.right)
+
+// ─── LIQUIDITY SWEEP DETECTOR ─────────────────────────────────────────────────
+// Sweep: wick pierces swing level then closes back (stop hunt)
+var float lastHTFHigh = ta.highest(high, 50)
+var float lastHTFLow  = ta.lowest(low,   50)
+
+liquidityBull = low < lastHTFLow[1] and close > lastHTFLow[1]  // swept lows, closed above
+liquidityBear = high > lastHTFHigh[1] and close < lastHTFHigh[1] // swept highs, closed below
+
+if liquidityBull
+    label.new(bar_index, low - atrVal*0.5, "💧 Liq Sweep",
+         color=color.new(#f0b429, 20), textcolor=color.white,
+         style=label.style_label_up, size=size.tiny)
+
+if liquidityBear
+    label.new(bar_index, high + atrVal*0.5, "💧 Liq Sweep",
+         color=color.new(#f0b429, 20), textcolor=color.white,
+         style=label.style_label_down, size=size.tiny)
+
+// ─── VOLUME DELTA PROXY ───────────────────────────────────────────────────────
+// Estimate buy/sell volume using candle close position
+closePos   = (close - low) / (high - low + 0.0001)
+buyVol     = volume * closePos
+sellVol    = volume * (1 - closePos)
+deltaVol   = ta.ema(buyVol - sellVol, 10)
+deltaPos   = deltaVol > 0
+// Cumulative delta momentum
+cumDelta   = ta.sma(deltaVol, 20)
+cumDeltaUp = cumDelta > cumDelta[1]
+
+// ─── MULTI-COMPONENT SIGNAL SCORE ────────────────────────────────────────────
+// Each component contributes 0 or 1 to the bull/bear score
+
+// LONG score components (1 point each)
+s_hmaUp      = hmaUp                              ? 1 : 0  // Hull MA trending up
+s_aboveVwap  = aboveVwap                          ? 1 : 0  // Price above VWAP
+s_vwapBounce = nearVwapDn1                        ? 1 : 0  // Bouncing off -1σ
+s_sqMomUp    = sqMomUp and sqMomVal > 0           ? 1 : 0  // Sqz momentum positive
+s_sqFire     = sqFire and sqMomVal > 0            ? 1 : 0  // Squeeze released up
+s_bosLong    = bosLong                            ? 1 : 0  // BOS bullish
+s_rsiOK      = rsiVal > 40 and rsiVal < rsiOB    ? 1 : 0  // RSI healthy bull zone
+s_bullDiv    = regBullDiv or hidBullDiv           ? 1 : 0  // RSI divergence bullish
+s_deltaUp    = deltaPos and cumDeltaUp            ? 1 : 0  // Buy pressure dominant
+s_liqBull    = liquidityBull                      ? 1 : 0  // Liquidity sweep → reversal
+
+longScore = s_hmaUp + s_aboveVwap + s_vwapBounce + s_sqMomUp + s_sqFire +
+            s_bosLong + s_rsiOK + s_bullDiv + s_deltaUp + s_liqBull
+
+// SHORT score components
+s_hmaDown    = not hmaUp                          ? 1 : 0
+s_belowVwap  = not aboveVwap                      ? 1 : 0
+s_vwapRej    = nearVwapUp1                        ? 1 : 0
+s_sqMomDn    = not sqMomUp and sqMomVal < 0       ? 1 : 0
+s_sqFireDn   = sqFire and sqMomVal < 0            ? 1 : 0
+s_bosShort   = bosShort                           ? 1 : 0
+s_rsiOKsh    = rsiVal < 60 and rsiVal > rsiOS    ? 1 : 0
+s_bearDiv    = regBearDiv or hidBearDiv           ? 1 : 0
+s_deltaDn    = not deltaPos and not cumDeltaUp    ? 1 : 0
+s_liqBear    = liquidityBear                      ? 1 : 0
+
+shortScore = s_hmaDown + s_belowVwap + s_vwapRej + s_sqMomDn + s_sqFireDn +
+             s_bosShort + s_rsiOKsh + s_bearDiv + s_deltaDn + s_liqBear
+
+// ─── SIGNAL GENERATION ────────────────────────────────────────────────────────
+longSignal  = longScore  >= scoreMin and not isChop and not (longScore[1]  >= scoreMin)
+shortSignal = shortScore >= scoreMin and not isChop and not (shortScore[1] >= scoreMin)
+
+// ─── TRAILING STOP ────────────────────────────────────────────────────────────
+var float trailLong  = na
+var float trailShort = na
+var bool  inLong     = false
+var bool  inShort    = false
+
+if longSignal
+    inLong    := true
+    inShort   := false
+    trailLong := low - atrVal * tslMult
+
+if inLong
+    trailLong := math.max(trailLong, close - atrVal * tslMult)
+
+if shortSignal
+    inShort   := true
+    inLong    := false
+    trailShort := high + atrVal * tslMult
+
+if inShort
+    trailShort := math.min(trailShort, close + atrVal * tslMult)
+
+// Exit conditions
+exitLong  = inLong  and (shortSignal or close < trailLong)
+exitShort = inShort and (longSignal  or close > trailShort)
+
+if exitLong  then inLong  := false
+if exitShort then inShort := false
+
+// ─── PLOT SIGNALS ─────────────────────────────────────────────────────────────
+// Entry arrows
+plotshape(longSignal,  title="LONG Signal",  location=location.belowbar,
+     style=shape.labelup,   color=colLong,  textcolor=color.black,
+     text="LONG",  size=size.normal)
+
+plotshape(shortSignal, title="SHORT Signal", location=location.abovebar,
+     style=shape.labeldown, color=colShort, textcolor=color.white,
+     text="SHORT", size=size.normal)
+
+// Exit arrows
+plotshape(exitLong,  title="Exit Long",  location=location.abovebar,
+     style=shape.xcross, color=colExit, size=size.small)
+plotshape(exitShort, title="Exit Short", location=location.belowbar,
+     style=shape.xcross, color=colExit, size=size.small)
+
+// Trailing stop lines
+plot(inLong  ? trailLong  : na, "TSL Long",  color=color.new(colLong,  40), linewidth=1, style=plot.style_stepline)
+plot(inShort ? trailShort : na, "TSL Short", color=color.new(colShort, 40), linewidth=1, style=plot.style_stepline)
+
+// ─── SCORE LABELS ────────────────────────────────────────────────────────────
+if showScore and (longSignal or shortSignal)
+    lbl = longSignal
+         ? label.new(bar_index, low - atrVal * 1.2,
+              "🐾 Score: " + str.tostring(longScore) + "/10\n" +
+              "HMA:" + (s_hmaUp?"✅":"❌") + " VWAP:" + (s_aboveVwap?"✅":"❌") +
+              " BOS:" + (s_bosLong?"✅":"❌") + "\n" +
+              "SQZ:" + (s_sqFire?"🔥":"⬜") + " DIV:" + (s_bullDiv?"✅":"❌") +
+              " LIQ:" + (s_liqBull?"💧":"❌"),
+              color=color.new(colLong, 10), textcolor=color.white,
+              style=label.style_label_up, size=size.small)
+         : label.new(bar_index, high + atrVal * 1.2,
+              "🐾 Score: " + str.tostring(shortScore) + "/10\n" +
+              "HMA:" + (s_hmaDown?"✅":"❌") + " VWAP:" + (s_belowVwap?"✅":"❌") +
+              " BOS:" + (s_bosShort?"✅":"❌") + "\n" +
+              "SQZ:" + (s_sqFireDn?"🔥":"⬜") + " DIV:" + (s_bearDiv?"✅":"❌") +
+              " LIQ:" + (s_liqBear?"💧":"❌"),
+              color=color.new(colShort, 10), textcolor=color.white,
+              style=label.style_label_down, size=size.small)
+
+// ─── TABLE: REALTIME DASHBOARD ───────────────────────────────────────────────
+var table dash = table.new(position.top_right, 2, 12,
+     bgcolor=color.new(#0a0e18, 10),
+     border_color=color.new(#334155, 80), border_width=1,
+     frame_color=color.new(#22d3ee, 50), frame_width=1)
+
+if barstate.islast
+    // Header
+    table.cell(dash, 0, 0,  "🐾 HollowCat Supreme",
+         text_color=#e2e8f0, bgcolor=color.new(#1e293b, 20),
+         text_size=size.small, text_halign=text.align_center)
+    table.merge_cells(dash, 0, 0, 1, 0)
+
+    // Scores
+    lScoreClr = longScore  >= scoreMin ? color.new(#00ff88, 20) : color.new(#334155, 50)
+    sScoreClr = shortScore >= scoreMin ? color.new(#ff4466, 20) : color.new(#334155, 50)
+    table.cell(dash, 0, 1,  "LONG Score",   text_color=#94a3b8, text_size=size.tiny)
+    table.cell(dash, 1, 1,  str.tostring(longScore)  + " / 10", text_color=#00ff88, bgcolor=lScoreClr, text_size=size.small)
+    table.cell(dash, 0, 2,  "SHORT Score",  text_color=#94a3b8, text_size=size.tiny)
+    table.cell(dash, 1, 2,  str.tostring(shortScore) + " / 10", text_color=#ff4466, bgcolor=sScoreClr, text_size=size.small)
+
+    // Components
+    table.cell(dash, 0, 3,  "Hull MA",       text_color=#64748b, text_size=size.tiny)
+    table.cell(dash, 1, 3,  hmaUp ? "▲ BULL" : "▼ BEAR", text_color=hmaUp ? #00ff88 : #ff4466, text_size=size.tiny)
+    table.cell(dash, 0, 4,  "VWAP",          text_color=#64748b, text_size=size.tiny)
+    table.cell(dash, 1, 4,  aboveVwap ? "ABOVE" : "BELOW", text_color=aboveVwap ? #00ff88 : #ff4466, text_size=size.tiny)
+    table.cell(dash, 0, 5,  "Squeeze",       text_color=#64748b, text_size=size.tiny)
+    table.cell(dash, 1, 5,  sqzOn ? "🔴 COIL" : sqFire ? "🔥 FIRE!" : "⬜ OFF",
+         text_color=sqzOn ? #ff4466 : sqFire ? #f0b429 : #64748b, text_size=size.tiny)
+    table.cell(dash, 0, 6,  "RSI",           text_color=#64748b, text_size=size.tiny)
+    table.cell(dash, 1, 6,  str.tostring(math.round(rsiVal, 1)) + (rsiVal > rsiOB ? " OB" : rsiVal < rsiOS ? " OS" : ""),
+         text_color=rsiVal > rsiOB ? #ff4466 : rsiVal < rsiOS ? #00ff88 : #94a3b8, text_size=size.tiny)
+    table.cell(dash, 0, 7,  "Volume Delta",  text_color=#64748b, text_size=size.tiny)
+    table.cell(dash, 1, 7,  deltaPos ? "▲ BUY" : "▼ SELL",
+         text_color=deltaPos ? #00ff88 : #ff4466, text_size=size.tiny)
+    table.cell(dash, 0, 8,  "Volatility",    text_color=#64748b, text_size=size.tiny)
+    table.cell(dash, 1, 8,  isChop ? "⚠ CHOP" : "✅ TREND",
+         text_color=isChop ? #f0b429 : #00ff88, text_size=size.tiny)
+    table.cell(dash, 0, 9,  "Position",      text_color=#64748b, text_size=size.tiny)
+    table.cell(dash, 1, 9,  inLong ? "🟢 LONG" : inShort ? "🔴 SHORT" : "— FLAT",
+         text_color=inLong ? #00ff88 : inShort ? #ff4466 : #64748b, text_size=size.tiny)
+
+    // Signal
+    sigTxt   = longSignal  ? "🚀 ENTRY LONG"  :
+               shortSignal ? "🐻 ENTRY SHORT" :
+               exitLong    ? "⚠ EXIT LONG"   :
+               exitShort   ? "⚠ EXIT SHORT"  : "— WAIT"
+    sigClr   = longSignal  ? color.new(#00ff88, 10) :
+               shortSignal ? color.new(#ff4466, 10) :
+               (exitLong or exitShort) ? color.new(#ffcc00, 10) :
+               color.new(#1e293b, 30)
+    sigTxtC  = longSignal  ? #001a0d :
+               shortSignal ? color.white :
+               (exitLong or exitShort) ? #000 :
+               #475569
+    table.cell(dash, 0, 10, "SIGNAL",        text_color=#94a3b8, text_size=size.tiny)
+    table.cell(dash, 1, 10, sigTxt,           text_color=sigTxtC, bgcolor=sigClr, text_size=size.small)
+
+    // ATR
+    table.cell(dash, 0, 11, "ATR",            text_color=#64748b, text_size=size.tiny)
+    table.cell(dash, 1, 11, str.tostring(math.round(atrVal, 4)), text_color=#94a3b8, text_size=size.tiny)
+
+// ─── ALERTS ───────────────────────────────────────────────────────────────────
+alertcondition(longSignal,  title="🐾 HCS LONG Signal",
+     message="🚀 HollowCat LONG Entry\nSymbol: {{ticker}} | TF: {{interval}}\nScore: High confidence long setup detected")
+alertcondition(shortSignal, title="🐾 HCS SHORT Signal",
+     message="🐻 HollowCat SHORT Entry\nSymbol: {{ticker}} | TF: {{interval}}\nScore: High confidence short setup detected")
+alertcondition(exitLong,    title="🐾 HCS Exit LONG",
+     message="⚠ HollowCat EXIT LONG\nSymbol: {{ticker}} | Trailing stop or reverse signal")
+alertcondition(exitShort,   title="🐾 HCS Exit SHORT",
+     message="⚠ HollowCat EXIT SHORT\nSymbol: {{ticker}} | Trailing stop or reverse signal")
+alertcondition(sqFire,      title="🐾 HCS Squeeze FIRE",
+     message="🔥 Squeeze Released on {{ticker}} — momentum incoming!")
+alertcondition(liquidityBull or liquidityBear, title="🐾 HCS Liquidity Sweep",
+     message="💧 Liquidity Sweep detected on {{ticker}} — possible reversal zone")

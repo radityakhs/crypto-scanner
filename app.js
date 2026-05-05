@@ -139,6 +139,7 @@ function setupEventListeners() {
     // Search functionality
     const searchInput = document.getElementById('searchCoin');
     if (searchInput) {
+        let _searchDebounce = null;
         searchInput.addEventListener('input', (e) => {
             activeSearchTerm = e.target.value;
             if (cryptoData.length === 0) {
@@ -146,7 +147,14 @@ function setupEventListeners() {
             } else {
                 _applyAllFilters();
             }
-        });
+            // Trigger unlisted coin search after 600ms of no typing
+            clearTimeout(_searchDebounce);
+            const term = e.target.value.trim();
+            if (term.length >= 2) {
+                _searchDebounce = setTimeout(() => _checkUnlistedCoinSearch(term), 600);
+            } else {
+                _clearUnlistedPanel();
+            }        });
         
         // Keyboard shortcut Ctrl+K or /
         document.addEventListener('keydown', (e) => {
@@ -1775,17 +1783,17 @@ async function loadCryptoData() {
     try {
         showLoading('cryptoTableBody');
 
-        // ── Cache 90 detik — ambil 200 koin via proxy lokal (CoinGecko, tanpa rate limit) ──
-        const CACHE_KEY = 'cryptoMarkets_v4';  // v4 = includes 1h/7d fields
+        // ── Cache 90 detik — ambil 500 koin via proxy lokal (CoinGecko, tanpa rate limit) ──
+        const CACHE_KEY = 'cryptoMarkets_v6';  // v6 = top 500 (2x250)
         const TTL = 90_000;
         let coins = cacheGet(CACHE_KEY);
 
         if (!coins) {
             const PROXY = 'http://127.0.0.1:3001/api/markets';
-            // Fetch halaman 1 & 2 paralel → total 200 koin
+            // 2 request paralel @ 250/page → total 500 koin teratas
             const [res1, res2] = await Promise.allSettled([
-                fetchWithTimeout(`${PROXY}?per_page=100&page=1`, 20000),
-                fetchWithTimeout(`${PROXY}?per_page=100&page=2`, 20000),
+                fetchWithTimeout(`${PROXY}?per_page=250&page=1`, 25000),
+                fetchWithTimeout(`${PROXY}?per_page=250&page=2`, 25000),
             ]);
             const parse = async (r) => {
                 if (r.status === 'rejected') return [];
@@ -2285,6 +2293,151 @@ function clearFilters() {
     const allRadio = document.querySelector('input[name="fFutures"][value="all"]');
     if (allRadio) allRadio.checked = true;
     _applyAllFilters();
+}
+
+// ─── Unlisted Coin Search ──────────────────────────────────────────────────
+// When search returns 0 results from local data, look up coin via CoinGecko.
+let _unlistedPanel = null;
+let _lastUnlistedQuery = '';
+
+function _clearUnlistedPanel() {
+    if (_unlistedPanel) { _unlistedPanel.remove(); _unlistedPanel = null; }
+}
+
+async function _checkUnlistedCoinSearch(term) {
+    // If local results already exist, hide unlisted panel
+    const t = term.toLowerCase();
+    const localHits = cryptoData.filter(c =>
+        c.name.toLowerCase().includes(t) || c.symbol.toLowerCase().includes(t)
+    );
+    if (localHits.length > 0) { _clearUnlistedPanel(); return; }
+
+    // Show loading
+    _showUnlistedPanel(term, null, true);
+    _lastUnlistedQuery = term;
+
+    try {
+        const r = await fetch(`http://127.0.0.1:3001/api/coin-search?q=${encodeURIComponent(term)}`);
+        const data = await r.json();
+        if (term !== _lastUnlistedQuery) return; // stale
+        _showUnlistedPanel(term, data.results || [], false);
+    } catch(e) {
+        if (term === _lastUnlistedQuery) _showUnlistedPanel(term, null, false, e.message);
+    }
+}
+
+function _showUnlistedPanel(query, results, loading, error) {
+    _clearUnlistedPanel();
+    const tableWrap = document.querySelector('.dex-table-wrap');
+    if (!tableWrap) return;
+
+    const panel = document.createElement('div');
+    panel.id = 'unlistedCoinPanel';
+    _unlistedPanel = panel;
+
+    if (loading) {
+        panel.innerHTML = `
+            <div style="background:#0f172a;border:1px solid #1e3a5f;border-radius:14px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;gap:10px;">
+                <span style="font-size:16px;animation:spin 1s linear infinite;display:inline-block;">⏳</span>
+                <span style="color:#475569;font-size:12px;">Mencari <strong style="color:#38bdf8">"${query}"</strong> di CoinGecko…</span>
+            </div>`;
+        tableWrap.parentNode.insertBefore(panel, tableWrap);
+        return;
+    }
+
+    if (error || !results) {
+        panel.innerHTML = `<div style="background:#0f172a;border:1px solid #ef444430;border-radius:14px;padding:14px 18px;margin-bottom:16px;color:#ef4444;font-size:12px;">⚠ Gagal mencari coin: ${error || 'unknown error'}</div>`;
+        tableWrap.parentNode.insertBefore(panel, tableWrap);
+        return;
+    }
+
+    if (!results.length) {
+        panel.innerHTML = `<div style="background:#0f172a;border:1px solid #334155;border-radius:14px;padding:14px 18px;margin-bottom:16px;color:#475569;font-size:12px;">🔍 Tidak ada hasil untuk <strong style="color:#e2e8f0">"${query}"</strong> — coin tidak ditemukan di CoinGecko.</div>`;
+        tableWrap.parentNode.insertBefore(panel, tableWrap);
+        return;
+    }
+
+    const rows = results.map(c => {
+        const p = c.price;
+        const priceStr = p == null ? '—' : p < 0.0001 ? `$${p.toExponential(3)}` : `$${p.toLocaleString('en-US', { minimumFractionDigits:2, maximumFractionDigits:6 })}`;
+        const chg = c.change24h;
+        const chgStr = chg == null ? '—' : (chg >= 0 ? `+${chg.toFixed(2)}` : chg.toFixed(2)) + '%';
+        const chgColor = chg == null ? '#64748b' : chg >= 0 ? '#22c55e' : '#ef4444';
+        const vol = c.volume;
+        const volStr = vol == null ? '—' : vol >= 1e9 ? `$${(vol/1e9).toFixed(2)}B` : vol >= 1e6 ? `$${(vol/1e6).toFixed(2)}M` : `$${(vol/1e3).toFixed(0)}K`;
+        const mcap = c.marketCap;
+        const mcapStr = mcap == null ? '—' : mcap >= 1e9 ? `$${(mcap/1e9).toFixed(2)}B` : mcap >= 1e6 ? `$${(mcap/1e6).toFixed(2)}M` : `$${(mcap/1e3).toFixed(0)}K`;
+        const rank = c.market_cap_rank ? `#${c.market_cap_rank}` : '—';
+        const thumb = c.image || c.thumb;
+
+        return `<div style="display:grid;grid-template-columns:40px 1fr 140px 100px 120px 120px auto;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #1e293b;">
+            <div>${thumb ? `<img src="${thumb}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;" onerror="this.style.display='none'">` : '<span style="font-size:24px;">🪙</span>'}</div>
+            <div>
+                <div style="font-weight:700;color:#e2e8f0;font-size:13px;">${c.symbol} <span style="background:#1e3a5f;color:#38bdf8;font-size:9px;padding:1px 6px;border-radius:8px;font-weight:400;">${rank}</span></div>
+                <div style="color:#64748b;font-size:11px;">${c.name}</div>
+            </div>
+            <div style="color:#e2e8f0;font-size:13px;font-weight:600;">${priceStr}</div>
+            <div style="color:${chgColor};font-size:13px;font-weight:600;">${chgStr}</div>
+            <div style="color:#94a3b8;font-size:12px;">${volStr}</div>
+            <div style="color:#94a3b8;font-size:12px;">${mcapStr}</div>
+            <div style="display:flex;flex-direction:column;gap:4px;">
+                <button onclick="_analyzeUnlistedCoin('${c.id}','${c.symbol}','${c.name.replace(/'/g,"\\'")}')" style="background:#6366f1;border:none;color:#fff;padding:5px 10px;border-radius:8px;font-size:11px;cursor:pointer;font-weight:600;">📊 Analisa</button>
+                <a href="https://www.coingecko.com/en/coins/${c.id}" target="_blank" style="background:#1e293b;border:1px solid #334155;color:#38bdf8;padding:4px 10px;border-radius:8px;font-size:11px;text-decoration:none;text-align:center;">CoinGecko ↗</a>
+            </div>
+        </div>`;
+    }).join('');
+
+    panel.innerHTML = `
+        <div style="background:#0f172a;border:1px solid #1e3a5f;border-radius:14px;overflow:hidden;margin-bottom:16px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #1e293b;">
+                <span style="color:#e2e8f0;font-size:13px;font-weight:600;">🔍 Hasil pencarian CoinGecko: <span style="color:#38bdf8">"${query}"</span></span>
+                <span style="color:#475569;font-size:11px;">${results.length} coin ditemukan • Tidak ada di top 300 MC</span>
+                <button onclick="document.getElementById('unlistedCoinPanel')?.remove()" style="background:none;border:none;color:#475569;cursor:pointer;font-size:16px;padding:0 4px;">✕</button>
+            </div>
+            <div style="display:grid;grid-template-columns:40px 1fr 140px 100px 120px 120px auto;gap:10px;padding:6px 14px;border-bottom:1px solid #0f2a3f;">
+                <div></div>
+                <div style="color:#475569;font-size:10px;font-weight:600;">TOKEN</div>
+                <div style="color:#475569;font-size:10px;font-weight:600;">PRICE</div>
+                <div style="color:#475569;font-size:10px;font-weight:600;">24H%</div>
+                <div style="color:#475569;font-size:10px;font-weight:600;">VOLUME</div>
+                <div style="color:#475569;font-size:10px;font-weight:600;">MARKET CAP</div>
+                <div style="color:#475569;font-size:10px;font-weight:600;">AKSI</div>
+            </div>
+            ${rows}
+        </div>`;
+
+    tableWrap.parentNode.insertBefore(panel, tableWrap);
+}
+
+/** Analyze an unlisted coin by fetching full market data from CoinGecko via proxy */
+async function _analyzeUnlistedCoin(coinId, symbol, name) {
+    // Inject into cryptoData temporarily and call analyzeCoin
+    const btn = event?.target;
+    if (btn) { btn.textContent = '⏳'; btn.disabled = true; }
+
+    try {
+        const r = await fetch(`http://127.0.0.1:3001/api/markets?ids=${coinId}&per_page=1&page=1`);
+        const arr = await r.json();
+        if (!Array.isArray(arr) || !arr.length) throw new Error('No data returned');
+        const coin = arr[0];
+
+        // Merge into cryptoData if not already there
+        const exists = cryptoData.find(c => c.id === coinId);
+        if (!exists) {
+            cryptoData.unshift(coin);
+            filteredCryptoData = [...cryptoData];
+        }
+
+        // Scroll to analysis panel and trigger
+        analyzeCoin(coinId);
+        const analysisSection = document.getElementById('coinAnalysisSection') || document.getElementById('analysisSection');
+        if (analysisSection) setTimeout(() => analysisSection.scrollIntoView({ behavior:'smooth' }), 200);
+
+    } catch(e) {
+        alert(`Gagal memuat analisa ${symbol}: ${e.message}`);
+    } finally {
+        if (btn) { btn.textContent = '📊 Analisa'; btn.disabled = false; }
+    }
 }
 
 /** Refresh data — invalidate cache then reload */
@@ -7975,3 +8128,67 @@ const web3Trading = (() => {
 
     return { connect, disconnect, setCurrentToken, openSwap, closeSwap, openOnDex };
 })();
+
+/* ═══════════════════════════════════════════════════════════
+   WALLET FLOW ANALYZER — Helper Functions
+   ─────────────────────────────────────────────────────────
+   Connects the standalone Wallet Flow Analyzer section
+   (index.html #walletFlowSection) to wallet-graph.js API.
+   ═══════════════════════════════════════════════════════════ */
+
+/** Called by Analisa button or Enter key on address input */
+function wfAnalyze() {
+    const addr  = (document.getElementById('wfAddressInput')?.value || '').trim();
+    const chain = document.getElementById('wfChainSelect')?.value || 'ethereum';
+    if (!addr) {
+        document.getElementById('wfAddressInput')?.focus();
+        return;
+    }
+    // Hide empty state, show graph panel
+    const emptyState  = document.getElementById('wfEmptyState');
+    const graphPanel  = document.getElementById('walletGraphPanel');
+    if (emptyState)  emptyState.style.display  = 'none';
+    if (graphPanel)  graphPanel.style.display  = 'flex';
+
+    // Load graph via wallet-graph.js
+    if (typeof walletGraph !== 'undefined') {
+        walletGraph.loadGraph(addr, chain);
+    } else {
+        console.warn('[wfAnalyze] walletGraph not loaded');
+    }
+}
+
+/** Called by ✕ Tutup button inside the graph panel */
+function wfCloseGraph() {
+    const emptyState  = document.getElementById('wfEmptyState');
+    const graphPanel  = document.getElementById('walletGraphPanel');
+    const addrInput   = document.getElementById('wfAddressInput');
+
+    if (graphPanel)  graphPanel.style.display  = 'none';
+    if (emptyState)  emptyState.style.display  = 'flex';
+    if (addrInput)   addrInput.value            = '';
+
+    // Clean up D3 simulation
+    if (typeof walletGraph !== 'undefined' && typeof walletGraph.closeGraph === 'function') {
+        walletGraph.closeGraph();
+    }
+}
+
+/** Quick-load preset example addresses */
+function wfLoadExample(name) {
+    const examples = {
+        vitalik:  { addr: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045', chain: 'ethereum' },
+        binance:  { addr: '0x28C6c06298d514Db089934071355E5743bf21d60', chain: 'ethereum' },
+        coinbase: { addr: '0x71660c4005BA85c37ccec55d0C4493E66Fe775d3', chain: 'ethereum' },
+        uniswap:  { addr: '0x1F98431c8aD98523631AE4a59f267346ea31F984', chain: 'ethereum' },
+    };
+    const ex = examples[name];
+    if (!ex) return;
+
+    const addrInput   = document.getElementById('wfAddressInput');
+    const chainSelect = document.getElementById('wfChainSelect');
+    if (addrInput)   addrInput.value  = ex.addr;
+    if (chainSelect) chainSelect.value = ex.chain;
+
+    wfAnalyze();
+}

@@ -1,0 +1,114 @@
+═══════════════════════════════════════════════════════════════════════════════
+  🚀 QUICK START: SWITCH TO LIVE TRADING
+═══════════════════════════════════════════════════════════════════════════════
+
+BEFORE YOU START:
+✅ Jupiter wallet connected with real Solana
+✅ Have 2-5 SOL in wallet (minimum)
+✅ Read LIVE_MODE_SWITCH.md for full details
+
+═══════════════════════════════════════════════════════════════════════════════
+STEP 1: BACKUP YOUR CONFIG
+═══════════════════════════════════════════════════════════════════════════════
+
+Run this in terminal:
+$ cp auto-trader.js auto-trader.js.backup
+
+═══════════════════════════════════════════════════════════════════════════════
+STEP 2: EDIT auto-trader.js
+═══════════════════════════════════════════════════════════════════════════════
+
+FILE: auto-trader.js
+FIND LINE: ~50
+
+LOOK FOR THIS:
+    DRY_RUN: true,
+
+CHANGE TO THIS:
+    DRY_RUN: false,
+
+SAVE FILE (Ctrl+S or Cmd+S)
+
+═══════════════════════════════════════════════════════════════════════════════
+STEP 3: RESTART THE AUTO TRADER
+═══════════════════════════════════════════════════════════════════════════════
+
+Kill current process:
+$ pkill -f "node auto-trader"
+
+Wait 2 seconds, then restart:
+$ node auto-trader.js
+
+You should see in logs:
+✓ [LIVE] LIVE MODE ENABLED - REAL TRADING ACTIVE
+✓ Connected to Jupiter Proxy
+✓ Wallet balance: X.XX SOL
+
+═══════════════════════════════════════════════════════════════════════════════
+STEP 4: VERIFY IN DASHBOARD
+═══════════════════════════════════════════════════════════════════════════════
+
+Open browser: http://localhost:8000
+Click "Auto Trader" tab
+
+You should see:
+✓ Wallet address displayed
+✓ Real SOL balance (not $1000)
+✓ Status: "LIVE MODE"
+
+═══════════════════════════════════════════════════════════════════════════════
+STEP 5: WAIT FOR FIRST SIGNAL
+═══════════════════════════════════════════════════════════════════════════════
+
+Dashboard will show:
+1. New signal arrives → Check entry filter
+2. If accepted → "Executing REAL order"
+3. Wait for confirmation → Trade appears in journal
+4. Monitor SL/TP → Automated exit
+
+═══════════════════════════════════════════════════════════════════════════════
+🚨 IF SOMETHING GOES WRONG
+═══════════════════════════════════════════════════════════════════════════════
+
+Kill immediately:
+$ pkill -f "node auto-trader"
+
+Check logs:
+$ tail -50 auto-trader.log
+
+Revert to paper trading (OPTIONAL):
+1. Change line 50 back to: DRY_RUN: true,
+2. Run: pkill -f "node auto-trader" && sleep 2 && node auto-trader.js
+
+═══════════════════════════════════════════════════════════════════════════════
+⚠️ RISK REMINDER
+═══════════════════════════════════════════════════════════════════════════════
+
+Current config (line 59): RISK_PER_TRADE_PCT: 1.5%
+
+With $15.86 wallet:
+- Max loss per trade: $0.24
+- This is VERY aggressive
+
+RECOMMENDATION: Lower to 0.5% per trade for safety
+(See LIVE_MODE_SWITCH.md for details)
+
+═══════════════════════════════════════════════════════════════════════════════
+✅ READY?
+═══════════════════════════════════════════════════════════════════════════════
+
+If you're comfortable with risks above:
+
+1. Backup auto-trader.js ✓
+2. Change DRY_RUN to false ✓
+3. Restart auto-trader ✓
+4. Verify in dashboard ✓
+5. Monitor first 24 hours ✓
+
+Then you're LIVE! 🎉
+
+═══════════════════════════════════════════════════════════════════════════════
+
+Questions? See:
+- LIVE_MODE_SWITCH.md (comprehensive guide with FAQ)
+- REAL_TRADING_SETUP.md (setup checklist & best practices)

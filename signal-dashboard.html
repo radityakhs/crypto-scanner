@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Memecoin Hunter — Terminal</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+:root {
+  --bg0: #060810;
+  --bg1: #0c0f1a;
+  --bg2: #111520;
+  --bg3: #161b2e;
+  --bg4: #1c2238;
+  --border: #1e2640;
+  --border2: #263052;
+  --text0: #e8eaf6;
+  --text1: #a0aec0;
+  --text2: #5c6b85;
+  --accent: #4f8ef7;
+  --accent2: #7c3aed;
+  --green: #10b981;
+  --red: #ef4444;
+  --yellow: #f59e0b;
+  --cyan: #06b6d4;
+  --purple: #8b5cf6;
+  --font-ui: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --sidebar-w: 220px;
+  --header-h: 52px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+body { background: var(--bg0); color: var(--text0); font-family: var(--font-ui); font-size: 13px; display: flex; flex-direction: column; }
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--bg1); }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+/* ── TOPBAR ── */
+.topbar {
+  height: var(--header-h); background: var(--bg1);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; padding: 0 20px; gap: 14px;
+  flex-shrink: 0; z-index: 100;
+}
+.logo { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 15px; color: var(--text0); white-space: nowrap; }
+.logo-icon { width: 28px; height: 28px; background: linear-gradient(135deg,var(--accent),var(--purple)); border-radius: 7px; display:flex; align-items:center; justify-content:center; font-size:14px; }
+.logo span { color: var(--accent); }
+.topbar-sep { width: 1px; height: 24px; background: var(--border); }
+.ticker { flex:1; display:flex; align-items:center; gap:20px; font-family:var(--font-mono); font-size:11px; overflow:hidden; }
+.tick { display:flex; align-items:center; gap:5px; white-space:nowrap; }
+.tick .sym { color:var(--text2); font-weight:600; }
+.tick .val { color:var(--text0); }
+.tick .up  { color:var(--green); }
+.tick .dn  { color:var(--red); }
+.topbar-right { display:flex; align-items:center; gap:8px; margin-left:auto; }
+
+.mode-pill {
+  display:flex; align-items:center; gap:6px;
+  padding:4px 12px; border-radius:20px;
+  font-size:11px; font-weight:600; letter-spacing:.4px; text-transform:uppercase; border:1px solid;
+}
+.mode-pill.dry  { background:rgba(92,107,133,.12); border-color:var(--border2); color:var(--text2); }
+.mode-pill.live { background:rgba(16,185,129,.1);  border-color:var(--green);   color:var(--green); }
+.mode-pill .dot { width:6px; height:6px; border-radius:50%; }
+.mode-pill.dry  .dot { background:var(--text2); }
+.mode-pill.live .dot { background:var(--green); animation:blink 1.2s infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
+
+.btn {
+  display:flex; align-items:center; gap:5px; padding:6px 12px;
+  background:var(--bg3); border:1px solid var(--border2); border-radius:6px;
+  color:var(--text1); font-size:11px; font-weight:500; cursor:pointer;
+  transition:all .13s; font-family:var(--font-ui); white-space:nowrap;
+}
+.btn:hover { background:var(--bg4); border-color:var(--accent); color:var(--text0); }
+.btn.primary { background:rgba(79,142,247,.1); border-color:var(--accent); color:var(--accent); }
+.btn.primary:hover { background:rgba(79,142,247,.2); }
+.btn svg { width:13px; height:13px; }
+
+.cdown { display:flex; align-items:center; gap:6px; font-family:var(--font-mono); font-size:11px; color:var(--text2); }
+.ring-svg { transform:rotate(-90deg); }
+.ring-track { fill:none; stroke:var(--border); stroke-width:2; }
+.ring-fill  { fill:none; stroke:var(--accent); stroke-width:2; stroke-linecap:round; transition:stroke-dashoffset .9s linear; }
+
+/* ── LAYOUT ── */
+.layout { display:flex; flex:1; overflow:hidden; }
+
+/* ── SIDEBAR ── */
+.sidebar {
+  width:var(--sidebar-w); background:var(--bg1);
+  border-right:1px solid var(--border);
+  display:flex; flex-direction:column; overflow-y:auto; flex-shrink:0;
+}
+.sb-section { padding:14px 10px 6px; }
+.sb-lbl { font-size:10px; font-weight:600; letter-spacing:1px; text-transform:uppercase; color:var(--text2); padding:0 6px; margin-bottom:5px; }
+.nav {
+  display:flex; align-items:center; gap:9px; padding:7px 10px; border-radius:6px;
+  cursor:pointer; font-size:12.5px; font-weight:500; color:var(--text1);
+  transition:all .12s; user-select:none; border:1px solid transparent;
+}
+.nav:hover { background:var(--bg3); color:var(--text0); }
+.nav.active { background:rgba(79,142,247,.1); color:var(--accent); border-color:rgba(79,142,247,.18); }
+.nav svg { width:15px; height:15px; flex-shrink:0; opacity:.75; }
+.nav.active svg { opacity:1; }
+.nav-badge {
+  margin-left:auto; background:var(--bg4); border:1px solid var(--border2);
+  padding:1px 6px; border-radius:10px; font-size:10px;
+  font-family:var(--font-mono); color:var(--text2);
+}
+.nav.active .nav-badge { background:rgba(79,142,247,.12); border-color:rgba(79,142,247,.3); color:var(--accent); }
+.nav-badge.live-badge { background:rgba(16,185,129,.1); border-color:rgba(16,185,129,.3); color:var(--green); }
+.sb-div { height:1px; background:var(--border); margin:8px 12px; }
+
+.sb-stats { padding:12px; display:flex; flex-direction:column; gap:5px; margin-top:auto; border-top:1px solid var(--border); }
+.ss { display:flex; justify-content:space-between; align-items:center; padding:5px 8px; background:var(--bg2); border-radius:5px; }
+.ss-lbl { font-size:10px; color:var(--text2); text-transform:uppercase; letter-spacing:.5px; }
+.ss-val { font-family:var(--font-mono); font-size:12px; font-weight:600; }
+.up { color:var(--green) !important; }
+.dn { color:var(--red) !important; }
+.neu { color:var(--text1) !important; }
+
+/* ── MAIN ── */
+.main { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+
+/* ── STAT BAR ── */
+.stat-bar { display:flex; gap:1px; background:var(--border); border-bottom:1px solid var(--border); flex-shrink:0; }
+.sc { flex:1; padding:9px 14px; background:var(--bg1); display:flex; flex-direction:column; gap:2px; min-width:75px; }
+.sc-lbl { font-size:10px; text-transform:uppercase; letter-spacing:.6px; color:var(--text2); font-weight:500; }
+.sc-val { font-family:var(--font-mono); font-size:17px; font-weight:700; color:var(--text0); line-height:1; }
+.sc-sub { font-size:10px; color:var(--text2); }
+
+/* ── PAGES ── */
+.page { flex:1; overflow-y:auto; display:none; padding:16px 20px; }
+.page.active { display:block; }
+
+.page-hdr { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+.page-title { font-size:15px; font-weight:600; color:var(--text0); display:flex; align-items:center; gap:8px; }
+.page-title svg { width:16px; height:16px; color:var(--accent); }
+.page-actions { display:flex; gap:8px; }
+
+/* ── CARD ── */
+.card { background:var(--bg1); border:1px solid var(--border); border-radius:10px; overflow:hidden; margin-bottom:16px; }
+.card-hdr { padding:10px 15px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; font-size:12px; font-weight:600; color:var(--text1); }
+.card-hdr-l { display:flex; align-items:center; gap:7px; }
+.cdot { width:7px; height:7px; border-radius:50%; }
+.cdot.g { background:var(--green); } .cdot.r { background:var(--red); } .cdot.y { background:var(--yellow); } .cdot.b { background:var(--accent); }
+
+/* ── TABLE ── */
+table { width:100%; border-collapse:collapse; }
+thead th {
+  padding:8px 13px; text-align:left;
+  font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.7px;
+  color:var(--text2); border-bottom:1px solid var(--border); white-space:nowrap;
+}
+tbody td { padding:10px 13px; border-bottom:1px solid rgba(30,38,64,.6); vertical-align:middle; font-size:12.5px; }
+tbody tr:last-child td { border-bottom:none; }
+tbody tr:hover td { background:var(--bg2); }
+
+.tok { display:flex; flex-direction:column; gap:2px; }
+.tok-sym  { font-weight:700; font-size:13px; color:var(--text0); font-family:var(--font-mono); }
+.tok-name { font-size:10px; color:var(--text2); }
+
+.spill {
+  display:inline-flex; align-items:center; padding:3px 8px; border-radius:5px;
+  font-family:var(--font-mono); font-size:11px; font-weight:700; border:1px solid;
+}
+.spill.hi  { background:rgba(16,185,129,.08);  border-color:rgba(16,185,129,.35);  color:var(--green); }
+.spill.mid { background:rgba(245,158,11,.08);  border-color:rgba(245,158,11,.35);  color:var(--yellow); }
+.spill.lo  { background:rgba(239,68,68,.08);   border-color:rgba(239,68,68,.35);   color:var(--red); }
+
+.pnl-pos { color:var(--green); font-weight:700; font-family:var(--font-mono); }
+.pnl-neg { color:var(--red);   font-weight:700; font-family:var(--font-mono); }
+.pnl-neu { color:var(--text2); font-family:var(--font-mono); }
+.pnl-sub { font-size:10px; opacity:.8; }
+
+.tp-prog { display:flex; gap:3px; align-items:center; }
+.tp-seg { height:5px; border-radius:2px; flex:1; background:var(--bg4); transition:background .3s; }
+.tp-seg.hit  { background:var(--green); }
+.tp-seg.next { background:rgba(79,142,247,.45); animation:glow .8s infinite alternate; }
+@keyframes glow { from{opacity:.5} to{opacity:1} }
+.tp-lbl { font-size:10px; color:var(--text2); font-family:var(--font-mono); white-space:nowrap; }
+.sl-lbl { font-size:10px; color:var(--red); font-family:var(--font-mono); margin-top:4px; }
+
+.tags { display:flex; flex-wrap:wrap; gap:3px; max-width:210px; }
+.tag {
+  padding:2px 6px; border-radius:3px; font-size:10px; font-family:var(--font-mono);
+  background:var(--bg3); border:1px solid var(--border2); color:var(--cyan); white-space:nowrap;
+}
+.tag.vel  { color:var(--yellow); border-color:rgba(245,158,11,.3); background:rgba(245,158,11,.05); }
+.tag.bst  { color:var(--red);    border-color:rgba(239,68,68,.3);  background:rgba(239,68,68,.05); }
+.tag.ely  { color:var(--green);  border-color:rgba(16,185,129,.3); background:rgba(16,185,129,.05); }
+
+.chart-lnk {
+  display:inline-flex; align-items:center; gap:4px; padding:4px 9px; border-radius:5px;
+  background:var(--bg3); border:1px solid var(--border2); color:var(--accent);
+  font-size:11px; font-weight:500; text-decoration:none; transition:all .12s;
+}
+.chart-lnk:hover { background:rgba(79,142,247,.12); border-color:var(--accent); }
+.chart-lnk svg { width:11px; height:11px; }
+
+.mono { font-family:var(--font-mono); }
+.sz { font-family:var(--font-mono); font-size:12px; color:var(--text1); }
+.hold { font-family:var(--font-mono); font-size:11px; color:var(--text2); }
+
+/* ── EMPTY ── */
+.empty-st { padding:44px 20px; text-align:center; display:flex; flex-direction:column; align-items:center; gap:10px; }
+.empty-ico { font-size:30px; opacity:.35; }
+.empty-ttl { font-size:14px; font-weight:600; color:var(--text1); }
+.empty-sub { font-size:12px; color:var(--text2); line-height:1.6; }
+
+/* ── PULSE ── */
+.pulse-wrap { display:inline-flex; align-items:center; gap:6px; font-size:11px; color:var(--text2); font-family:var(--font-mono); }
+.pulse-dot  { width:7px; height:7px; border-radius:50%; background:var(--accent); animation:sp 1.5s ease-in-out infinite; }
+@keyframes sp { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.6);opacity:.4} }
+
+/* ── ALERT ── */
+.alert { display:flex; gap:12px; align-items:flex-start; padding:11px 15px; border-radius:8px; margin-bottom:14px; font-size:12px; line-height:1.6; color:var(--text1); }
+.alert.warn { background:rgba(245,158,11,.06); border:1px solid rgba(245,158,11,.22); }
+.alert.info { background:rgba(79,142,247,.06);  border:1px solid rgba(79,142,247,.22); }
+.alert .ai  { font-size:15px; flex-shrink:0; margin-top:1px; }
+.alert strong { color:var(--text0); }
+
+/* ── GUIDE ── */
+.guide-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+@media (max-width:1000px) { .guide-grid { grid-template-columns:1fr; } }
+.gc { background:var(--bg1); border:1px solid var(--border); border-radius:10px; padding:18px; }
+.gc h3 { font-size:13px; font-weight:600; color:var(--text0); margin-bottom:14px; display:flex; align-items:center; gap:8px; }
+.gc h3 .ico { font-size:16px; }
+
+.steps { display:flex; flex-direction:column; gap:9px; }
+.step-row { display:flex; gap:11px; align-items:flex-start; }
+.step-n {
+  width:21px; height:21px; flex-shrink:0;
+  background:linear-gradient(135deg,var(--accent),var(--purple));
+  border-radius:50%; display:flex; align-items:center; justify-content:center;
+  font-size:11px; font-weight:700; color:#fff; margin-top:1px;
+}
+.step-t { font-size:12px; color:var(--text1); line-height:1.6; }
+.step-t strong { color:var(--text0); }
+.step-t code { font-family:var(--font-mono); font-size:11px; background:var(--bg3); border:1px solid var(--border2); padding:1px 5px; border-radius:3px; color:var(--cyan); }
+
+.rules { display:flex; flex-direction:column; gap:7px; }
+.rule { display:flex; align-items:flex-start; gap:9px; padding:8px 11px; border-radius:6px; background:var(--bg2); border-left:3px solid var(--border2); font-size:12px; color:var(--text1); line-height:1.5; }
+.rule strong { color:var(--text0); font-family:var(--font-mono); font-size:11px; }
+.rule.g { border-left-color:var(--green); }
+.rule.r { border-left-color:var(--red); }
+.rule.b { border-left-color:var(--accent); }
+.rule.y { border-left-color:var(--yellow); }
+
+.tool-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.tool { padding:10px 12px; border-radius:7px; background:var(--bg2); border:1px solid var(--border); display:flex; flex-direction:column; gap:3px; }
+.tool-nm { font-size:12px; font-weight:600; color:var(--text0); }
+.tool-ds { font-size:11px; color:var(--text2); line-height:1.4; }
+.tool-tg { font-size:10px; padding:2px 6px; border-radius:3px; display:inline-block; margin-top:2px; background:rgba(79,142,247,.08); border:1px solid rgba(79,142,247,.2); color:var(--accent); }
+.tool-tg.free { background:rgba(16,185,129,.08); border-color:rgba(16,185,129,.2); color:var(--green); }
+
+/* ── STATS PAGE ── */
+.stats-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:14px; }
+.stat-mini { background:var(--bg1); border:1px solid var(--border); border-radius:8px; padding:12px 14px; }
+.stat-mini .sm-lbl { font-size:10px; text-transform:uppercase; letter-spacing:.6px; color:var(--text2); margin-bottom:4px; }
+.stat-mini .sm-val { font-family:var(--font-mono); font-size:19px; font-weight:700; }
+
+/* ── ERROR ── */
+.err-card { background:rgba(239,68,68,.05); border:1px solid rgba(239,68,68,.22); border-radius:10px; padding:24px; display:flex; flex-direction:column; align-items:center; gap:12px; text-align:center; }
+.err-card h3 { color:var(--red); font-size:14px; }
+.err-card p  { color:var(--text1); font-size:12px; line-height:1.7; }
+.err-card code { font-family:var(--font-mono); font-size:12px; background:var(--bg3); border:1px solid var(--border2); padding:8px 16px; border-radius:6px; color:var(--cyan); }
+
+/* Back button */
+.back-btn {
+  display:inline-flex; align-items:center; gap:5px;
+  padding:4px 10px; border-radius:6px; font-size:11px; font-weight:600;
+  background:rgba(148,163,184,.08); border:1px solid rgba(148,163,184,.18);
+  color:#94a3b8; text-decoration:none; white-space:nowrap; flex-shrink:0;
+  transition:background .12s, border-color .12s, color .12s;
+}
+.back-btn:hover {
+  background:rgba(99,102,241,.15); border-color:rgba(99,102,241,.45); color:#a5b4fc;
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════ TOPBAR -->
+<div class="topbar">
+  <a href="index.html" class="btn back-btn" title="Kembali ke CryptoScanner">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="13" height="13"><path d="M19 12H5"/><path d="M12 5l-7 7 7 7"/></svg>
+    Main
+  </a>
+  <div class="topbar-sep"></div>
+  <div class="logo">
+    <div class="logo-icon">🎯</div>
+    Memecoin <span>Hunter</span>
+  </div>
+  <div class="topbar-sep"></div>
+  <div class="ticker">
+    <div class="tick"><span class="sym">SCAN</span><span class="val" id="t-scan">—</span></div>
+    <div class="tick"><span class="sym">TOKENS</span><span class="val" id="t-tokens">104+</span></div>
+    <div class="tick"><span class="sym">OPEN</span><span class="val" id="t-open">0</span></div>
+    <div class="tick"><span class="sym">PNL</span><span class="val" id="t-pnl">—</span></div>
+    <div class="tick"><span class="sym">API</span><span class="val" id="t-api" style="color:var(--text2)">connecting…</span></div>
+  </div>
+  <div class="topbar-right">
+    <div class="cdown">
+      <svg class="ring-svg" width="22" height="22" viewBox="0 0 22 22">
+        <circle class="ring-track" cx="11" cy="11" r="8"/>
+        <circle class="ring-fill" cx="11" cy="11" r="8" id="ring-fill"
+          stroke-dasharray="50.27" stroke-dashoffset="0"/>
+      </svg>
+      <span id="countdown">15s</span>
+    </div>
+    <button class="btn primary" onclick="fetchData()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+      Refresh
+    </button>
+    <span class="mode-pill dry" id="mode-badge">
+      <span class="dot"></span><span id="mode-txt">DRY RUN</span>
+    </span>
+  </div>
+</div>
+
+<!-- ═══════════════════════ LAYOUT -->
+<div class="layout">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sb-section">
+      <div class="sb-lbl">Monitor</div>
+      <div class="nav active" onclick="showPage('positions',this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        <span>Positions</span>
+        <span class="nav-badge" id="nb-pos">0</span>
+      </div>
+      <div class="nav" onclick="showPage('signals',this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        <span>Signal Feed</span>
+        <span class="nav-badge live-badge">LIVE</span>
+      </div>
+      <div class="nav" onclick="showPage('journal',this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        <span>Journal</span>
+        <span class="nav-badge" id="nb-journal">0</span>
+      </div>
+    </div>
+
+    <div class="sb-div"></div>
+
+    <div class="sb-section">
+      <div class="sb-lbl">Analytics</div>
+      <div class="nav" onclick="showPage('stats',this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        <span>Statistics</span>
+      </div>
+      <div class="nav" onclick="showPage('guide',this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <span>How to Trade</span>
+      </div>
+    </div>
+
+    <div class="sb-stats">
+      <div class="ss"><span class="ss-lbl">Open PnL</span><span class="ss-val neu" id="ss-open">$0.00</span></div>
+      <div class="ss"><span class="ss-lbl">Realized</span><span class="ss-val neu" id="ss-real">$0.00</span></div>
+      <div class="ss"><span class="ss-lbl">Win Rate</span><span class="ss-val neu" id="ss-wr">--%</span></div>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main">
+
+    <!-- STAT BAR -->
+    <div class="stat-bar">
+      <div class="sc"><div class="sc-lbl">Server</div><div class="sc-val" id="sb-status" style="font-size:12px;color:var(--text2)">Connecting…</div></div>
+      <div class="sc"><div class="sc-lbl">Open Pos</div><div class="sc-val" id="sb-pos">—</div></div>
+      <div class="sc"><div class="sc-lbl">Open P&amp;L</div><div class="sc-val" id="sb-opnl">—</div></div>
+      <div class="sc"><div class="sc-lbl">Realized</div><div class="sc-val" id="sb-real">—</div></div>
+      <div class="sc"><div class="sc-lbl">Daily P&amp;L</div><div class="sc-val" id="sb-daily">—</div></div>
+      <div class="sc"><div class="sc-lbl">Win Rate</div><div class="sc-val" id="sb-wr">—</div><div class="sc-sub" id="sb-wr-sub"></div></div>
+      <div class="sc"><div class="sc-lbl">Trades</div><div class="sc-val" id="sb-trades">—</div></div>
+      <div class="sc"><div class="sc-lbl">Best Trade</div><div class="sc-val up" id="sb-best">—</div></div>
+    </div>
+
+    <!-- PAGE: POSITIONS -->
+    <div class="page active" id="page-positions">
+      <div class="page-hdr">
+        <div class="page-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          Open Positions
+          <span class="pulse-wrap"><span class="pulse-dot"></span><span id="scan-lbl">scanning every 20s</span></span>
+        </div>
+        <div class="page-actions">
+          <button class="btn" onclick="fetchData()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+            Refresh Now
+          </button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-hdr">
+          <div class="card-hdr-l"><div class="cdot g"></div>Live Positions (Paper Trading)</div>
+          <span id="pos-cnt" style="font-size:11px;color:var(--text2)">0 / 6 slots</span>
+        </div>
+        <div id="pos-body">
+          <div class="empty-st"><div class="empty-ico">📡</div><div class="empty-ttl">Waiting for proxy…</div><div class="empty-sub">Make sure <code>dex-trader-proxy.js</code> is running on port 3004</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PAGE: SIGNAL FEED -->
+    <div class="page" id="page-signals">
+      <div class="page-hdr">
+        <div class="page-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          Signal Feed
+          <span class="pulse-wrap"><span class="pulse-dot"></span>LIVE</span>
+        </div>
+      </div>
+      <div class="alert info">
+        <span class="ai">ℹ️</span>
+        <div>Setiap entry di bawah adalah sinyal BUY aktif. Klik <strong>Open Chart →</strong> untuk langsung buka DEXScreener dan eksekusi manual di Raydium/pump.fun.</div>
+      </div>
+      <div class="card">
+        <div class="card-hdr"><div class="card-hdr-l"><div class="cdot g"></div>Active Buy Signals</div></div>
+        <div id="sig-body"><div class="empty-st"><div class="empty-ico">📡</div><div class="empty-ttl">Loading…</div></div></div>
+      </div>
+    </div>
+
+    <!-- PAGE: JOURNAL -->
+    <div class="page" id="page-journal">
+      <div class="page-hdr">
+        <div class="page-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          Trade Journal
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-hdr"><div class="card-hdr-l"><div class="cdot b"></div>Closed Trades</div><span id="jrnl-cnt" style="font-size:11px;color:var(--text2)">0 trades</span></div>
+        <div id="jrnl-body"><div class="empty-st"><div class="empty-ico">📋</div><div class="empty-ttl">No closed trades yet</div><div class="empty-sub">Closed positions appear here after TP or SL is hit.</div></div></div>
+      </div>
+    </div>
+
+    <!-- PAGE: STATS -->
+    <div class="page" id="page-stats">
+      <div class="page-hdr">
+        <div class="page-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          Session Statistics
+        </div>
+      </div>
+      <div id="stats-body"><div class="empty-st"><div class="empty-ico">📊</div><div class="empty-ttl">Loading…</div></div></div>
+    </div>
+
+    <!-- PAGE: GUIDE -->
+    <div class="page" id="page-guide">
+      <div class="page-hdr">
+        <div class="page-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          How to Trade with This Bot
+        </div>
+      </div>
+      <div class="alert warn">
+        <span class="ai">⚠️</span>
+        <div><strong>Paper Trading Mode — Virtual Money.</strong> Gunakan sinyal sebagai panduan manual di DEX. Memecoin sangat berisiko — hanya gunakan dana yang siap hilang sepenuhnya.</div>
+      </div>
+      <div class="guide-grid">
+
+        <div class="gc">
+          <h3><span class="ico">🚀</span>Entry: Cara Masuk Trade</h3>
+          <div class="steps">
+            <div class="step-row"><div class="step-n">1</div><div class="step-t">Buka tab <strong>Signal Feed</strong> → saat sinyal baru muncul, klik <strong>Open Chart →</strong></div></div>
+            <div class="step-row"><div class="step-n">2</div><div class="step-t">Di DEXScreener klik <strong>"Trade"</strong> → pilih <strong>Raydium</strong> atau <strong>pump.fun</strong></div></div>
+            <div class="step-row"><div class="step-n">3</div><div class="step-t">Buy SOL senilai kolom <strong>Size</strong> (misal $20 ≈ 0.11 SOL). Slippage <strong>10–20%</strong></div></div>
+            <div class="step-row"><div class="step-n">4</div><div class="step-t">Pasang <strong>Stop Loss -25%</strong> via Trojan / BullX. <strong>Wajib!</strong></div></div>
+            <div class="step-row"><div class="step-n">5</div><div class="step-t">Ikuti 4 TP cascade → jual bertahap, biarkan sisa sebagai moon bag</div></div>
+          </div>
+        </div>
+
+        <div class="gc">
+          <h3><span class="ico">🛑</span>Exit: 4 TP Cascade Strategy</h3>
+          <div class="rules">
+            <div class="rule g"><div><strong>TP1 +30%</strong> — Jual 40% → balik modal sebagian, sisa posisi sudah "free"</div></div>
+            <div class="rule g"><div><strong>TP2 +80%</strong> — Jual 30% → profit aman terkunci</div></div>
+            <div class="rule b"><div><strong>TP3 +200%</strong> — Jual 20% → 2× modal sudah di tangan</div></div>
+            <div class="rule b"><div><strong>TP4 +500%</strong> — Jual sisa 10% → moon bag</div></div>
+            <div class="rule r"><div><strong>Stop Loss -25%</strong> — Exit SEMUA segera. Tidak ada kompromi!</div></div>
+            <div class="rule y"><div><strong>Trailing SL</strong> — Setelah TP1 hit, SL naik 20% di bawah peak price</div></div>
+          </div>
+        </div>
+
+        <div class="gc">
+          <h3><span class="ico">🔍</span>Cara Baca Signal Tags</h3>
+          <div class="rules">
+            <div class="rule y"><div><strong>vel:Xx⚡</strong> — Volume velocity: 8x = vol 5m adalah 8× rata-rata → momentum kuat</div></div>
+            <div class="rule r"><div><strong>burst5m🔥</strong> — Volume burst tiba-tiba di 5m terakhir → ada akumulasi dini</div></div>
+            <div class="rule g"><div><strong>fdv:$XK🎯EARLY</strong> — FDV sangat kecil → masih early stage, potensi 10–100x</div></div>
+            <div class="rule g"><div><strong>b/s:Xx</strong> — Buy/Sell ratio 3x = 3× lebih banyak buyer → akumulasi kuat</div></div>
+            <div class="rule b"><div><strong>age:Xmin🎯</strong> — Umur token &lt; 30 menit = sangat early (juga high risk)</div></div>
+            <div class="rule"><div><strong>1h:+X%</strong> — Sudah naik X% dalam 1h. Jika &gt;+400% → mungkin sudah terlambat</div></div>
+          </div>
+        </div>
+
+        <div class="gc">
+          <h3><span class="ico">🔧</span>Recommended DEX Tools</h3>
+          <div class="tool-grid">
+            <div class="tool"><div class="tool-nm">Trojan on Solana</div><div class="tool-ds">Telegram bot. Auto SL/TP, anti-rug, sniper</div><span class="tool-tg">t.me/solana_trojanbot</span></div>
+            <div class="tool"><div class="tool-nm">BullX</div><div class="tool-ds">Web app. SL/TP built-in, advanced analytics</div><span class="tool-tg">bullx.io</span></div>
+            <div class="tool"><div class="tool-nm">Photon</div><div class="tool-ds">Cepat, auto buy/sell %, low latency</div><span class="tool-tg">photon-sol.tinyastro.io</span></div>
+            <div class="tool"><div class="tool-nm">Raydium</div><div class="tool-ds">Manual swap. Tidak ada SL built-in!</div><span class="tool-tg free">Manual Only</span></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div><!-- /main -->
+</div><!-- /layout -->
+
+<script>
+const API = 'http://localhost:3004';
+let state = null, cdTimer, countdown = 15;
+const CIRC = 50.27;
+
+/* ── Navigation ── */
+function showPage(id, el) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  el.classList.add('active');
+  if (state) {
+    if (id === 'signals') renderSignals();
+    if (id === 'stats')   renderStats();
+    if (id === 'journal') renderJournal(state.closedTrades || []);
+  }
+}
+
+/* ── Countdown ── */
+function updateRing(s) {
+  document.getElementById('ring-fill').style.strokeDashoffset = CIRC * (1 - s / 15);
+  document.getElementById('countdown').textContent = s + 's';
+}
+function startCountdown() {
+  clearInterval(cdTimer); countdown = 15; updateRing(15);
+  cdTimer = setInterval(() => { countdown--; updateRing(countdown); if (countdown <= 0) { fetchData(); countdown = 15; } }, 1000);
+}
+
+/* ── Helpers ── */
+const fmtUsd  = n => (n >= 0 ? '+' : '-') + '$' + Math.abs(n).toFixed(2);
+const fmtPct  = n => (n >= 0 ? '+' : '') + n.toFixed(1) + '%';
+const sc      = s => s >= 75 ? 'hi' : s >= 65 ? 'mid' : 'lo';
+function fmtAge(ms) { if (!ms) return '—'; const m = Math.floor((Date.now()-ms)/60000); return m < 60 ? m+'m' : Math.floor(m/60)+'h '+(m%60)+'m'; }
+function tagCls(s) { if (s.includes('burst')) return 'bst'; if (s.includes('vel:')) return 'vel'; if (s.includes('EARLY')||s.includes('b/s:')) return 'ely'; return ''; }
+
+/* ── Fetch ── */
+async function fetchData() {
+  try {
+    const r = await fetch(API + '/state', { signal: AbortSignal.timeout(5000) });
+    state = await r.json();
+    renderAll(state);
+    document.getElementById('t-api').textContent = '● online';
+    document.getElementById('t-api').style.color = 'var(--green)';
+    startCountdown();
+  } catch(e) {
+    renderError();
+    document.getElementById('t-api').textContent = '● offline';
+    document.getElementById('t-api').style.color = 'var(--red)';
+  }
+}
+
+function renderError() {
+  document.getElementById('sb-status').textContent = 'OFFLINE';
+  document.getElementById('sb-status').style.color = 'var(--red)';
+  document.getElementById('pos-body').innerHTML = `
+    <div style="padding:20px">
+      <div class="err-card">
+        <h3>⚠️ Cannot connect to port 3004</h3>
+        <p>Jalankan dulu di terminal:</p>
+        <code>node dex-trader-proxy.js</code>
+        <p>Kemudian jalankan scanner:</p>
+        <code>node memecoin-hunter.js</code>
+      </div>
+    </div>`;
+}
+
+/* ── Render All ── */
+function renderAll(d) {
+  const pos    = d.positions || {};
+  const posArr = Object.values(pos);
+  const closed = d.closedTrades || [];
+  const stats  = d.stats || {};
+
+  // Mode badge
+  const badge = document.getElementById('mode-badge');
+  if (d.dryRun) { badge.className = 'mode-pill dry'; document.getElementById('mode-txt').textContent = 'DRY RUN'; }
+  else          { badge.className = 'mode-pill live'; document.getElementById('mode-txt').textContent = 'LIVE'; }
+
+  // Compute open PnL
+  let openPnl = 0;
+  posArr.forEach(p => {
+    const cur = p.currentPrice || p.entryPrice;
+    openPnl += ((cur - p.entryPrice) / p.entryPrice * 100 / 100) * p.sizeUsd * (p.remainPct||1) + (p.partialPnlUsd||0);
+  });
+
+  const wr = stats.totalTrades > 0 ? ((stats.wins / stats.totalTrades)*100).toFixed(0)+'%' : '--%';
+
+  // Topbar ticker
+  document.getElementById('t-scan').textContent   = new Date().toLocaleTimeString('id-ID');
+  document.getElementById('t-open').textContent   = posArr.length;
+  document.getElementById('t-pnl').textContent    = (openPnl >= 0 ? '+' : '') + '$' + Math.abs(openPnl).toFixed(2);
+  document.getElementById('t-pnl').style.color    = openPnl >= 0 ? 'var(--green)' : 'var(--red)';
+
+  // Nav badges
+  document.getElementById('nb-pos').textContent     = posArr.length;
+  document.getElementById('nb-journal').textContent = closed.length;
+
+  // Stat bar
+  document.getElementById('sb-status').textContent = '● LIVE';
+  document.getElementById('sb-status').style.color = 'var(--green)';
+
+  const setPnl = (id, val) => { const el = document.getElementById(id); el.textContent = fmtUsd(val); el.className = 'sc-val ' + (val >= 0 ? 'up' : 'dn'); };
+  const posEl  = document.getElementById('sb-pos'); posEl.textContent = posArr.length+'/6'; posEl.className = 'sc-val '+(posArr.length >= 5 ? 'warn':'');
+  setPnl('sb-opnl',  openPnl);
+  setPnl('sb-real',  d.totalPnl||0);
+  setPnl('sb-daily', d.dailyPnl||0);
+  document.getElementById('sb-wr').textContent     = wr;
+  document.getElementById('sb-wr-sub').textContent = stats.totalTrades > 0 ? stats.wins+'W/'+stats.losses+'L' : '';
+  document.getElementById('sb-trades').textContent = stats.totalTrades || 0;
+  document.getElementById('sb-best').textContent   = stats.bestTrade > 0 ? '+$'+stats.bestTrade.toFixed(2) : '—';
+
+  // Sidebar stats
+  const setSSVal = (id, val, up) => { const el = document.getElementById(id); el.textContent = (val>=0?'+':'')+' $'+Math.abs(val).toFixed(2); el.className = 'ss-val '+(val>0?'up':val<0?'dn':'neu'); };
+  setSSVal('ss-open', openPnl);
+  setSSVal('ss-real', d.totalPnl||0);
+  document.getElementById('ss-wr').textContent = wr;
+  document.getElementById('pos-cnt').textContent   = posArr.length + ' / 6 slots';
+  document.getElementById('jrnl-cnt').textContent  = closed.length + ' trades';
+
+  // Render active page
+  const pid = document.querySelector('.page.active')?.id?.replace('page-','');
+  if (pid === 'positions') renderPositions(posArr);
+  if (pid === 'journal')   renderJournal(closed);
+  if (pid === 'signals')   renderSignals();
+  if (pid === 'stats')     renderStats();
+}
+
+/* ── Positions ── */
+function renderPositions(posArr) {
+  const body = document.getElementById('pos-body');
+  if (!posArr.length) {
+    body.innerHTML = `<div class="empty-st"><div class="empty-ico">🔍</div><div class="empty-ttl">Scanning for entries…</div><div class="empty-sub">Scanner aktif, menunggu token dengan score ≥ 62.<br>Biasanya muncul dalam 1–2 menit.</div></div>`;
+    return;
+  }
+  const rows = posArr.map(p => {
+    const cur    = p.currentPrice || p.entryPrice;
+    const pnlPct = (cur - p.entryPrice) / p.entryPrice * 100;
+    const pnlUsd = (pnlPct / 100) * p.sizeUsd * (p.remainPct||1) + (p.partialPnlUsd||0);
+    const pcls   = pnlPct > 0 ? 'pnl-pos' : pnlPct < 0 ? 'pnl-neg' : 'pnl-neu';
+    const t1     = p.tp1Hit, t2 = p.tp2Hit, t3 = p.tp3Hit, t4 = p.tp4Hit;
+    const nxt    = !t1 ? '+30%' : !t2 ? '+80%' : !t3 ? '+200%' : !t4 ? '+500%' : '✓ All';
+    const slPrc  = t1 ? p.trailingSl : p.stopLoss;
+    const slPct  = slPrc ? ((slPrc/p.entryPrice-1)*100).toFixed(0) : '-25';
+    const slTxt  = t1 ? `trail ${slPct}%` : 'init -25%';
+    const tags   = (p.signals||[]).slice(0,5).map(s=>`<span class="tag ${tagCls(s)}">${s}</span>`).join('');
+    return `
+      <tr>
+        <td><div class="tok"><span class="tok-sym">${p.coinSymbol||'?'}</span><span class="tok-name">${(p.coinName||'').slice(0,22)}</span></div></td>
+        <td><span class="spill ${sc(p.score)}">${p.score}</span></td>
+        <td><span class="sz">$${(p.sizeUsd||0).toFixed(0)}</span></td>
+        <td style="font-family:var(--font-mono);font-size:11px;color:var(--text1)">$${p.entryPrice?.toFixed(8)}</td>
+        <td style="font-family:var(--font-mono);font-size:11px;color:var(--text0)">$${cur.toFixed(8)}</td>
+        <td><div class="${pcls}">${fmtPct(pnlPct)}</div><div class="pnl-sub ${pcls}">${pnlUsd>=0?'+':''}$${pnlUsd.toFixed(2)}</div></td>
+        <td>
+          <div class="tp-prog">
+            <div class="tp-seg ${t1?'hit':!t1?'next':''}"></div>
+            <div class="tp-seg ${t2?'hit':t1&&!t2?'next':''}"></div>
+            <div class="tp-seg ${t3?'hit':t2&&!t3?'next':''}"></div>
+            <div class="tp-seg ${t4?'hit':t3&&!t4?'next':''}"></div>
+            <span class="tp-lbl">→${nxt}</span>
+          </div>
+          <div class="sl-lbl">🛑 SL: ${slTxt}</div>
+        </td>
+        <td><span class="hold">${fmtAge(p.openedAtMs)}</span></td>
+        <td><a class="chart-lnk" href="${p.url||'#'}" target="_blank"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Chart</a></td>
+        <td><div class="tags">${tags}</div></td>
+      </tr>`;
+  }).join('');
+  body.innerHTML = `
+    <table>
+      <thead><tr><th>Token</th><th>Score</th><th>Size</th><th>Entry</th><th>Current</th><th>P&amp;L</th><th>TP Progress / SL</th><th>Hold</th><th>Chart</th><th>Signals</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+/* ── Signal Feed ── */
+function renderSignals() {
+  if (!state) return;
+  const posArr = Object.values(state.positions || {});
+  const body   = document.getElementById('sig-body');
+  if (!posArr.length) {
+    body.innerHTML = `<div class="empty-st"><div class="empty-ico">📡</div><div class="empty-ttl">Scanner aktif, belum ada sinyal</div><div class="empty-sub">Menunggu token dengan score ≥ 62 dari DEXScreener…</div></div>`;
+    return;
+  }
+  body.innerHTML = posArr.map(p => {
+    const cur    = p.currentPrice || p.entryPrice;
+    const pnlPct = (cur - p.entryPrice) / p.entryPrice * 100;
+    const pcls   = pnlPct > 0 ? 'pnl-pos' : pnlPct < 0 ? 'pnl-neg' : 'pnl-neu';
+    const tags   = (p.signals||[]).map(s=>`<span class="tag ${tagCls(s)}">${s}</span>`).join('');
+    const age    = p.ageAtEntry ? (p.ageAtEntry*60).toFixed(0)+'min at entry' : '—';
+    return `
+      <div style="padding:16px;border-bottom:1px solid var(--border)">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap">
+          <div style="flex:1;min-width:200px">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap">
+              <span class="tok-sym" style="font-size:16px">${p.coinSymbol||'?'}</span>
+              <span class="spill ${sc(p.score)}">${p.score}/100</span>
+              <span class="${pcls}" style="font-size:14px">${fmtPct(pnlPct)}</span>
+            </div>
+            <div style="font-size:11px;color:var(--text2);margin-bottom:8px">${p.coinName||''} · ${age}</div>
+            <div class="tags">${tags}</div>
+          </div>
+          <div style="text-align:right;flex-shrink:0">
+            <div style="font-size:12px;color:var(--text2);margin-bottom:4px">Entry <span style="font-family:var(--font-mono);color:var(--text1)">$${p.entryPrice?.toFixed(8)}</span></div>
+            <div style="font-size:12px;color:var(--text2);margin-bottom:4px">Now &nbsp;<span style="font-family:var(--font-mono);color:var(--text0)">$${cur.toFixed(8)}</span></div>
+            <div style="font-size:12px;color:var(--text2);margin-bottom:10px">Size <span style="font-weight:600;color:var(--text1)">$${(p.sizeUsd||0).toFixed(0)}</span> · SL <span style="color:var(--red)">-25%</span></div>
+            <a class="chart-lnk" href="${p.url||'#'}" target="_blank" style="font-size:12px;padding:6px 14px">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+              Open Chart →
+            </a>
+          </div>
+        </div>
+        <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--text2);display:flex;gap:16px;flex-wrap:wrap">
+          <span><strong style="color:var(--text1)">TP1</strong> <span style="color:var(--green)">$${p.tp1Price?.toFixed(8)||'—'}</span> (+30%)</span>
+          <span><strong style="color:var(--text1)">TP2</strong> <span style="color:var(--cyan)">$${p.tp2Price?.toFixed(8)||'—'}</span> (+80%)</span>
+          <span><strong style="color:var(--text1)">TP3</strong> <span style="color:var(--purple)">$${p.tp3Price?.toFixed(8)||'—'}</span> (+200%)</span>
+          <span style="margin-left:auto"><strong style="color:var(--text1)">SL</strong> <span style="color:var(--red)">$${p.stopLoss?.toFixed(8)||'—'}</span></span>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+/* ── Journal ── */
+function renderJournal(closed) {
+  const body = document.getElementById('jrnl-body');
+  if (!closed.length) {
+    body.innerHTML = `<div class="empty-st"><div class="empty-ico">📋</div><div class="empty-ttl">No closed trades yet</div><div class="empty-sub">Trades akan muncul setelah TP atau SL hit.</div></div>`;
+    return;
+  }
+  const wins   = closed.filter(t => (t.pnlUsd||0) > 0).length;
+  const pnlSum = closed.reduce((a,t) => a+(t.pnlUsd||0), 0);
+  const rows   = closed.slice().reverse().slice(0,30).map(t => {
+    const u    = t.pnlUsd || 0;
+    const p    = t.pnlPct || 0;
+    const pcls = u >= 0 ? 'pnl-pos' : 'pnl-neg';
+    const ec   = t.exitReason?.includes('STOP') ? 'var(--red)' : t.exitReason?.includes('TP4') ? 'var(--purple)' : t.exitReason?.includes('TP') ? 'var(--green)' : 'var(--text2)';
+    const tm   = t.closedAt ? new Date(t.closedAt).toLocaleTimeString('id-ID') : '—';
+    return `<tr>
+      <td><span class="tok-sym">${t.symbol||t.coinSymbol||'?'}</span></td>
+      <td><span class="spill ${sc(t.score||0)}">${t.score||'—'}</span></td>
+      <td><span class="sz">$${(t.sizeUsd||0).toFixed(0)}</span></td>
+      <td><div class="${pcls}">${fmtPct(p)}</div><div class="pnl-sub ${pcls}">${u>=0?'+':''}$${Math.abs(u).toFixed(2)}</div></td>
+      <td><span style="font-size:11px;color:${ec};font-weight:600">${t.exitReason||'—'}</span></td>
+      <td><span style="font-size:11px;color:var(--text2);font-family:var(--font-mono)">${tm}</span></td>
+      <td><a class="chart-lnk" href="${t.url||'#'}" target="_blank" style="font-size:10px;padding:3px 7px">↗</a></td>
+    </tr>`;
+  }).join('');
+  body.innerHTML = `
+    <div style="display:flex;gap:24px;padding:13px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap">
+      <div><div class="sc-lbl">Total Trades</div><div class="sc-val" style="font-size:18px">${closed.length}</div></div>
+      <div><div class="sc-lbl">Win Rate</div><div class="sc-val ${wins/closed.length > .5 ? 'up':'dn'}" style="font-size:18px">${closed.length?((wins/closed.length)*100).toFixed(0):0}%</div></div>
+      <div><div class="sc-lbl">Total PnL</div><div class="sc-val ${pnlSum>=0?'up':'dn'}" style="font-size:18px">${fmtUsd(pnlSum)}</div></div>
+      <div><div class="sc-lbl">Wins</div><div class="sc-val up" style="font-size:18px">${wins}</div></div>
+    </div>
+    <table>
+      <thead><tr><th>Token</th><th>Score</th><th>Size</th><th>P&amp;L</th><th>Exit Reason</th><th>Time</th><th></th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+/* ── Stats ── */
+function renderStats() {
+  if (!state) return;
+  const s   = state.stats || {};
+  const pos = Object.values(state.positions || {});
+  let openPnl = 0;
+  pos.forEach(p => { const c = p.currentPrice||p.entryPrice; openPnl += ((c-p.entryPrice)/p.entryPrice*100/100)*p.sizeUsd*(p.remainPct||1)+(p.partialPnlUsd||0); });
+
+  const items = [
+    ['Win Rate',    s.totalTrades>0?((s.wins/s.totalTrades)*100).toFixed(1)+'%':'0%',  s.wins/(s.totalTrades||1)>.5?'up':'dn'],
+    ['Total Trades',s.totalTrades||0, 'neu'],
+    ['Avg Win',     s.avgWin?'+$'+s.avgWin.toFixed(2):'—', 'up'],
+    ['Avg Loss',    s.avgLoss?'-$'+Math.abs(s.avgLoss).toFixed(2):'—','dn'],
+    ['Best Trade',  s.bestTrade>0?'+$'+s.bestTrade.toFixed(2):'—','up'],
+    ['Worst Trade', s.worstTrade<0?'-$'+Math.abs(s.worstTrade).toFixed(2):'—','dn'],
+    ['Total Win $', s.totalWinUsd>0?'+$'+s.totalWinUsd.toFixed(2):'—','up'],
+    ['Open PnL',    (openPnl>=0?'+':'')+'$'+openPnl.toFixed(2), openPnl>=0?'up':'dn'],
+  ];
+
+  const byScore   = s.byScore || {};
+  const scoreBars = Object.entries(byScore).sort((a,b)=>a[0]-b[0]).map(([rng,d])=>{
+    const tot = (d.wins||0)+(d.losses||0);
+    const wr2 = tot > 0 ? ((d.wins||0)/tot*100).toFixed(0) : 0;
+    return `
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+        <div style="font-family:var(--font-mono);font-size:11px;color:var(--text1);width:65px">Score ${rng}</div>
+        <div style="flex:1;height:6px;background:var(--bg3);border-radius:3px;overflow:hidden">
+          <div style="height:100%;width:${wr2}%;background:${wr2>60?'var(--green)':wr2>40?'var(--yellow)':'var(--red)'};border-radius:3px;transition:width .4s"></div>
+        </div>
+        <div style="font-family:var(--font-mono);font-size:10px;color:var(--text2);width:110px;text-align:right">${d.wins||0}W / ${d.losses||0}L · ${wr2}% WR</div>
+      </div>`;
+  }).join('');
+
+  document.getElementById('stats-body').innerHTML = `
+    <div class="stats-grid">
+      ${items.map(([l,v,c])=>`
+        <div class="stat-mini">
+          <div class="sm-lbl">${l}</div>
+          <div class="sm-val ${c}">${v}</div>
+        </div>`).join('')}
+    </div>
+    ${Object.keys(byScore).length ? `
+    <div class="card">
+      <div class="card-hdr"><div class="card-hdr-l"><div class="cdot b"></div>Win Rate by Score Range</div></div>
+      <div style="padding:4px 16px 10px">${scoreBars||'<div style="padding:16px;color:var(--text2)">No score data yet.</div>'}</div>
+    </div>` : ''}`;
+}
+
+/* ── Init ── */
+fetchData();
+startCountdown();
+</script>
+</body>
+</html>
