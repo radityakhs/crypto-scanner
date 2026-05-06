@@ -191,6 +191,7 @@
                     <div class="home-market-status" id="homeMarketStatus">
                         <span class="home-status-dot home-status-live"></span> Markets Open
                     </div>
+                    <span id="whaleAlertBadge" style="display:none;margin-left:10px;font-size:.78rem;padding:3px 8px;border-radius:999px;background:#0f2a1a;border:1px solid #4ade80;color:#4ade80;font-weight:600;cursor:pointer;" onclick="document.getElementById('whaleAccumulationPanel')?.scrollIntoView({behavior:'smooth'})">🐋 Loading...</span>
                 </div>
             </div>
 
@@ -755,13 +756,36 @@
              ║         ECOSYSTEM MOMENTUM DETECTOR                 ║
              ║  Ketika SOL/TON/ETH pump → lihat ecosystem tokens   ║
              ╚══════════════════════════════════════════════════════╝ -->
-        <div class="eco-pump-section" style="padding:0 12px 32px;">
+        <div class="eco-pump-section" style="padding:0 12px 20px;">
             <div id="ecosystemPumpPanel">
                 <div style="padding:40px;text-align:center;color:#64748b;">
                     <span style="font-size:1.5rem">🔗</span><br>
                     <span style="font-size:.88rem">Ecosystem Momentum loading...</span>
                 </div>
             </div>
+        </div>
+
+        <!-- ╔══════════════════════════════════════════════════════╗
+             ║         WHALE ACCUMULATION RADAR                    ║
+             ║  Deteksi volume spike + stealth accumulation        ║
+             ╚══════════════════════════════════════════════════════╝ -->
+        <div style="padding:0 12px 32px;">
+            <div id="whaleAccumulationPanel">
+                <div style="padding:40px;text-align:center;color:#4ade8066;">
+                    <span style="font-size:1.5rem">🐋</span><br>
+                    <span style="font-size:.88rem">Scanning whale activity...</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Signal Accuracy Tracker -->
+        <div style="padding:0 12px 20px;">
+            <div id="signalAccPanel"></div>
+        </div>
+
+        <!-- Market Regime + Fear & Greed + Watchlist -->
+        <div style="padding:0 12px 32px;">
+            <div id="marketRegimePanel"></div>
         </div>
 
         </div><!-- /#home -->
@@ -5118,6 +5142,9 @@
     <script src="dex-hunter-ui.js"></script>
     <script src="wallet-graph.js"></script>
     <script src="ecosystem-pump.js"></script>
+    <script src="whale-accumulation.js"></script>
+    <script src="signal-accuracy.js"></script>
+    <script src="market-regime.js"></script>
     <script src="home-matrix-bg.js?v=36"></script>
     <script src="home-epic-animations.js?v=36"></script>
     <script src="home-hologram-3d.js?v=36"></script>
@@ -6526,9 +6553,15 @@ ${rnd(CAT_OUTROS)}`,
         // Init Ecosystem Pump panel saat halaman siap
         document.addEventListener('DOMContentLoaded', function() {
             if (typeof EcosystemPump !== 'undefined') EcosystemPump.init();
+            if (typeof WhaleAccumulation !== 'undefined') WhaleAccumulation.init();
+            if (typeof SignalAccuracy !== 'undefined') SignalAccuracy.init();
+            if (typeof MarketRegime !== 'undefined') MarketRegime.init();
         });
         if (document.readyState !== 'loading') {
             if (typeof EcosystemPump !== 'undefined') EcosystemPump.init();
+            if (typeof WhaleAccumulation !== 'undefined') WhaleAccumulation.init();
+            if (typeof SignalAccuracy !== 'undefined') SignalAccuracy.init();
+            if (typeof MarketRegime !== 'undefined') MarketRegime.init();
         }
         // Init Signal Terminal saat tab diklik — lazy init
         (function () {
