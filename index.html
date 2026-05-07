@@ -3041,51 +3041,7 @@
                     </div>
                 </div>
 
-                <!-- ── Trading Sessions ──────────────────── -->
-                <div class="hcs-sessions-wrap" id="hcsTradingSessions">
-                    <div class="hcs-sess-header">
-                        <span class="hcs-sess-title">🕐 Market Sessions</span>
-                        <span class="hcs-sess-clock" id="hcsSessClock">–</span>
-                        <span class="hcs-sess-tz">UTC</span>
-                    </div>
-                    <!-- Timeline bar -->
-                    <div class="hcs-sess-timeline-wrap">
-                        <div class="hcs-sess-timeline" id="hcsSessTimeline">
-                            <!-- Filled dynamically -->
-                        </div>
-                        <div class="hcs-sess-needle" id="hcsSessNeedle"></div>
-                        <div class="hcs-sess-hour-labels" id="hcsSessHourLabels"></div>
-                    </div>
-                    <!-- Session cards -->
-                    <div class="hcs-sess-cards">
-                        <div class="hcs-sess-card" id="hcsSessAsia">
-                            <div class="hcs-sess-flag">🌏</div>
-                            <div class="hcs-sess-name">ASIA</div>
-                            <div class="hcs-sess-time">00:00 – 09:00</div>
-                            <div class="hcs-sess-status" id="hcsSessAsiaStatus">–</div>
-                            <div class="hcs-sess-countdown" id="hcsSessAsiaCD"></div>
-                            <div class="hcs-sess-centers">Tokyo · Singapore · Sydney</div>
-                        </div>
-                        <div class="hcs-sess-card" id="hcsSessLondon">
-                            <div class="hcs-sess-flag">🇬🇧</div>
-                            <div class="hcs-sess-name">LONDON</div>
-                            <div class="hcs-sess-time">07:00 – 16:00</div>
-                            <div class="hcs-sess-status" id="hcsSessLondonStatus">–</div>
-                            <div class="hcs-sess-countdown" id="hcsSessLondonCD"></div>
-                            <div class="hcs-sess-centers">London · Frankfurt · Zurich</div>
-                        </div>
-                        <div class="hcs-sess-card" id="hcsSessAmerica">
-                            <div class="hcs-sess-flag">🗽</div>
-                            <div class="hcs-sess-name">AMERICA</div>
-                            <div class="hcs-sess-time">13:00 – 22:00</div>
-                            <div class="hcs-sess-status" id="hcsSessAmericaStatus">–</div>
-                            <div class="hcs-sess-countdown" id="hcsSessAmericaCD"></div>
-                            <div class="hcs-sess-centers">New York · Chicago · Toronto</div>
-                        </div>
-                    </div>
-                    <!-- Overlap badges -->
-                    <div class="hcs-sess-overlaps" id="hcsSessOverlaps"></div>
-                </div>
+                <!-- ── Trading Sessions (on chart) ── rendered via canvas renderChart() -->
 
                 <!-- ── Signal Card ────────────────────────── -->
                 <div class="hcs-signal-card" id="hcsSignalCard" style="display:none">
@@ -10242,6 +10198,51 @@ ${rnd(CAT_OUTROS)}`,
                     ctx.beginPath(); ctx.arc(gx, gy, 1, 0, Math.PI*2); ctx.fill();
                 }
             }
+
+            // ── Trading Sessions Background ─────────────────────────────────
+            // Sessions in UTC: Asia 0-9, London 7-16, America 13-22
+            const SESS_DEF = [
+                { name:'ASIA',    start:0,  end:9,  color:'rgba(34,211,238,0.06)',  border:'rgba(34,211,238,0.25)',  labelColor:'rgba(34,211,238,0.55)'  },
+                { name:'LONDON',  start:7,  end:16, color:'rgba(167,139,250,0.06)', border:'rgba(167,139,250,0.25)', labelColor:'rgba(167,139,250,0.55)' },
+                { name:'AMERICA', start:13, end:22, color:'rgba(251,146,60,0.07)',  border:'rgba(251,146,60,0.25)',  labelColor:'rgba(251,146,60,0.55)'  },
+            ];
+            SESS_DEF.forEach(sess => {
+                // Find runs of consecutive candles belonging to this session
+                let runStart = -1;
+                const drawRun = (from, to) => {
+                    if (from < 0 || to < from) return;
+                    const x1 = pxX(from) - slotW * 0.5;
+                    const x2 = pxX(to)   + slotW * 0.5;
+                    const rW  = x2 - x1;
+                    // Filled background
+                    ctx.fillStyle = sess.color;
+                    ctx.fillRect(x1, PAD.top, rW, cH);
+                    // Top border line (subtle)
+                    ctx.strokeStyle = sess.border;
+                    ctx.lineWidth = 1;
+                    ctx.setLineDash([]);
+                    ctx.beginPath(); ctx.moveTo(x1, PAD.top); ctx.lineTo(x2, PAD.top); ctx.stroke();
+                    // Session label at top of run (only if wide enough)
+                    if (rW > 30) {
+                        ctx.save();
+                        ctx.fillStyle = sess.labelColor;
+                        ctx.font = 'bold 9px monospace';
+                        ctx.textAlign = 'center';
+                        ctx.fillText(sess.name, x1 + rW / 2, PAD.top + 11);
+                        ctx.restore();
+                    }
+                };
+                cvs.forEach((c, i) => {
+                    const utcH = new Date(c.time).getUTCHours();
+                    const inSess = utcH >= sess.start && utcH < sess.end;
+                    if (inSess) {
+                        if (runStart < 0) runStart = i;
+                    } else {
+                        if (runStart >= 0) { drawRun(runStart, i - 1); runStart = -1; }
+                    }
+                });
+                if (runStart >= 0) drawRun(runStart, cvs.length - 1);
+            });
 
             // ── Price grid lines ────────────────────────────────────────────
             ctx.strokeStyle = 'rgba(255,255,255,0.035)';
