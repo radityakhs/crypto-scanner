@@ -73,9 +73,13 @@ const EcosystemPump = (() => {
 .ep-missing span { background:#1e293b; padding:2px 7px; border-radius:10px; margin:2px; display:inline-block; }
 .ep-loading { padding:30px; text-align:center; color:#64748b; font-size:14px; }
 .ep-error   { padding:20px; text-align:center; color:#f87171; font-size:13px; }
-.ep-tooltip-wrap { position:relative; display:inline-block; }
-.ep-tooltip-wrap .ep-tooltip { visibility:hidden; opacity:0; position:absolute; bottom:calc(100% + 6px); left:50%; transform:translateX(-50%); background:#1e293b; color:#cbd5e1; font-size:11px; padding:6px 10px; border-radius:8px; border:1px solid #334155; pointer-events:none; z-index:9999; transition:opacity .15s; max-width:240px; white-space:normal; text-align:left; }
-.ep-tooltip-wrap:hover .ep-tooltip { visibility:visible; opacity:1; }
+.ep-sig-cell { display:flex; flex-direction:column; align-items:flex-end; gap:4px; }
+.ep-rec { display:inline-flex; align-items:center; gap:3px; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:800; letter-spacing:.04em; }
+.ep-rec.buy  { background:#14532d; color:#4ade80; border:1px solid #16a34a; }
+.ep-rec.wait { background:#422006; color:#fbbf24; border:1px solid #d97706; }
+.ep-rec.sell { background:#450a0a; color:#f87171; border:1px solid #dc2626; }
+.ep-rec.watch{ background:#1e293b; color:#94a3b8; border:1px solid #334155; }
+.ep-sig-desc { font-size:10px; color:#64748b; max-width:160px; text-align:right; line-height:1.4; }
 @media(max-width:600px){.ep-l1-prices{display:none}.ep-table th:nth-child(3),.ep-table td:nth-child(3),.ep-table th:nth-child(5),.ep-table td:nth-child(5){display:none}}
         `;
         document.head.appendChild(s);
@@ -98,6 +102,16 @@ const EcosystemPump = (() => {
         const lagColor = t.lagScore24h>8?'#22c55e':t.lagScore24h>3?'#f59e0b':'#64748b';
         const volBadge = t.hasHighVol?'🔥🔥':t.hasVolSpike?'🔥':'';
         const img = t.image ? `<img src="${t.image}" class="ep-tok-img" onerror="this.style.display='none'">` : '';
+
+        // Map signal → BUY/WAIT/SELL rekomendasi
+        const recMap = {
+            LONG:  { label:'✅ BUY',  cls:'buy' },
+            WAIT:  { label:'⏳ WAIT', cls:'wait' },
+            AVOID: { label:'🚫 SELL', cls:'sell' },
+            WATCH: { label:'👀 WATCH',cls:'watch' },
+        };
+        const rec = recMap[t.signal] || recMap['WATCH'];
+
         return `<tr>
             <td>${img}<span class="ep-tok-sym">${t.symbol}</span><span class="ep-tok-name">${t.name}</span></td>
             <td style="color:#e2e8f0">${fmtP(t.price)}</td>
@@ -105,7 +119,12 @@ const EcosystemPump = (() => {
             <td class="ep-ch ${chClass(t.ch24h)}">${fmt(t.ch24h)}</td>
             <td><div class="ep-lag-wrap"><div class="ep-lag-bar-bg"><div class="ep-lag-bar" style="width:${lagPct}%;background:${lagColor}"></div></div><span class="ep-lag-val" style="color:${lagColor}">${(t.lagScore24h??0)>0?'+':''}${(t.lagScore24h??0).toFixed(1)}%</span></div></td>
             <td><span style="font-size:11px">${volBadge}</span></td>
-            <td><div class="ep-tooltip-wrap"><span class="ep-sig" data-s="${t.signal}">${t.signalLabel}</span><div class="ep-tooltip">${t.signalDesc||''}</div></div></td>
+            <td>
+                <div class="ep-sig-cell">
+                    <span class="ep-rec ${rec.cls}">${rec.label}</span>
+                    ${t.signalDesc ? `<span class="ep-sig-desc">${t.signalDesc}</span>` : ''}
+                </div>
+            </td>
         </tr>`;
     }
 
@@ -165,7 +184,7 @@ const EcosystemPump = (() => {
 
         const filterBtns = ['ALL','LONG','WAIT','AVOID','WATCH'].map(f =>
             `<button class="ep-filter-btn ${_filter===f?'active':''}" onclick="EcosystemPump.setFilter('${f}')">${
-                f==='ALL'?'All':f==='LONG'?'🚀 LONG':f==='WAIT'?'⏳ WAIT':f==='AVOID'?'⛔ AVOID':'👀 WATCH'
+                f==='ALL'?'All':f==='LONG'?'✅ BUY':f==='WAIT'?'⏳ WAIT':f==='AVOID'?'🚫 SELL':'👀 WATCH'
             }</button>`
         ).join('');
 
