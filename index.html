@@ -801,12 +801,37 @@
             <div id="marketRegimePanel"></div>
         </div>
 
-        <!-- Telegram Alert Settings -->
-        <div style="padding:0 12px 32px;">
-            <div id="telegramSettingsPanel"></div>
+        </div><!-- /#home -->
+
+        <!-- ── Telegram Floating Button + Modal ── -->
+        <div id="tg-fab" onclick="TelegramSettings.openModal()" title="Telegram Alert Settings"
+            style="position:fixed;bottom:24px;right:24px;z-index:9999;
+                   width:52px;height:52px;border-radius:50%;
+                   background:linear-gradient(135deg,#2563eb,#7c3aed);
+                   box-shadow:0 4px 20px #2563eb66;
+                   display:flex;align-items:center;justify-content:center;
+                   cursor:pointer;transition:transform .2s,box-shadow .2s;
+                   font-size:22px;user-select:none;"
+            onmouseenter="this.style.transform='scale(1.12)';this.style.boxShadow='0 6px 28px #7c3aed88'"
+            onmouseleave="this.style.transform='scale(1)';this.style.boxShadow='0 4px 20px #2563eb66'">
+            📬
+            <span id="tg-fab-dot" style="position:absolute;top:6px;right:6px;
+                width:10px;height:10px;border-radius:50%;background:#22c55e;
+                box-shadow:0 0 6px #22c55e;display:none;
+                border:2px solid #111"></span>
         </div>
 
-        </div><!-- /#home -->
+        <!-- Telegram Modal -->
+        <div id="tg-modal-overlay" onclick="TelegramSettings.closeModal()"
+            style="display:none;position:fixed;inset:0;z-index:10000;
+                   background:rgba(0,0,0,.7);backdrop-filter:blur(4px);
+                   align-items:center;justify-content:center;">
+            <div onclick="event.stopPropagation()"
+                style="width:min(480px,95vw);border-radius:16px;overflow:hidden;
+                       box-shadow:0 24px 60px #000a;">
+                <div id="telegramSettingsPanel"></div>
+            </div>
+        </div>
 
         <!-- ╔══════════════════════════════════════════╗
              ║         PORTFOLIO — EXPERT JOURNAL      ║

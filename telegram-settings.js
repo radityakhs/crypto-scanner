@@ -1,10 +1,9 @@
 /**
  * TELEGRAM ALERT SETTINGS PANEL
- * Setup bot token + chat ID, lalu test
+ * Floating button (📬) di pojok kanan bawah → buka modal popup
  */
 const TelegramSettings = (() => {
     const API = 'http://127.0.0.1:3001/api/telegram-config';
-    const TEST_API = 'http://127.0.0.1:3001/api/telegram-test';
     let _cfg = null;
 
     function injectStyles() {
@@ -12,10 +11,12 @@ const TelegramSettings = (() => {
         const s = document.createElement('style');
         s.id = 'tg-styles';
         s.textContent = `
-#telegramSettingsPanel { margin:16px 0; }
-.tg-card { background:#0a0e1a; border:1px solid #1e3a5f; border-radius:14px; overflow:hidden; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; }
-.tg-header { padding:12px 18px; background:linear-gradient(135deg,#0a0e1a,#0d1b2e); border-bottom:1px solid #1e3a5f; display:flex; align-items:center; gap:10px; }
-.tg-header h3 { margin:0; font-size:14px; color:#e2e8f0; flex:1; }
+#telegramSettingsPanel { margin:0; }
+.tg-card { background:#0a0e1a; border:1px solid #1e3a5f; border-radius:16px; overflow:hidden; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; }
+.tg-header { padding:14px 18px; background:linear-gradient(135deg,#0a0e1a,#0d1b2e); border-bottom:1px solid #1e3a5f; display:flex; align-items:center; gap:10px; }
+.tg-header h3 { margin:0; font-size:15px; color:#e2e8f0; flex:1; }
+.tg-close-btn { background:none; border:none; color:#64748b; font-size:20px; cursor:pointer; padding:0 4px; line-height:1; }
+.tg-close-btn:hover { color:#e2e8f0; }
 .tg-status-dot { width:8px; height:8px; border-radius:50%; background:#374151; flex-shrink:0; }
 .tg-status-dot.active { background:#22c55e; box-shadow:0 0 6px #22c55e88; }
 .tg-body { padding:16px 18px; }
@@ -38,8 +39,15 @@ const TelegramSettings = (() => {
 .tg-how summary { cursor:pointer; font-size:12px; color:#64748b; user-select:none; }
 .tg-how p { font-size:11px; color:#475569; margin:6px 0 0; line-height:1.7; }
 .tg-how code { background:#1e293b; padding:1px 5px; border-radius:4px; color:#94a3b8; font-size:11px; }
+#tg-modal-overlay { display:none; }
+#tg-modal-overlay.open { display:flex !important; }
         `;
         document.head.appendChild(s);
+    }
+
+    function _updateFab(active) {
+        const dot = document.getElementById('tg-fab-dot');
+        if (dot) dot.style.display = active ? 'block' : 'none';
     }
 
     function render(cfg) {
@@ -47,25 +55,27 @@ const TelegramSettings = (() => {
         const el = document.getElementById('telegramSettingsPanel');
         if (!el) return;
         const active = cfg?.configured;
+        _updateFab(active);
 
         el.innerHTML = `<div class="tg-card">
             <div class="tg-header">
                 <h3>📬 Telegram Alert</h3>
                 <span class="tg-status-dot ${active ? 'active' : ''}" title="${active ? 'Aktif' : 'Belum dikonfigurasi'}"></span>
                 <span style="font-size:11px;color:${active ? '#4ade80' : '#475569'}">${active ? '✅ Aktif' : '⚙️ Belum setup'}</span>
+                <button class="tg-close-btn" onclick="TelegramSettings.closeModal()" title="Tutup">✕</button>
             </div>
             <div class="tg-body">
                 <div class="tg-row">
                     <div class="tg-input-wrap">
                         <div class="tg-label">Bot Token</div>
-                        <input id="tg-token-input" class="tg-input" type="password" 
-                            placeholder="123456789:ABCdef…" 
+                        <input id="tg-token-input" class="tg-input" type="password"
+                            placeholder="123456789:ABCdef…"
                             value="${cfg?.hasToken ? '••••••••••••••••' : ''}"/>
                     </div>
                     <div class="tg-input-wrap">
                         <div class="tg-label">Chat ID</div>
-                        <input id="tg-chatid-input" class="tg-input" type="text" 
-                            placeholder="-100123456789 atau @username" 
+                        <input id="tg-chatid-input" class="tg-input" type="text"
+                            placeholder="-100123456789 atau @username"
                             value="${cfg?.chatId || ''}"/>
                     </div>
                     <div style="display:flex;gap:6px;padding-top:20px;flex-wrap:wrap">
@@ -84,7 +94,7 @@ const TelegramSettings = (() => {
                     </p>
                 </details>
                 <div class="tg-note" style="margin-top:8px">
-                    ⚡ Alert otomatis dikirim saat ada sinyal <b>LONG</b> baru di Ecosystem Pump (maks 1x per token per 4 jam)
+                    ⚡ Alert otomatis dikirim saat ada sinyal <b>LONG</b> baru (maks 1x per token per 4 jam)
                 </div>
             </div>
         </div>`;
@@ -97,8 +107,19 @@ const TelegramSettings = (() => {
             if (d.ok) render(d);
         } catch (e) {
             const el = document.getElementById('telegramSettingsPanel');
-            if (el) el.innerHTML = '<div style="padding:12px;color:#475569;font-size:13px">⚠️ Proxy server offline</div>';
+            if (el) el.innerHTML = `<div class="tg-card"><div style="padding:20px;color:#475569;font-size:13px;text-align:center">⚠️ Proxy server offline<br><button class="tg-btn tg-btn-test" style="margin-top:10px" onclick="TelegramSettings.closeModal()">Tutup</button></div></div>`;
         }
+    }
+
+    function openModal() {
+        const overlay = document.getElementById('tg-modal-overlay');
+        if (overlay) overlay.classList.add('open');
+        load();
+    }
+
+    function closeModal() {
+        const overlay = document.getElementById('tg-modal-overlay');
+        if (overlay) overlay.classList.remove('open');
     }
 
     function showMsg(text, type) {
@@ -114,11 +135,8 @@ const TelegramSettings = (() => {
         const chatIdInput = document.getElementById('tg-chatid-input');
         const token  = tokenInput?.value?.trim();
         const chatId = chatIdInput?.value?.trim();
-
-        // Don't overwrite token if still masked
         const body = { chatId };
         if (token && !token.startsWith('•')) body.botToken = token;
-
         try {
             const r = await fetch(API, {
                 method: 'POST',
@@ -142,8 +160,11 @@ const TelegramSettings = (() => {
 
     function init() {
         injectStyles();
-        load();
+        // Cek status untuk update dot FAB saja (tanpa buka modal)
+        fetch(API).then(r => r.json()).then(d => { if (d.ok) _updateFab(d.configured); }).catch(() => {});
+        // Tutup modal saat tekan ESC
+        document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
     }
 
-    return { init, load, save, test };
+    return { init, load, save, test, openModal, closeModal };
 })();
