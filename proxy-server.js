@@ -2820,12 +2820,121 @@ app.post('/api/watchlist', express.json(), (req, res) => {
 
 app.options('/api/watchlist', (req, res) => { res.setHeader('Access-Control-Allow-Origin', '*'); res.setHeader('Access-Control-Allow-Methods', 'GET,POST'); res.setHeader('Access-Control-Allow-Headers', 'Content-Type'); res.sendStatus(200); });
 
+// ══════════════════════════════════════════════════════════════
+//  SCHEDULED WHALE ALERT — jalan setiap 30 menit di background
+//  Tidak perlu buka browser — cukup proxy server tetap hidup
+// ══════════════════════════════════════════════════════════════
+async function runScheduledWhaleAlert() {
+    try {
+        // Reload Telegram config dari file
+        try { _tgConfig = { ..._tgConfig, ...JSON.parse(fs.readFileSync(TG_CONFIG_FILE, 'utf8')) }; } catch(_) {}
+        if (!_tgConfig.botToken || !_tgConfig.chatId) return; // belum dikonfigurasi
+
+        const now = Date.now();
+        if ((now - _whaleAlertTs) < 30 * 60_000) return; // sudah kirim < 30 menit lalu
+
+        console.log('🕐 [Scheduler] Fetching whale data untuk scheduled alert...');
+
+        // Fetch coins dari CoinGecko langsung (sama seperti endpoint whale-accumulation)
+        const allIds = [...new Set(Object.values(ECOSYSTEM_MAP).flatMap(e => e.cgIds))];
+        const chunks = [allIds.slice(0, 100), allIds.slice(100, 200)].filter(c => c.length);
+        const pages  = await Promise.allSettled(chunks.map(ids =>
+            fetch(
+                `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${ids.join(',')}&price_change_percentage=1h,24h&sparkline=false&per_page=100`,
+                { headers: { 'Accept': 'application/json' }, signal: AbortSignal.timeout(15000) }
+            ).then(r => r.ok ? r.json() : [])
+        ));
+
+        let coins = [];
+        pages.forEach(p => { if (p.status === 'fulfilled' && Array.isArray(p.value)) coins.push(...p.value); });
+        if (!coins.length) { console.warn('[Scheduler] Tidak ada data coins dari CoinGecko'); return; }
+
+        const scored = coins.map(c => {
+            const ws = computeWhaleScore(c);
+            const ecoId   = Object.keys(ECOSYSTEM_MAP).find(k => ECOSYSTEM_MAP[k].cgIds.includes(c.id));
+            const ecoMeta = ecoId ? ECOSYSTEM_MAP[ecoId] : null;
+            return {
+                id: c.id, symbol: c.symbol?.toUpperCase(), name: c.name,
+                price: c.current_price,
+                ch1h:  +(c.price_change_percentage_1h_in_currency ?? 0).toFixed(2),
+                ch24h: +(c.price_change_percentage_24h ?? 0).toFixed(2),
+                volume24h: c.total_volume, marketCap: c.market_cap,
+                high24h: c.high_24h, low24h: c.low_24h,
+                ecoSymbol: ecoMeta?.symbol ?? '?',
+                ecoName:   ecoMeta?.name   ?? '?',
+                ...ws,
+            };
+        }).filter(t => t.score > 0).sort((a, b) => b.score - a.score);
+
+        const accumulating = scored.filter(t => t.type === 'ACCUMULATING');
+        if (!accumulating.length) { console.log('[Scheduler] Tidak ada sinyal akumulasi saat ini'); return; }
+
+        // Tandai throttle SEBELUM kirim (mencegah race condition)
+        _whaleAlertTs = now;
+
+        const top3 = accumulating.slice(0, 3);
+        const fmt = p => !p ? '–' : p < 0.001 ? p.toFixed(6) : p < 0.01 ? p.toFixed(5) : p < 1 ? p.toFixed(4) : p < 100 ? p.toFixed(3) : p.toFixed(2);
+        const topLines = top3.map((t, i) => {
+            const volPct   = t.volMcRatio ? (t.volMcRatio * 100).toFixed(1) : '–';
+            const chg      = t.ch24h >= 0 ? `+${t.ch24h}%` : `${t.ch24h}%`;
+            const chgEmoji = t.ch24h >= 2 ? '📈' : t.ch24h <= -3 ? '📉' : '↔️';
+            const sigMain  = t.signals?.[0] || '—';
+            const entry = t.price, tp1 = entry * 1.08, tp2 = entry * 1.18, sl = entry * 0.95;
+            const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉';
+            let narrative = '';
+            if (t.signals?.some(s => s.includes('Stealth')))         narrative = `Volume meledak tapi harga nyaris flat — whale diam-diam akumulasi.`;
+            else if (t.signals?.some(s => s.includes('Absorption'))) narrative = `Harga turun tapi vol besar — seller sedang diaborsi big buyer.`;
+            else if (t.signals?.some(s => s.includes('Near 24h Low'))) narrative = `Mendekati support 24h dengan volume tinggi — potensi reversal kuat.`;
+            else if (t.signals?.some(s => s.includes('Reversal')))   narrative = `1h mulai hijau sementara 24h masih merah — early entry window.`;
+            else                                                       narrative = `Volume anomali terdeteksi — aktivitas besar di balik layar.`;
+            return `━━━━━━━━━━━━━━━━━━\n` +
+                   `${medal} <b>${t.symbol}</b> (${t.ecoSymbol})   Score: <b>${t.score}/100</b>\n` +
+                   `${chgEmoji} $${fmt(entry)}  <b>${chg}</b>\n` +
+                   `📌 ${sigMain}\n\n` +
+                   `💡 <i>${narrative}</i>\n\n` +
+                   `📈 Entry: <b>$${fmt(entry)}</b>\n` +
+                   `🎯 TP1: $${fmt(tp1)} <i>(+8%)</i>  TP2: $${fmt(tp2)} <i>(+18%)</i>\n` +
+                   `🛑 SL: $${fmt(sl)} <i>(-5%)</i>\n` +
+                   `📊 Vol/MCap: <b>${volPct}%</b>`;
+        }).join('\n');
+
+        const distributing = scored.filter(t => t.ch24h > 8 && t.volMcRatio > 0.3 && t.type !== 'ACCUMULATING').slice(0, 3);
+        let distLines = '';
+        if (distributing.length > 0) {
+            distLines = `\n\n⚠️ <b>POTENSI DISTRIBUSI</b>\n` +
+                `<i>Harga naik tajam + vol besar = whale mungkin jual ke retailer</i>\n` +
+                distributing.map(t => `• <b>${t.symbol}</b> +${t.ch24h}% | Vol/MCap: ${(t.volMcRatio*100).toFixed(1)}% — <i>Jangan FOMO!</i>`).join('\n');
+        }
+
+        const msg =
+            `🐋 <b>WHALE RADAR — TOP 3 TERBAIK</b> <i>(Auto-Scheduled)</i>\n` +
+            `🕐 ${new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })} WIB\n` +
+            `📊 ${accumulating.length} akumulasi terdeteksi — ini yang terkuat:\n\n` +
+            `${topLines}${distLines}\n` +
+            `━━━━━━━━━━━━━━━━━━\n` +
+            `⚠️ <i>Bukan financial advice. DYOR.</i>`;
+        await sendTelegram(msg);
+        console.log(`✅ [Scheduler] Whale alert terkirim ke Telegram (${top3.map(t=>t.symbol).join(', ')})`);
+    } catch (e) {
+        console.error('[Scheduler] Whale alert error:', e.message);
+    }
+}
+
 // ── START ─────────────────────────────────────────────────────
 checkEnv();
 app.listen(PORT, '127.0.0.1', () => {
     console.log(`✅ OKX Proxy berjalan di http://127.0.0.1:${PORT}`);
     console.log(`   Frontend di http://localhost:8000 sudah bisa akses OKX API`);
     console.log(`   Key tersimpan aman di .env — tidak pernah dikirim ke browser`);
+
+    // Jalankan scheduled whale alert setiap 30 menit
+    // Alert akan terkirim ke Telegram TANPA perlu buka browser
+    const ALERT_INTERVAL_MS = 30 * 60_000; // 30 menit
+    setTimeout(() => {
+        runScheduledWhaleAlert(); // pertama kali 1 menit setelah startup
+        setInterval(runScheduledWhaleAlert, ALERT_INTERVAL_MS);
+        console.log(`🤖 [Scheduler] Whale alert otomatis aktif — interval 30 menit`);
+    }, 60_000);
 });
 
 // Pre-warm /periodic refresh for whale-screen to avoid slow first request
