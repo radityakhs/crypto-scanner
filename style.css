@@ -12372,7 +12372,151 @@ img[src*="ic_dev"],        img[src*="ic_code"] {
    ═══════════════════════════════════════════════════════════════ */
 .hcs-wrap { padding: 18px 20px; max-width: 1400px; margin: 0 auto; }
 
-/* Header */
+/* ── Trading Sessions ───────────────────────────────────────── */
+.hcs-sessions-wrap {
+    background: #060a14;
+    border: 1px solid #1a2e50;
+    border-radius: 14px;
+    padding: 14px 18px;
+    margin-bottom: 16px;
+}
+.hcs-sess-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+.hcs-sess-title { font-size: .8rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: .08em; }
+.hcs-sess-clock { font-size: 1.05rem; font-weight: 900; color: #e2e8f0; font-variant-numeric: tabular-nums; margin-left: auto; }
+.hcs-sess-tz { font-size: .7rem; color: #475569; }
+
+/* Timeline */
+.hcs-sess-timeline-wrap {
+    position: relative;
+    height: 32px;
+    margin-bottom: 6px;
+}
+.hcs-sess-timeline {
+    position: absolute;
+    top: 4px;
+    left: 0; right: 0;
+    height: 18px;
+    background: #0d1117;
+    border-radius: 6px;
+    overflow: visible;
+}
+.hcs-sess-seg {
+    position: absolute;
+    top: 0; height: 100%;
+    border-radius: 4px;
+    opacity: .75;
+    transition: opacity .3s;
+}
+.hcs-sess-seg.active { opacity: 1; box-shadow: 0 0 10px var(--sess-color); }
+.hcs-sess-seg-label {
+    position: absolute;
+    top: 50%; transform: translateY(-50%);
+    font-size: .6rem; font-weight: 800;
+    color: rgba(255,255,255,.85);
+    white-space: nowrap;
+    pointer-events: none;
+    letter-spacing: .06em;
+}
+.hcs-sess-needle {
+    position: absolute;
+    top: 0; bottom: 0;
+    width: 2px;
+    background: #fff;
+    border-radius: 2px;
+    box-shadow: 0 0 6px #fff8, 0 0 12px #fff4;
+    transition: left .5s linear;
+    z-index: 10;
+}
+.hcs-sess-needle::before {
+    content: '';
+    position: absolute;
+    top: -4px; left: 50%;
+    transform: translateX(-50%);
+    width: 8px; height: 8px;
+    background: #fff;
+    border-radius: 50%;
+}
+.hcs-sess-hour-labels {
+    position: absolute;
+    top: 24px; left: 0; right: 0;
+    display: flex;
+    justify-content: space-between;
+    pointer-events: none;
+}
+.hcs-sess-hr-lbl { font-size: .6rem; color: #334155; font-variant-numeric: tabular-nums; }
+
+/* Session cards */
+.hcs-sess-cards {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-top: 14px;
+}
+@media(max-width:600px) { .hcs-sess-cards { grid-template-columns: 1fr; } }
+
+.hcs-sess-card {
+    background: #0a0e1a;
+    border: 1px solid #1e293b;
+    border-radius: 12px;
+    padding: 12px 14px;
+    text-align: center;
+    transition: border-color .3s, box-shadow .3s;
+    position: relative;
+    overflow: hidden;
+}
+.hcs-sess-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: var(--sess-color, #334155);
+    border-radius: 12px 12px 0 0;
+    opacity: .5;
+    transition: opacity .3s;
+}
+.hcs-sess-card.open {
+    border-color: var(--sess-color);
+    box-shadow: 0 0 20px -4px var(--sess-color);
+}
+.hcs-sess-card.open::before { opacity: 1; }
+
+.hcs-sess-flag { font-size: 1.4rem; line-height: 1; margin-bottom: 4px; }
+.hcs-sess-name { font-size: .7rem; font-weight: 800; letter-spacing: .1em; color: #94a3b8; margin-bottom: 3px; }
+.hcs-sess-card.open .hcs-sess-name { color: var(--sess-color); }
+.hcs-sess-time { font-size: .75rem; color: #475569; margin-bottom: 6px; font-variant-numeric: tabular-nums; }
+.hcs-sess-status {
+    font-size: .75rem; font-weight: 800;
+    padding: 3px 12px; border-radius: 20px;
+    display: inline-block; margin-bottom: 4px;
+    background: #1e293b; color: #475569;
+    transition: background .3s, color .3s;
+}
+.hcs-sess-card.open .hcs-sess-status {
+    background: color-mix(in srgb, var(--sess-color) 20%, transparent);
+    color: var(--sess-color);
+}
+.hcs-sess-countdown { font-size: .68rem; color: #475569; min-height: 1em; margin-bottom: 4px; }
+.hcs-sess-card.open .hcs-sess-countdown { color: #94a3b8; }
+.hcs-sess-centers { font-size: .6rem; color: #334155; }
+
+/* Overlap notification */
+.hcs-sess-overlaps { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
+.hcs-sess-overlap-badge {
+    font-size: .7rem; font-weight: 700;
+    padding: 3px 12px; border-radius: 20px;
+    background: linear-gradient(135deg, rgba(251,191,36,.2), rgba(245,158,11,.1));
+    border: 1px solid #fbbf2488;
+    color: #fbbf24;
+    animation: hcs-glow .8s ease-in-out infinite alternate;
+}
+@keyframes hcs-glow { from { box-shadow: 0 0 4px #fbbf2444; } to { box-shadow: 0 0 12px #fbbf2488; } }
+
+
 .hcs-header { margin-bottom: 16px; }
 .hcs-title-row { display:flex; align-items:center; gap:12px; margin-bottom:14px; flex-wrap:wrap; }
 .hcs-cat-icon { font-size:2rem; line-height:1; }

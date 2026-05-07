@@ -865,6 +865,116 @@
         document.addEventListener('click', function(e) {
             if (!document.getElementById('fab-menu')?.contains(e.target)) _fabClose();
         });
+
+        // ── Trading Sessions Clock ─────────────────────────────────────
+        (function() {
+            const SESSIONS = [
+                { id: 'asia',    name: 'ASIA',    start: 0,  end: 9,  color: '#22d3ee', cardId: 'hcsSessAsia',    statusId: 'hcsSessAsiaStatus',    cdId: 'hcsSessAsiaCD' },
+                { id: 'london',  name: 'LONDON',  start: 7,  end: 16, color: '#a78bfa', cardId: 'hcsSessLondon',  statusId: 'hcsSessLondonStatus',  cdId: 'hcsSessLondonCD' },
+                { id: 'america', name: 'AMERICA', start: 13, end: 22, color: '#fb923c', cardId: 'hcsSessAmerica', statusId: 'hcsSessAmericaStatus', cdId: 'hcsSessAmericaCD' },
+            ];
+
+            function pad(n) { return String(n).padStart(2,'0'); }
+
+            function formatCountdown(hoursUntil) {
+                const totalMin = Math.round(hoursUntil * 60);
+                const h = Math.floor(totalMin / 60), m = totalMin % 60;
+                return h > 0 ? `${h}h ${pad(m)}m` : `${m}m`;
+            }
+
+            function buildTimeline() {
+                const tl = document.getElementById('hcsSessTimeline');
+                const hlWrap = document.getElementById('hcsSessHourLabels');
+                if (!tl || !hlWrap) return;
+                // Segments
+                tl.innerHTML = SESSIONS.map(s => {
+                    const left = (s.start / 24) * 100;
+                    const width = ((s.end - s.start) / 24) * 100;
+                    return `<div class="hcs-sess-seg" id="hcsSessSeg-${s.id}"
+                        style="left:${left}%;width:${width}%;background:${s.color};--sess-color:${s.color}">
+                        <span class="hcs-sess-seg-label" style="left:8px">${s.name}</span>
+                    </div>`;
+                }).join('');
+                // Hour labels: every 3h
+                hlWrap.innerHTML = [0,3,6,9,12,15,18,21,24].map(h => {
+                    const pct = (h / 24) * 100;
+                    return `<span class="hcs-sess-hr-lbl" style="position:absolute;left:${pct}%;transform:translateX(-50%)">${pad(h)}:00</span>`;
+                }).join('');
+            }
+
+            function tick() {
+                const now = new Date();
+                const utcH = now.getUTCHours();
+                const utcM = now.getUTCMinutes();
+                const utcS = now.getUTCSeconds();
+                const utcFrac = utcH + utcM / 60 + utcS / 3600; // fractional hour
+
+                // Clock
+                const cl = document.getElementById('hcsSessClock');
+                if (cl) cl.textContent = `${pad(utcH)}:${pad(utcM)}:${pad(utcS)}`;
+
+                // Needle
+                const needle = document.getElementById('hcsSessNeedle');
+                if (needle) needle.style.left = `${(utcFrac / 24) * 100}%`;
+
+                // Cards + overlaps
+                const openSessions = [];
+                SESSIONS.forEach(s => {
+                    const isOpen = utcFrac >= s.start && utcFrac < s.end;
+                    const card = document.getElementById(s.cardId);
+                    const status = document.getElementById(s.statusId);
+                    const cd = document.getElementById(s.cdId);
+                    const seg = document.getElementById(`hcsSessSeg-${s.id}`);
+
+                    if (card) {
+                        card.classList.toggle('open', isOpen);
+                        card.style.setProperty('--sess-color', s.color);
+                    }
+                    if (seg) seg.classList.toggle('active', isOpen);
+                    if (status) status.textContent = isOpen ? '● OPEN' : '○ CLOSED';
+
+                    if (cd) {
+                        if (isOpen) {
+                            const remaining = s.end - utcFrac;
+                            cd.textContent = `Tutup dalam ${formatCountdown(remaining)}`;
+                        } else {
+                            // Hours until next open
+                            let next = utcFrac < s.start ? s.start - utcFrac : (24 - utcFrac + s.start);
+                            cd.textContent = `Buka dalam ${formatCountdown(next)}`;
+                        }
+                    }
+                    if (isOpen) openSessions.push(s);
+                });
+
+                // Overlap badges
+                const ob = document.getElementById('hcsSessOverlaps');
+                if (ob) {
+                    const overlaps = [];
+                    // London + America overlap: 13:00-16:00
+                    const londonOpen = utcFrac >= 7 && utcFrac < 16;
+                    const americaOpen = utcFrac >= 13 && utcFrac < 22;
+                    const asiaOpen = utcFrac >= 0 && utcFrac < 9;
+                    if (londonOpen && americaOpen) overlaps.push('⚡ London × America Overlap — Volatilitas Tinggi!');
+                    if (asiaOpen && londonOpen) overlaps.push('🌅 Asia × London Overlap — 07:00–09:00');
+                    if (openSessions.length === 0) overlaps.push('😴 Semua sesi tutup — pasar sepi');
+                    ob.innerHTML = overlaps.map(t => `<span class="hcs-sess-overlap-badge">${t}</span>`).join('');
+                }
+            }
+
+            // Init when DOM ready
+            function initSessions() {
+                if (!document.getElementById('hcsSessTimeline')) return;
+                buildTimeline();
+                tick();
+                setInterval(tick, 1000);
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', initSessions);
+            } else {
+                initSessions();
+            }
+        })();
         </script>
 
         <!-- Telegram Modal -->
@@ -2929,6 +3039,52 @@
                         <button class="hcs-qp-btn" data-sym="DOGEUSDT">DOGE</button>
                         <button class="hcs-qp-btn" data-sym="LINKUSDT">LINK</button>
                     </div>
+                </div>
+
+                <!-- ── Trading Sessions ──────────────────── -->
+                <div class="hcs-sessions-wrap" id="hcsTradingSessions">
+                    <div class="hcs-sess-header">
+                        <span class="hcs-sess-title">🕐 Market Sessions</span>
+                        <span class="hcs-sess-clock" id="hcsSessClock">–</span>
+                        <span class="hcs-sess-tz">UTC</span>
+                    </div>
+                    <!-- Timeline bar -->
+                    <div class="hcs-sess-timeline-wrap">
+                        <div class="hcs-sess-timeline" id="hcsSessTimeline">
+                            <!-- Filled dynamically -->
+                        </div>
+                        <div class="hcs-sess-needle" id="hcsSessNeedle"></div>
+                        <div class="hcs-sess-hour-labels" id="hcsSessHourLabels"></div>
+                    </div>
+                    <!-- Session cards -->
+                    <div class="hcs-sess-cards">
+                        <div class="hcs-sess-card" id="hcsSessAsia">
+                            <div class="hcs-sess-flag">🌏</div>
+                            <div class="hcs-sess-name">ASIA</div>
+                            <div class="hcs-sess-time">00:00 – 09:00</div>
+                            <div class="hcs-sess-status" id="hcsSessAsiaStatus">–</div>
+                            <div class="hcs-sess-countdown" id="hcsSessAsiaCD"></div>
+                            <div class="hcs-sess-centers">Tokyo · Singapore · Sydney</div>
+                        </div>
+                        <div class="hcs-sess-card" id="hcsSessLondon">
+                            <div class="hcs-sess-flag">🇬🇧</div>
+                            <div class="hcs-sess-name">LONDON</div>
+                            <div class="hcs-sess-time">07:00 – 16:00</div>
+                            <div class="hcs-sess-status" id="hcsSessLondonStatus">–</div>
+                            <div class="hcs-sess-countdown" id="hcsSessLondonCD"></div>
+                            <div class="hcs-sess-centers">London · Frankfurt · Zurich</div>
+                        </div>
+                        <div class="hcs-sess-card" id="hcsSessAmerica">
+                            <div class="hcs-sess-flag">🗽</div>
+                            <div class="hcs-sess-name">AMERICA</div>
+                            <div class="hcs-sess-time">13:00 – 22:00</div>
+                            <div class="hcs-sess-status" id="hcsSessAmericaStatus">–</div>
+                            <div class="hcs-sess-countdown" id="hcsSessAmericaCD"></div>
+                            <div class="hcs-sess-centers">New York · Chicago · Toronto</div>
+                        </div>
+                    </div>
+                    <!-- Overlap badges -->
+                    <div class="hcs-sess-overlaps" id="hcsSessOverlaps"></div>
                 </div>
 
                 <!-- ── Signal Card ────────────────────────── -->
