@@ -2821,6 +2821,370 @@ app.post('/api/watchlist', express.json(), (req, res) => {
 app.options('/api/watchlist', (req, res) => { res.setHeader('Access-Control-Allow-Origin', '*'); res.setHeader('Access-Control-Allow-Methods', 'GET,POST'); res.setHeader('Access-Control-Allow-Headers', 'Content-Type'); res.sendStatus(200); });
 
 // ══════════════════════════════════════════════════════════════
+//  AI NARRATIVE INTELLIGENCE ENGINE
+//  "Find the next mover before retail enters."
+// ══════════════════════════════════════════════════════════════
+
+// Narrative map — leader coins + followers + categories
+const NARRATIVE_MAP = {
+    'solana-meme': {
+        name: 'Solana Meme & DeFi', emoji: '◎', color: '#9945FF',
+        leader: 'solana', leaderCgId: 'solana',
+        followers: ['dogwifhat','bonk','fartcoin','popcat','book-of-meme','samoyedcoin'],
+        followerSymbols: ['WIF','BONK','FARTCOIN','POPCAT','BOME','SAMO'],
+        tags: ['meme','solana','defi'], avgLagHours: 4,
+        desc: 'SOL naik → Solana meme coins ikut pump dalam 2-6 jam',
+    },
+    'ton-ecosystem': {
+        name: 'TON / Telegram', emoji: '💎', color: '#0088CC',
+        leader: 'the-open-network', leaderCgId: 'the-open-network',
+        followers: ['dogs-1','not','hamster-kombat','gram'],
+        followerSymbols: ['DOGS','NOT','HMSTR','GRAM'],
+        tags: ['telegram','gaming','social'], avgLagHours: 6,
+        desc: 'TON naik → mini-app tokens (DOGS, NOT, HMSTR) ikut',
+    },
+    'ai-agents': {
+        name: 'AI Agents / Base', emoji: '🤖', color: '#8B5CF6',
+        leader: 'virtuals-protocol', leaderCgId: 'virtuals-protocol',
+        followers: ['luna-by-virtuals','game-by-virtuals','aixbt-by-virtuals','ai16z','zerebro','goat'],
+        followerSymbols: ['LUNA','GAME','AIXBT','AI16Z','ZEREBRO','GOAT'],
+        tags: ['ai','agents','base'], avgLagHours: 3,
+        desc: 'VIRTUAL naik → AI agent tokens ikut dalam 2-4 jam',
+    },
+    'ethereum-defi': {
+        name: 'Ethereum DeFi', emoji: 'Ξ', color: '#627EEA',
+        leader: 'ethereum', leaderCgId: 'ethereum',
+        followers: ['uniswap','aave','chainlink','pendle','lido-dao','curve-dao-token'],
+        followerSymbols: ['UNI','AAVE','LINK','PENDLE','LDO','CRV'],
+        tags: ['defi','ethereum','restaking'], avgLagHours: 8,
+        desc: 'ETH naik → DeFi blue chips ikut dengan lag 4-12 jam',
+    },
+    'hyperliquid': {
+        name: 'Hyperliquid', emoji: '⚡', color: '#00FF88',
+        leader: 'hyperliquid', leaderCgId: 'hyperliquid',
+        followers: ['purr-hyperliquid','hfun','ferocious'],
+        followerSymbols: ['PURR','HFUN','FEROCIOUS'],
+        tags: ['perp','defi','l1'], avgLagHours: 2,
+        desc: 'HYPE naik → HL ecosystem tokens ikut cepat',
+    },
+    'btc-season': {
+        name: 'BTC Dominance Play', emoji: '₿', color: '#F7931A',
+        leader: 'bitcoin', leaderCgId: 'bitcoin',
+        followers: ['solana','binancecoin','sui','aptos','near','avalanche-2'],
+        followerSymbols: ['SOL','BNB','SUI','APT','NEAR','AVAX'],
+        tags: ['l1','major','altcoin'], avgLagHours: 12,
+        desc: 'BTC sideways/turun dominance → liquidity rotasi ke L1 altcoin',
+    },
+    'sui-ecosystem': {
+        name: 'Sui Ecosystem', emoji: '💧', color: '#6FBCF0',
+        leader: 'sui', leaderCgId: 'sui',
+        followers: ['cetus-protocol','navi-protocol','bucket-protocol','scallop-2'],
+        followerSymbols: ['CETUS','NAVX','BUCK','SCA'],
+        tags: ['defi','move','l1'], avgLagHours: 5,
+        desc: 'SUI naik → Sui DeFi ecosystem ikut',
+    },
+    'injective-ecosystem': {
+        name: 'Injective', emoji: '🌊', color: '#00A3FF',
+        leader: 'injective-protocol', leaderCgId: 'injective-protocol',
+        followers: ['black-panther','ninja-protocol'],
+        followerSymbols: ['KAGE','NINJA'],
+        tags: ['defi','perp','cosmos'], avgLagHours: 6,
+        desc: 'INJ naik → INJ DeFi tokens ikut',
+    },
+};
+
+// In-memory rolling snapshot store (1h, 4h, 24h)
+const _narrativeHistory = {}; // { cgId: [{ts, price, volume, ch1h, ch24h}] }
+const NARRATIVE_HISTORY_MAX = 48; // keep 48 snapshots (~24h jika 30min interval)
+
+function updateNarrativeHistory(coins) {
+    const now = Date.now();
+    coins.forEach(c => {
+        if (!_narrativeHistory[c.id]) _narrativeHistory[c.id] = [];
+        _narrativeHistory[c.id].push({
+            ts: now, price: c.current_price,
+            volume: c.total_volume,
+            ch1h: c.price_change_percentage_1h_in_currency ?? 0,
+            ch24h: c.price_change_percentage_24h ?? 0,
+        });
+        // Keep rolling window
+        if (_narrativeHistory[c.id].length > NARRATIVE_HISTORY_MAX) {
+            _narrativeHistory[c.id].shift();
+        }
+    });
+}
+
+// Cross-correlation score: berapa kali follower ikut leader dalam 24h window
+function computeFollowProbability(leaderId, followerIds) {
+    const leaderHist = _narrativeHistory[leaderId] || [];
+    if (leaderHist.length < 3) return { probability: 0, avgLagGain: 0, dataPoints: 0 };
+
+    let followEvents = 0, totalGain = 0, checks = 0;
+    // Check: setiap kali leader ch1h > 3%, berapa % follower yang ikut positif?
+    leaderHist.forEach(snap => {
+        if (snap.ch1h > 3) {
+            checks++;
+            const followerFollowed = followerIds.filter(fid => {
+                const fHist = _narrativeHistory[fid] || [];
+                const near = fHist.find(h => Math.abs(h.ts - snap.ts) < 2 * 3600_000);
+                return near && near.ch1h > 1;
+            });
+            followEvents += followerFollowed.length;
+            totalGain += followerFollowed.length > 0 ?
+                (followerIds.map(fid => {
+                    const fHist = _narrativeHistory[fid] || [];
+                    const near = fHist.find(h => Math.abs(h.ts - snap.ts) < 2 * 3600_000);
+                    return near?.ch1h ?? 0;
+                }).reduce((a, b) => a + b, 0) / followerIds.length) : 0;
+        }
+    });
+
+    const probability = checks > 0 ? Math.round((followEvents / (checks * followerIds.length)) * 100) : 0;
+    const avgLagGain  = checks > 0 ? +(totalGain / Math.max(checks, 1)).toFixed(2) : 0;
+    return { probability, avgLagGain, dataPoints: leaderHist.length };
+}
+
+// Compute AI signal score per narrative
+function computeNarrativeScore(leaderData, followerDataArr) {
+    if (!leaderData) return 0;
+    const volAccel = Math.min(leaderData.total_volume / Math.max(leaderData.market_cap * 0.02, 1), 5);
+    const momentumScore = Math.max(0, leaderData.price_change_percentage_24h ?? 0) / 20;
+    const followerMomentum = followerDataArr.length > 0
+        ? followerDataArr.reduce((s, f) => s + Math.max(0, f?.price_change_percentage_24h ?? 0), 0) / followerDataArr.length / 15
+        : 0;
+    const liquidityScore = Math.min((leaderData.total_volume / Math.max(leaderData.market_cap, 1)) * 10, 1);
+
+    const score = Math.round(
+        (volAccel * 0.25 + momentumScore * 0.30 + followerMomentum * 0.25 + liquidityScore * 0.20) * 100
+    );
+    return Math.min(score, 100);
+}
+
+// Cache for narrative overview
+let _narrativeCache = null, _narrativeCacheTs = 0;
+const NARRATIVE_TTL = 3 * 60_000; // 3 menit
+
+app.get('/api/narrative/overview', async (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    const force = req.query.refresh === '1';
+    if (!force && _narrativeCache && (Date.now() - _narrativeCacheTs) < NARRATIVE_TTL) {
+        return res.json({ ok: true, cached: true, ..._narrativeCache });
+    }
+
+    try {
+        // Collect all unique IDs from narrative map
+        const allNarrativeIds = [...new Set(
+            Object.values(NARRATIVE_MAP).flatMap(n => [n.leaderCgId, ...n.followers])
+        )];
+        const chunks = [];
+        for (let i = 0; i < allNarrativeIds.length; i += 100) chunks.push(allNarrativeIds.slice(i, i + 100));
+
+        const pages = await Promise.allSettled(chunks.map(ids =>
+            fetch(
+                `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${ids.join(',')}&price_change_percentage=1h,24h,7d&sparkline=false&per_page=100`,
+                { headers: { 'Accept': 'application/json' }, signal: AbortSignal.timeout(15000) }
+            ).then(r => r.ok ? r.json() : [])
+        ));
+        let coins = [];
+        pages.forEach(p => { if (p.status === 'fulfilled' && Array.isArray(p.value)) coins.push(...p.value); });
+
+        // Update rolling history
+        updateNarrativeHistory(coins);
+
+        const coinMap = {};
+        coins.forEach(c => { coinMap[c.id] = c; });
+
+        // Compute narrative results
+        const narratives = Object.entries(NARRATIVE_MAP).map(([id, meta]) => {
+            const leaderData = coinMap[meta.leaderCgId];
+            const followerDataArr = meta.followers.map(fid => coinMap[fid]).filter(Boolean);
+
+            const score = computeNarrativeScore(leaderData, followerDataArr);
+            const followProb = computeFollowProbability(meta.leaderCgId, meta.followers);
+
+            // Leader momentum
+            const leaderCh24h = leaderData?.price_change_percentage_24h ?? 0;
+            const leaderCh1h  = leaderData?.price_change_percentage_1h_in_currency ?? 0;
+            const leaderVol   = leaderData?.total_volume ?? 0;
+            const leaderMcap  = leaderData?.market_cap ?? 0;
+
+            // Follower momentum
+            const followerMomentum = followerDataArr.length > 0
+                ? +(followerDataArr.reduce((s, f) => s + (f.price_change_percentage_24h ?? 0), 0) / followerDataArr.length).toFixed(2)
+                : 0;
+
+            // Active rotation signal
+            let rotationSignal = 'NEUTRAL';
+            if (leaderCh1h > 5 && followerMomentum < 2) rotationSignal = 'BREAKOUT_IMMINENT'; // leader pump, follower belum
+            else if (leaderCh24h > 8 && followerMomentum > 5) rotationSignal = 'ROTATION_ACTIVE'; // sudah ikut
+            else if (leaderCh24h > 4) rotationSignal = 'WARMING';
+            else if (leaderCh24h < -5) rotationSignal = 'COOLING';
+
+            // Top followers sorted by score potential
+            const followerDetails = followerDataArr.map(f => {
+                const fCh24h = f.price_change_percentage_24h ?? 0;
+                const fCh1h  = f.price_change_percentage_1h_in_currency ?? 0;
+                const lag    = leaderCh24h - fCh24h; // positive = follower belum ikut (opportunity)
+                const volMc  = f.market_cap > 0 ? +(f.total_volume / f.market_cap * 100).toFixed(1) : 0;
+                return {
+                    id: f.id, symbol: f.symbol?.toUpperCase(), name: f.name,
+                    price: f.current_price, ch1h: +fCh1h.toFixed(2), ch24h: +fCh24h.toFixed(2),
+                    volume: f.total_volume, marketCap: f.market_cap,
+                    lagScore: +lag.toFixed(2), // makin positif = makin belum pump
+                    volMcRatio: volMc,
+                    potential: lag > 3 && fCh1h < 2 ? 'HIGH' : lag > 0 ? 'MEDIUM' : 'LOW',
+                };
+            }).sort((a, b) => b.lagScore - a.lagScore);
+
+            return {
+                id, ...meta,
+                score,
+                rotationSignal,
+                followProbability: followProb.probability,
+                avgLagGain: followProb.avgLagGain,
+                leader: {
+                    id: meta.leaderCgId,
+                    symbol: leaderData?.symbol?.toUpperCase() ?? meta.leader.toUpperCase(),
+                    price: leaderData?.current_price ?? 0,
+                    ch1h: +leaderCh1h.toFixed(2),
+                    ch24h: +leaderCh24h.toFixed(2),
+                    ch7d: +(leaderData?.price_change_percentage_7d_in_currency ?? 0).toFixed(2),
+                    volume: leaderVol,
+                    marketCap: leaderMcap,
+                    volMcRatio: leaderMcap > 0 ? +(leaderVol / leaderMcap * 100).toFixed(1) : 0,
+                },
+                followerMomentum,
+                followers: followerDetails,
+            };
+        }).sort((a, b) => b.score - a.score);
+
+        // Top predicted movers (followers belum pump tapi leader sudah pump)
+        const predictions = [];
+        narratives.forEach(n => {
+            if (n.leader.ch1h > 3 || n.leader.ch24h > 5) {
+                n.followers.filter(f => f.potential === 'HIGH').forEach(f => {
+                    const entry  = f.price;
+                    const tp1    = +(entry * 1.10).toFixed(6);
+                    const tp2    = +(entry * 1.22).toFixed(6);
+                    const sl     = +(entry * 0.94).toFixed(6);
+                    const aiScore = Math.min(100, Math.round(
+                        (n.score * 0.3) + (n.leader.ch1h * 3) + (f.lagScore * 2) + (f.volMcRatio * 0.5)
+                    ));
+                    predictions.push({
+                        symbol: f.symbol, name: f.name, price: f.price,
+                        ch1h: f.ch1h, ch24h: f.ch24h,
+                        narrative: n.name, narrativeEmoji: n.emoji,
+                        leaderSymbol: n.leader.symbol, leaderCh1h: n.leader.ch1h,
+                        leaderCh24h: n.leader.ch24h,
+                        lagScore: f.lagScore, potential: f.potential,
+                        aiScore,
+                        entry, tp1, tp2, sl,
+                        reason: `${n.leader.symbol} +${n.leader.ch1h}% (1h) | ${f.symbol} lag: +${f.lagScore}% belum ikut`,
+                        avgLagHours: n.avgLagHours,
+                    });
+                });
+            }
+        });
+        predictions.sort((a, b) => b.aiScore - a.aiScore);
+
+        // Liquidity rotation: which narratives gaining volume fastest
+        const liquidityFlow = narratives.map(n => ({
+            id: n.id, name: n.name, emoji: n.emoji, color: n.color,
+            score: n.score,
+            leaderCh24h: n.leader.ch24h,
+            leaderVolMc: n.leader.volMcRatio,
+            followerMomentum: n.followerMomentum,
+            rotationSignal: n.rotationSignal,
+        })).sort((a, b) => b.score - a.score);
+
+        // Smart money signals: high vol + low ch24h (stealth accumulation)
+        const smartMoneySignals = coins
+            .filter(c => {
+                const volMc = c.market_cap > 0 ? c.total_volume / c.market_cap : 0;
+                const ch24h = c.price_change_percentage_24h ?? 0;
+                return volMc > 0.1 && Math.abs(ch24h) < 4 && c.market_cap > 50_000_000;
+            })
+            .map(c => {
+                const volMc = +(c.total_volume / c.market_cap * 100).toFixed(1);
+                const ecoId = Object.keys(NARRATIVE_MAP).find(k =>
+                    NARRATIVE_MAP[k].followers.includes(c.id) || NARRATIVE_MAP[k].leaderCgId === c.id
+                );
+                return {
+                    id: c.id, symbol: c.symbol?.toUpperCase(), name: c.name,
+                    price: c.current_price,
+                    ch24h: +(c.price_change_percentage_24h ?? 0).toFixed(2),
+                    ch1h: +(c.price_change_percentage_1h_in_currency ?? 0).toFixed(2),
+                    volMcRatio: volMc,
+                    volume: c.total_volume,
+                    marketCap: c.market_cap,
+                    narrative: ecoId ? NARRATIVE_MAP[ecoId].name : '—',
+                    signal: 'STEALTH_ACCUMULATION',
+                };
+            })
+            .sort((a, b) => b.volMcRatio - a.volMcRatio)
+            .slice(0, 10);
+
+        const result = {
+            narratives,
+            predictions: predictions.slice(0, 15),
+            liquidityFlow,
+            smartMoneySignals,
+            topNarrative: narratives[0],
+            breakoutImminent: narratives.filter(n => n.rotationSignal === 'BREAKOUT_IMMINENT'),
+            fetchedAt: new Date().toISOString(),
+            totalCoins: coins.length,
+        };
+
+        _narrativeCache   = result;
+        _narrativeCacheTs = Date.now();
+
+        // ── Telegram Alert jika ada BREAKOUT_IMMINENT ──────────
+        try { _tgConfig = { ..._tgConfig, ...JSON.parse(fs.readFileSync(TG_CONFIG_FILE, 'utf8')) }; } catch(_) {}
+        if (_tgConfig.botToken && _tgConfig.chatId && result.breakoutImminent.length > 0) {
+            const bo = result.breakoutImminent[0];
+            const top3preds = result.predictions.slice(0, 3);
+            if (top3preds.length > 0 && (Date.now() - _whaleAlertTs) > 20 * 60_000) {
+                const lines = top3preds.map((p, i) => {
+                    const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉';
+                    const fmt = v => v < 0.001 ? v.toFixed(6) : v < 1 ? v.toFixed(4) : v.toFixed(2);
+                    return `${medal} <b>${p.symbol}</b> (${p.narrativeEmoji} ${p.narrative})\n` +
+                        `💡 ${p.reason}\n` +
+                        `📈 Entry: <b>$${fmt(p.entry)}</b>  🎯 TP1: $${fmt(p.tp1)} (+10%)  TP2: $${fmt(p.tp2)} (+22%)\n` +
+                        `🛑 SL: $${fmt(p.sl)} (-6%)  ⏱ Lag ~${p.avgLagHours}h  🤖 AI Score: <b>${p.aiScore}/100</b>`;
+                }).join('\n━━━━━━━━━━━━━━━━━━\n');
+
+                const msg = `🧠 <b>NARRATIVE ROTATION ALERT</b>\n` +
+                    `🕐 ${new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })} WIB\n` +
+                    `⚡ <b>${bo.leader.symbol}</b> pump +${bo.leader.ch1h}% (1h) — followers belum ikut!\n\n` +
+                    `🎯 <b>PREDICTED NEXT MOVERS:</b>\n━━━━━━━━━━━━━━━━━━\n` +
+                    `${lines}\n` +
+                    `━━━━━━━━━━━━━━━━━━\n` +
+                    `⚠️ <i>AI prediction. DYOR. Bukan financial advice.</i>`;
+                sendTelegram(msg).catch(() => {});
+                _whaleAlertTs = Date.now();
+            }
+        }
+
+        res.json({ ok: true, cached: false, ...result });
+    } catch (e) {
+        console.error('/api/narrative/overview error:', e.message);
+        if (_narrativeCache) return res.json({ ok: true, cached: true, stale: true, ..._narrativeCache });
+        res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// Narrative predictions only (lightweight)
+app.get('/api/narrative/predictions', async (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    if (_narrativeCache) return res.json({ ok: true, predictions: _narrativeCache.predictions, fetchedAt: _narrativeCache.fetchedAt });
+    res.json({ ok: false, message: 'No data yet, call /api/narrative/overview first' });
+});
+
+// CORS preflight
+app.options('/api/narrative/overview',    (req, res) => { res.setHeader('Access-Control-Allow-Origin', '*'); res.sendStatus(200); });
+app.options('/api/narrative/predictions', (req, res) => { res.setHeader('Access-Control-Allow-Origin', '*'); res.sendStatus(200); });
+
+// ══════════════════════════════════════════════════════════════
 //  SCHEDULED WHALE ALERT — jalan setiap 30 menit di background
 //  Tidak perlu buka browser — cukup proxy server tetap hidup
 // ══════════════════════════════════════════════════════════════
