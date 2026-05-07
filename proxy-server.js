@@ -2432,7 +2432,7 @@ function computeWhaleScore(c) {
 
 let _whaleAccCache   = null;
 let _whaleAccCacheTs = 0;
-let _whaleAlertTs    = 0;   // throttle: max 1 alert per 2 jam
+let _whaleAlertTs    = 0;   // throttle: max 1 alert per 30 menit
 const WHALE_ACC_TTL  = 4 * 60_000;
 
 app.get('/api/whale-accumulation', async (req, res) => {
@@ -2498,51 +2498,65 @@ app.get('/api/whale-accumulation', async (req, res) => {
         // ── Telegram Alert: Whale Activity ─────────────────────
         try { _tgConfig = { ..._tgConfig, ...JSON.parse(fs.readFileSync(TG_CONFIG_FILE, 'utf8')) }; } catch(_) {}
         const now2h = Date.now();
-        if (_tgConfig.botToken && _tgConfig.chatId && accumulating.length > 0 && (now2h - _whaleAlertTs) > 2 * 60 * 60_000) {
+        if (_tgConfig.botToken && _tgConfig.chatId && accumulating.length > 0 && (now2h - _whaleAlertTs) > 30 * 60_000) {
             _whaleAlertTs = now2h;
+            // Ambil TOP 3 saja — yang score tertinggi dan sinyal paling kuat
+            const top3 = accumulating
+                .sort((a, b) => b.score - a.score)
+                .slice(0, 3);
             const fmt = p => !p ? '–' : p < 0.001 ? p.toFixed(6) : p < 0.01 ? p.toFixed(5) : p < 1 ? p.toFixed(4) : p < 100 ? p.toFixed(3) : p.toFixed(2);
-            const topLines = accumulating.slice(0, 5).map(t => {
+            const topLines = top3.map((t, i) => {
                 const volPct   = t.volMcRatio ? (t.volMcRatio * 100).toFixed(1) : '–';
                 const chg      = t.ch24h >= 0 ? `+${t.ch24h}%` : `${t.ch24h}%`;
                 const chgEmoji = t.ch24h >= 2 ? '📈' : t.ch24h <= -3 ? '📉' : '↔️';
                 const sigMain  = t.signals?.[0] || '—';
-                // Determine narrative
+                const entry    = t.price;
+                const tp1      = entry * 1.08;
+                const tp2      = entry * 1.18;
+                const sl       = entry * 0.95;
+                // Rank medal
+                const medal    = i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉';
+                // Narrative
                 let narrative = '';
                 if (t.signals?.some(s => s.includes('Stealth')))
-                    narrative = `Volume tinggi tapi harga nyaris flat — whale diam-diam akumulasi.`;
+                    narrative = `Volume meledak tapi harga nyaris flat — whale diam-diam akumulasi.`;
                 else if (t.signals?.some(s => s.includes('Absorption')))
-                    narrative = `Harga turun tapi volume besar — seller diaborsi oleh big buyer.`;
+                    narrative = `Harga turun tapi vol besar — seller sedang diaborsi big buyer.`;
                 else if (t.signals?.some(s => s.includes('Near 24h Low')))
-                    narrative = `Harga mendekati support 24h dengan volume signifikan — potensi reversal.`;
+                    narrative = `Mendekati support 24h dengan volume tinggi — potensi reversal kuat.`;
                 else if (t.signals?.some(s => s.includes('Reversal')))
-                    narrative = `1h mulai reversal sementara 24h masih merah — entry timing menarik.`;
+                    narrative = `1h mulai hijau sementara 24h masih merah — early entry window.`;
                 else
-                    narrative = `Aktivitas volume anomali terdeteksi — perlu dipantau.`;
+                    narrative = `Volume anomali terdeteksi — aktivitas besar di balik layar.`;
 
                 return `━━━━━━━━━━━━━━━━━━\n` +
-                       `🐋 <b>${t.symbol}</b> (${t.ecoSymbol})   Score: <b>${t.score}/100</b>\n` +
-                       `${chgEmoji} Harga: $${fmt(t.price)}  <b>${chg}</b>\n` +
-                       `📌 <b>${sigMain}</b>\n\n` +
+                       `${medal} <b>${t.symbol}</b> (${t.ecoSymbol})   Score: <b>${t.score}/100</b>\n` +
+                       `${chgEmoji} $${fmt(entry)}  <b>${chg}</b>\n` +
+                       `📌 ${sigMain}\n\n` +
                        `💡 <i>${narrative}</i>\n\n` +
+                       `📈 Entry: <b>$${fmt(entry)}</b>\n` +
+                       `🎯 TP1: $${fmt(tp1)} <i>(+8%)</i>  TP2: $${fmt(tp2)} <i>(+18%)</i>\n` +
+                       `🛑 SL: $${fmt(sl)} <i>(-5%)</i>\n` +
                        `📊 Vol/MCap: <b>${volPct}%</b>`;
             }).join('\n');
 
-            // Distribution candidates (price up + high vol = possible sell)
+            // Distribution candidates
             const distributing = scored.filter(t =>
                 t.ch24h > 8 && t.volMcRatio > 0.3 && t.type !== 'ACCUMULATING'
             ).slice(0, 3);
             let distLines = '';
             if (distributing.length > 0) {
-                distLines = `\n\n⚠️ <b>DISTRIBUSI TERDETEKSI</b> (harga naik + vol tinggi — whale mungkin jual)\n` +
+                distLines = `\n\n⚠️ <b>POTENSI DISTRIBUSI</b>\n` +
+                    `<i>Harga naik tajam + vol besar = whale mungkin jual ke retailer</i>\n` +
                     distributing.map(t =>
-                        `• <b>${t.symbol}</b> +${t.ch24h}% | Vol/MCap: ${(t.volMcRatio*100).toFixed(1)}% — <i>Hati-hati, bisa jebakan bull</i>`
+                        `• <b>${t.symbol}</b> +${t.ch24h}% | Vol/MCap: ${(t.volMcRatio*100).toFixed(1)}% — <i>Jangan FOMO!</i>`
                     ).join('\n');
             }
 
             const whaleMsg =
-                `🐋 <b>WHALE ACTIVITY ALERT</b>\n` +
+                `🐋 <b>WHALE RADAR — TOP 3 TERBAIK</b>\n` +
                 `🕐 ${new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })} WIB\n` +
-                `📦 ${accumulating.length} token terdeteksi akumulasi\n\n` +
+                `� ${accumulating.length} akumulasi terdeteksi — ini yang terkuat:\n\n` +
                 `${topLines}${distLines}\n` +
                 `━━━━━━━━━━━━━━━━━━\n` +
                 `⚠️ <i>Bukan financial advice. DYOR.</i>`;
