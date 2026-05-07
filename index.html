@@ -784,8 +784,13 @@
         </div>
 
         <!-- Market Regime + Fear & Greed + Watchlist -->
-        <div style="padding:0 12px 32px;">
+        <div style="padding:0 12px 20px;">
             <div id="marketRegimePanel"></div>
+        </div>
+
+        <!-- Telegram Alert Settings -->
+        <div style="padding:0 12px 32px;">
+            <div id="telegramSettingsPanel"></div>
         </div>
 
         </div><!-- /#home -->
@@ -5145,6 +5150,7 @@
     <script src="whale-accumulation.js"></script>
     <script src="signal-accuracy.js"></script>
     <script src="market-regime.js"></script>
+    <script src="telegram-settings.js"></script>
     <script src="home-matrix-bg.js?v=36"></script>
     <script src="home-epic-animations.js?v=36"></script>
     <script src="home-hologram-3d.js?v=36"></script>
@@ -6556,12 +6562,14 @@ ${rnd(CAT_OUTROS)}`,
             if (typeof WhaleAccumulation !== 'undefined') WhaleAccumulation.init();
             if (typeof SignalAccuracy !== 'undefined') SignalAccuracy.init();
             if (typeof MarketRegime !== 'undefined') MarketRegime.init();
+            if (typeof TelegramSettings !== 'undefined') TelegramSettings.init();
         });
         if (document.readyState !== 'loading') {
             if (typeof EcosystemPump !== 'undefined') EcosystemPump.init();
             if (typeof WhaleAccumulation !== 'undefined') WhaleAccumulation.init();
             if (typeof SignalAccuracy !== 'undefined') SignalAccuracy.init();
             if (typeof MarketRegime !== 'undefined') MarketRegime.init();
+            if (typeof TelegramSettings !== 'undefined') TelegramSettings.init();
         }
         // Init Signal Terminal saat tab diklik — lazy init
         (function () {
