@@ -786,6 +786,11 @@
             </div>
         </div>
 
+        <!-- AI Narrative Intelligence -->
+        <div style="padding:0 12px 20px;">
+            <div id="narrativeIntelligencePanel"></div>
+        </div>
+
         <!-- Signal Accuracy Tracker -->
         <div style="padding:0 12px 20px;">
             <div id="signalAccPanel"></div>
@@ -6548,11 +6553,11 @@ ${rnd(CAT_OUTROS)}`,
             });
         })();
 
-        // Init Narrative Intelligence saat tab pertama kali dibuka
+        // Init Narrative Intelligence saat home tab dibuka
         (function () {
             let _narrativeInited = false;
             document.addEventListener('tabchange', function (e) {
-                if (e.detail === 'narrative-intelligence' && !_narrativeInited) {
+                if (e.detail === 'home' && !_narrativeInited) {
                     _narrativeInited = true;
                     if (typeof NarrativeIntelligence !== 'undefined') NarrativeIntelligence.init();
                 }
@@ -6592,6 +6597,7 @@ ${rnd(CAT_OUTROS)}`,
             if (typeof SignalAccuracy !== 'undefined') SignalAccuracy.init();
             if (typeof MarketRegime !== 'undefined') MarketRegime.init();
             if (typeof TelegramSettings !== 'undefined') TelegramSettings.init();
+            if (typeof NarrativeIntelligence !== 'undefined') NarrativeIntelligence.init();
         });
         if (document.readyState !== 'loading') {
             if (typeof EcosystemPump !== 'undefined') EcosystemPump.init();
@@ -6599,6 +6605,7 @@ ${rnd(CAT_OUTROS)}`,
             if (typeof SignalAccuracy !== 'undefined') SignalAccuracy.init();
             if (typeof MarketRegime !== 'undefined') MarketRegime.init();
             if (typeof TelegramSettings !== 'undefined') TelegramSettings.init();
+            if (typeof NarrativeIntelligence !== 'undefined') NarrativeIntelligence.init();
         }
         // Init Signal Terminal saat tab diklik — lazy init
         (function () {
