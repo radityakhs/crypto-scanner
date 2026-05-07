@@ -803,23 +803,69 @@
 
         </div><!-- /#home -->
 
-        <!-- ── Telegram Floating Button + Modal ── -->
-        <div id="tg-fab" onclick="TelegramSettings.openModal()" title="Telegram Alert Settings"
-            style="position:fixed;bottom:24px;right:24px;z-index:9999;
-                   width:52px;height:52px;border-radius:50%;
-                   background:linear-gradient(135deg,#2563eb,#7c3aed);
-                   box-shadow:0 4px 20px #2563eb66;
-                   display:flex;align-items:center;justify-content:center;
-                   cursor:pointer;transition:transform .2s,box-shadow .2s;
-                   font-size:22px;user-select:none;"
-            onmouseenter="this.style.transform='scale(1.12)';this.style.boxShadow='0 6px 28px #7c3aed88'"
-            onmouseleave="this.style.transform='scale(1)';this.style.boxShadow='0 4px 20px #2563eb66'">
-            📬
-            <span id="tg-fab-dot" style="position:absolute;top:6px;right:6px;
-                width:10px;height:10px;border-radius:50%;background:#22c55e;
-                box-shadow:0 0 6px #22c55e;display:none;
-                border:2px solid #111"></span>
+        <!-- ── Floating Action Button (FAB) Menu ── -->
+        <style>
+        #fab-menu { position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;flex-direction:column;align-items:flex-end;gap:10px; }
+        #fab-main { width:54px;height:54px;border-radius:50%;
+            background:linear-gradient(135deg,#2563eb,#7c3aed);
+            box-shadow:0 4px 20px #2563eb66;
+            display:flex;align-items:center;justify-content:center;
+            cursor:pointer;transition:transform .2s,box-shadow .2s;
+            font-size:22px;user-select:none;border:none;color:#fff;
+            position:relative; }
+        #fab-main:hover { transform:scale(1.1);box-shadow:0 6px 28px #7c3aed88; }
+        #fab-main.open { transform:rotate(45deg); }
+        #tg-fab-dot { position:absolute;top:6px;right:6px;
+            width:10px;height:10px;border-radius:50%;background:#22c55e;
+            box-shadow:0 0 6px #22c55e;display:none;border:2px solid #111; }
+        #fab-options { display:none;flex-direction:column;align-items:flex-end;gap:8px; }
+        #fab-options.open { display:flex; }
+        .fab-opt { display:flex;align-items:center;gap:10px;cursor:pointer; }
+        .fab-opt-label { background:#1e293b;border:1px solid #334155;
+            color:#e2e8f0;font-size:12px;font-weight:600;
+            padding:6px 12px;border-radius:8px;white-space:nowrap;
+            box-shadow:0 2px 10px #0006; }
+        .fab-opt-btn { width:40px;height:40px;border-radius:50%;border:none;
+            cursor:pointer;font-size:18px;display:flex;align-items:center;
+            justify-content:center;box-shadow:0 2px 10px #0004; }
+        .fab-opt-btn.tg { background:linear-gradient(135deg,#2563eb,#1d4ed8); }
+        .fab-opt-btn.ai { background:linear-gradient(135deg,#7c3aed,#a855f7); }
+        </style>
+
+        <div id="fab-menu">
+            <div id="fab-options">
+                <!-- AI Chat -->
+                <div class="fab-opt" onclick="AiChat.open();_fabClose()">
+                    <div class="fab-opt-label">🤖 AI Analyst</div>
+                    <button class="fab-opt-btn ai">🤖</button>
+                </div>
+                <!-- Telegram Settings -->
+                <div class="fab-opt" onclick="TelegramSettings.openModal();_fabClose()">
+                    <div class="fab-opt-label">📬 Telegram Alert</div>
+                    <button class="fab-opt-btn tg">📬</button>
+                </div>
+            </div>
+            <button id="fab-main" onclick="_fabToggle()" title="Menu">
+                ✦
+                <span id="tg-fab-dot"></span>
+            </button>
         </div>
+
+        <script>
+        function _fabToggle() {
+            const btn = document.getElementById('fab-main');
+            const opts = document.getElementById('fab-options');
+            btn.classList.toggle('open');
+            opts.classList.toggle('open');
+        }
+        function _fabClose() {
+            document.getElementById('fab-main')?.classList.remove('open');
+            document.getElementById('fab-options')?.classList.remove('open');
+        }
+        document.addEventListener('click', function(e) {
+            if (!document.getElementById('fab-menu')?.contains(e.target)) _fabClose();
+        });
+        </script>
 
         <!-- Telegram Modal -->
         <div id="tg-modal-overlay" onclick="TelegramSettings.closeModal()"
@@ -5206,6 +5252,7 @@
     <script src="signal-accuracy.js"></script>
     <script src="market-regime.js"></script>
     <script src="telegram-settings.js"></script>
+    <script src="ai-chat.js"></script>
     <script src="home-matrix-bg.js?v=36"></script>
     <script src="home-epic-animations.js?v=36"></script>
     <script src="home-hologram-3d.js?v=36"></script>
@@ -6630,6 +6677,7 @@ ${rnd(CAT_OUTROS)}`,
             if (typeof MarketRegime !== 'undefined') MarketRegime.init();
             if (typeof TelegramSettings !== 'undefined') TelegramSettings.init();
             if (typeof NarrativeIntelligence !== 'undefined') NarrativeIntelligence.init();
+            if (typeof AiChat !== 'undefined') AiChat.init();
         });
         if (document.readyState !== 'loading') {
             if (typeof EcosystemPump !== 'undefined') EcosystemPump.init();
@@ -6638,6 +6686,7 @@ ${rnd(CAT_OUTROS)}`,
             if (typeof MarketRegime !== 'undefined') MarketRegime.init();
             if (typeof TelegramSettings !== 'undefined') TelegramSettings.init();
             if (typeof NarrativeIntelligence !== 'undefined') NarrativeIntelligence.init();
+            if (typeof AiChat !== 'undefined') AiChat.init();
         }
         // Init Signal Terminal saat tab diklik — lazy init
         (function () {

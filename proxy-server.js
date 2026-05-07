@@ -25,6 +25,7 @@ const OKX_BASE     = 'https://www.okx.com';
 const API_KEY      = process.env.OKX_API_KEY;
 const SECRET_KEY   = process.env.OKX_SECRET_KEY;
 const PASSPHRASE   = process.env.OKX_PASSPHRASE;
+const GROQ_KEY     = process.env.GROQ_API_KEY || '';
 
 // ── Keamanan: hanya terima dari localhost ─────────────────────
 app.use(cors({
@@ -1898,6 +1899,78 @@ Jangan tulis "Tweet 1:", "Variasi:", atau penjelasan apapun.`;
 
 // GET /api/moon — moon phase info saja
 app.get('/api/moon', (_, res) => res.json(getMoonPhase()));
+
+// ─── POST /api/ai-chat ─────────────────────────────────────────────────────
+// Chat AI analyst untuk crypto & saham — powered by Groq (free)
+// Body: { messages: [{role:'user'|'assistant', content:'...'}], apiKey?: '...' }
+app.post('/api/ai-chat', express.json(), async (req, res) => {
+    const key = req.body?.apiKey || GROQ_KEY;
+    if (!key) {
+        return res.status(503).json({ ok: false, error: 'GROQ_API_KEY belum diset. Masukkan API key di pengaturan AI Chat.' });
+    }
+    const userMessages = (req.body?.messages || []).slice(-20); // max 20 pesan terakhir
+    if (!userMessages.length) return res.status(400).json({ ok: false, error: 'No messages' });
+
+    const systemPrompt = `Kamu adalah AI Analyst profesional khusus crypto dan saham. Nama kamu adalah "CryptoMind AI".
+
+Kemampuanmu:
+- Analisa teknikal (support/resistance, trend, momentum, RSI, MACD, volume)
+- Analisa fundamental (tokenomics, use case, team, roadmap)
+- Analisa on-chain (whale movement, holder distribution)  
+- Makro ekonomi (Fed rate, inflasi, DXY, risk-on/off)
+- Saham AS dan Indonesia (IDX)
+- Rekomendasi entry, target price (TP), dan stop loss (SL)
+
+Aturan jawaban:
+- Jawab dalam Bahasa Indonesia yang profesional tapi mudah dipahami
+- Selalu sertakan disclaimer "BUKAN saran keuangan, lakukan riset sendiri" saat memberi rekomendasi spesifik
+- Gunakan emoji secukupnya agar mudah dibaca
+- Format jawaban dengan heading jika perlu (gunakan **bold**)
+- Jika ada data harga, estimasi berdasarkan pengetahuan terbaru kamu
+- Jawab dengan singkat dan padat kecuali diminta detail`;
+
+    try {
+        const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${key}`,
+            },
+            body: JSON.stringify({
+                model: 'llama3-70b-8192',
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    ...userMessages,
+                ],
+                max_tokens: 1024,
+                temperature: 0.7,
+            }),
+        });
+        if (!groqRes.ok) {
+            const errText = await groqRes.text();
+            return res.status(groqRes.status).json({ ok: false, error: errText });
+        }
+        const data = await groqRes.json();
+        const reply = data.choices?.[0]?.message?.content || '';
+        res.json({ ok: true, reply, model: data.model, usage: data.usage });
+    } catch (e) {
+        res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ─── GET/POST /api/ai-chat-config ──────────────────────────────────────────
+// Simpan/baca Groq API key untuk AI Chat
+let _aiChatKey = GROQ_KEY;
+app.get('/api/ai-chat-config', (_, res) => {
+    res.json({ ok: true, hasKey: !!_aiChatKey });
+});
+app.post('/api/ai-chat-config', express.json(), (req, res) => {
+    const { apiKey } = req.body || {};
+    if (apiKey) _aiChatKey = apiKey.trim();
+    res.json({ ok: true, hasKey: !!_aiChatKey });
+});
+
+
 
 // ══════════════════════════════════════════════════════════════
 //  ECOSYSTEM MOMENTUM DETECTOR  v2
