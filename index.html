@@ -10253,14 +10253,14 @@ ${rnd(CAT_OUTROS)}`,
                 const y = pxY(p);
                 ctx.beginPath(); ctx.moveTo(PAD.left, y); ctx.lineTo(W - PAD.right, y); ctx.stroke();
                 // Price label
-                ctx.fillStyle = '#2d3f55'; ctx.font = '10px monospace';
+                ctx.fillStyle = '#94a3b8'; ctx.font = '10px monospace';
                 ctx.textAlign = 'left';
                 ctx.fillText('$'+fmtP(p), W - PAD.right + 4, y + 3);
             }
 
             // ── Time axis ───────────────────────────────────────────────────
             const lblStep = Math.max(1, Math.floor(cvs.length / 8));
-            ctx.fillStyle = '#2d3f55'; ctx.font = '9px monospace'; ctx.textAlign = 'center';
+            ctx.fillStyle = '#94a3b8'; ctx.font = '9px monospace'; ctx.textAlign = 'center';
             cvs.forEach((c, i) => {
                 if (i % lblStep === 0) {
                     ctx.fillText(fmtTime(c.time, _tf), pxX(i), H - PAD.bottom + 14);
