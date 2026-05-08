@@ -12610,6 +12610,21 @@ img[src*="ic_dev"],        img[src*="ic_code"] {
     letter-spacing:.7px; margin-bottom:8px; }
 .hcs-panel-empty { font-size:.75rem; color:#334155; text-align:center; padding:10px 0; }
 
+/* MTF Confluence */
+.mtf-row { display:flex; align-items:center; gap:6px; padding:5px 0; border-bottom:1px solid #0f172a; }
+.mtf-row:last-child { border-bottom:none; }
+.mtf-tf { font-size:.7rem; font-weight:700; color:#94a3b8; min-width:28px; }
+.mtf-badge { font-size:.68rem; font-weight:800; padding:2px 8px; border-radius:20px; white-space:nowrap; }
+.mtf-badge.bull  { background:#14532d; color:#4ade80; border:1px solid #16a34a; }
+.mtf-badge.bear  { background:#450a0a; color:#f87171; border:1px solid #dc2626; }
+.mtf-badge.range { background:#1e293b; color:#94a3b8; border:1px solid #334155; }
+.mtf-badge.loading { background:#1e293b; color:#475569; border:1px solid #1e293b; }
+.mtf-score { font-size:.65rem; color:#475569; margin-left:auto; }
+.mtf-confluence { margin-top:8px; padding:6px 10px; border-radius:8px; font-size:.7rem; font-weight:700; text-align:center; }
+.mtf-confluence.bullish { background:#14532d33; border:1px solid #16a34a55; color:#4ade80; }
+.mtf-confluence.bearish { background:#450a0a33; border:1px solid #dc262655; color:#f87171; }
+.mtf-confluence.mixed   { background:#42200633; border:1px solid #d9770655; color:#fbbf24; }
+
 /* FVG list items */
 .hcs-fvg-item { background:rgba(255,255,255,.03); border-radius:6px; padding:8px 10px;
     margin-bottom:5px; border-left:3px solid; font-size:.75rem; cursor:default; }

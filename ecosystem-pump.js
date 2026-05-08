@@ -80,6 +80,8 @@ const EcosystemPump = (() => {
 .ep-rec.sell { background:#450a0a; color:#f87171; border:1px solid #dc2626; }
 .ep-rec.watch{ background:#1e293b; color:#94a3b8; border:1px solid #334155; }
 .ep-sig-desc { font-size:10px; color:#64748b; max-width:160px; text-align:right; line-height:1.4; }
+.ep-ai-btn { background:linear-gradient(135deg,#6d28d9,#4c1d95); border:1px solid #7c3aed; color:#c4b5fd; border-radius:8px; padding:2px 8px; font-size:10px; font-weight:700; cursor:pointer; white-space:nowrap; transition:all .15s; }
+.ep-ai-btn:hover { background:linear-gradient(135deg,#7c3aed,#5b21b6); color:#fff; transform:scale(1.05); }
 @media(max-width:600px){.ep-l1-prices{display:none}.ep-table th:nth-child(3),.ep-table td:nth-child(3),.ep-table th:nth-child(5),.ep-table td:nth-child(5){display:none}}
         `;
         document.head.appendChild(s);
@@ -123,6 +125,7 @@ const EcosystemPump = (() => {
                 <div class="ep-sig-cell">
                     <span class="ep-rec ${rec.cls}">${rec.label}</span>
                     ${t.signalDesc ? `<span class="ep-sig-desc">${t.signalDesc}</span>` : ''}
+                    <button class="ep-ai-btn" onclick="EcosystemPump._analyzeToken(${JSON.stringify(t).replace(/"/g,'&quot;')})">🤖 AI</button>
                 </div>
             </td>
         </tr>`;
@@ -237,5 +240,21 @@ const EcosystemPump = (() => {
         _timer = setInterval(()=>refresh(), 3*60_000);
     }
 
-    return { init, refresh, toggleCard, setFilter };
+    function analyzeToken(t) {
+        // Build context message untuk AI Chat
+        const ch1h  = t.ch1h  != null ? (t.ch1h >=0?'+':'')+t.ch1h.toFixed(2)+'%' : '–';
+        const ch24h = t.ch24h != null ? (t.ch24h>=0?'+':'')+t.ch24h.toFixed(2)+'%' : '–';
+        const price = t.price != null ? '$'+(t.price<1?t.price.toFixed(4):t.price.toFixed(2)) : '–';
+        const signal = t.signal === 'LONG' ? '✅ BUY' : t.signal === 'AVOID' ? '🚫 SELL' : t.signal === 'WAIT' ? '⏳ WAIT' : '👀 WATCH';
+        const vol    = t.hasHighVol ? 'Volume sangat tinggi 🔥🔥' : t.hasVolSpike ? 'Volume spike 🔥' : 'Volume normal';
+        const msg = `Tolong analisa token berikut:\n\n**${t.symbol}** (${t.name})\n• Harga: ${price}\n• Perubahan 1h: ${ch1h}\n• Perubahan 24h: ${ch24h}\n• Lag Score: ${(t.lagScore24h??0).toFixed(1)}%\n• Volume: ${vol}\n• Sinyal: ${signal}\n${t.signalDesc ? `• Alasan: ${t.signalDesc}` : ''}\n\nApakah layak entry sekarang? Berikan rekomendasi entry, stop loss, dan target profit.`;
+
+        if (typeof AiChat !== 'undefined') {
+            AiChat.open(msg);
+        } else {
+            alert('AI Chat belum tersedia. Pastikan ai-chat.js sudah dimuat.');
+        }
+    }
+
+    return { init, refresh, toggleCard, setFilter, _analyzeToken: analyzeToken };
 })();

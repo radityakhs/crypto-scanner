@@ -135,11 +135,22 @@ const AiChat = (() => {
         document.head.appendChild(s);
     }
 
-    function open() {
+    function open(prefillMessage) {
         const overlay = document.getElementById('ac-modal-overlay');
         if (overlay) {
             overlay.classList.add('open');
-            checkConfig();
+            checkConfig().then(() => {
+                if (prefillMessage) {
+                    // Pre-fill textarea dan auto-send
+                    const ta = document.getElementById('ac-input');
+                    if (ta) {
+                        ta.value = prefillMessage;
+                        ta.dispatchEvent(new Event('input'));
+                        // Auto send setelah sebentar
+                        setTimeout(() => send(), 300);
+                    }
+                }
+            });
         }
     }
 

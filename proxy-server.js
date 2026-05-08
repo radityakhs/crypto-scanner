@@ -1970,10 +1970,110 @@ app.post('/api/ai-chat-config', express.json(), (req, res) => {
     res.json({ ok: true, hasKey: !!_aiChatKey });
 });
 
+// ─── PRICE ALERTS ──────────────────────────────────────────────────────────
+// In-memory alert store: { id, symbol, condition:'above'|'below', price, active, createdAt }
+let _priceAlerts = [];
+let _alertIdSeq  = 1;
 
+// Fetch current price from Binance
+async function fetchCurrentPrice(symbol) {
+    try {
+        const sym = symbol.toUpperCase().replace('/', '');
+        const pair = sym.endsWith('USDT') ? sym : sym + 'USDT';
+        const r = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${pair}`);
+        const d = await r.json();
+        return parseFloat(d.price) || null;
+    } catch (e) { return null; }
+}
+
+app.get('/api/price-alerts', (_, res) => {
+    res.json({ ok: true, alerts: _priceAlerts });
+});
+
+app.post('/api/price-alerts', express.json(), (req, res) => {
+    const { symbol, condition, price, action } = req.body || {};
+    if (action === 'delete') {
+        _priceAlerts = _priceAlerts.filter(a => a.id !== req.body.id);
+        return res.json({ ok: true });
+    }
+    if (!symbol || !condition || !price) return res.json({ ok: false, error: 'symbol, condition, price required' });
+    const alert = { id: _alertIdSeq++, symbol: symbol.toUpperCase(), condition, price: parseFloat(price), active: true, createdAt: Date.now(), triggered: false };
+    _priceAlerts.push(alert);
+    res.json({ ok: true, alert });
+});
+
+// Check price alerts every 30 seconds
+setInterval(async () => {
+    const active = _priceAlerts.filter(a => a.active && !a.triggered);
+    if (!active.length) return;
+    for (const alert of active) {
+        const cur = await fetchCurrentPrice(alert.symbol);
+        if (!cur) continue;
+        const hit = alert.condition === 'above' ? cur >= alert.price : cur <= alert.price;
+        if (hit) {
+            alert.triggered = true;
+            alert.triggeredAt = Date.now();
+            alert.triggeredPrice = cur;
+            // Send Telegram
+            if (_tgBotToken && _tgChatId) {
+                const emoji  = alert.condition === 'above' ? '🚀' : '📉';
+                const dir    = alert.condition === 'above' ? 'menembus ke atas' : 'turun ke bawah';
+                const msg    = `${emoji} <b>PRICE ALERT!</b>\n\n<b>${alert.symbol}</b> ${dir} <code>$${alert.price.toLocaleString()}</code>\n\nHarga sekarang: <b>$${cur.toLocaleString()}</b>\n\n⏰ ${new Date().toLocaleString('id-ID')}`;
+                try {
+                    await fetch(`https://api.telegram.org/bot${_tgBotToken}/sendMessage`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ chat_id: _tgChatId, text: msg, parse_mode: 'HTML' })
+                    });
+                } catch (e) {}
+            }
+        }
+    }
+}, 30_000);
 
 // ══════════════════════════════════════════════════════════════
-//  ECOSYSTEM MOMENTUM DETECTOR  v2
+//  CRYPTO NEWS SENTIMENT
+// ══════════════════════════════════════════════════════════════
+let _newsCache = { ts: 0, data: [] };
+app.get('/api/news-sentiment', async (_, res) => {
+    try {
+        // Cache 10 menit
+        if (Date.now() - _newsCache.ts < 600_000 && _newsCache.data.length) {
+            return res.json({ ok: true, news: _newsCache.data, cached: true });
+        }
+        // Fetch headlines dari CryptoPanic public feed (no key needed)
+        const r = await fetch('https://cryptopanic.com/api/v1/posts/?auth_token=pub_test&public=true&kind=news&filter=important&currencies=BTC,ETH,SOL&limit=10');
+        const d = await r.json();
+        const titles = (d.results || []).map(p => p.title).slice(0, 10);
+        if (!titles.length) return res.json({ ok: false, error: 'No news found' });
+
+        // Score dengan Groq (jika ada key)
+        let newsWithSentiment = titles.map(t => ({ title: t, sentiment: 'neutral', score: 50 }));
+        if (_aiChatKey) {
+            const prompt = `Berikan sentiment analysis untuk masing-masing headline crypto berikut. Format jawaban JSON array: [{"title":"...","sentiment":"bullish"|"bearish"|"neutral","score":0-100}].\n\nHeadlines:\n${titles.map((t,i) => `${i+1}. ${t}`).join('\n')}`;
+            try {
+                const gr = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${_aiChatKey}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ model: 'llama3-70b-8192', messages: [
+                        { role: 'system', content: 'You are a crypto market analyst. Only respond with valid JSON.' },
+                        { role: 'user', content: prompt }
+                    ], max_tokens: 500, temperature: 0.3 })
+                });
+                const gd = await gr.json();
+                const txt = gd.choices?.[0]?.message?.content || '';
+                const match = txt.match(/\[[\s\S]*\]/);
+                if (match) newsWithSentiment = JSON.parse(match[0]);
+            } catch (e) { console.warn('[News] Groq score failed:', e.message); }
+        }
+        _newsCache = { ts: Date.now(), data: newsWithSentiment };
+        res.json({ ok: true, news: newsWithSentiment });
+    } catch (e) {
+        res.json({ ok: false, error: e.message });
+    }
+});
+
+
 //  Fitur:
 //  - Deteksi L1 yang pump (>5% / 1h atau 24h)
 //  - Hitung lag score, relative strength, vol spike per token
@@ -3365,13 +3465,78 @@ app.listen(PORT, '127.0.0.1', () => {
     console.log(`   Key tersimpan aman di .env — tidak pernah dikirim ke browser`);
 
     // Jalankan scheduled whale alert setiap 30 menit
-    // Alert akan terkirim ke Telegram TANPA perlu buka browser
-    const ALERT_INTERVAL_MS = 30 * 60_000; // 30 menit
+    const ALERT_INTERVAL_MS = 30 * 60_000;
     setTimeout(() => {
-        runScheduledWhaleAlert(); // pertama kali 1 menit setelah startup
+        runScheduledWhaleAlert();
         setInterval(runScheduledWhaleAlert, ALERT_INTERVAL_MS);
         console.log(`🤖 [Scheduler] Whale alert otomatis aktif — interval 30 menit`);
     }, 60_000);
+
+    // ── AI Daily Brief: kirim ke Telegram setiap pukul 08:00 WIB (01:00 UTC) ──
+    async function sendAIDailyBrief() {
+        if (!_aiChatKey || !_tgBotToken || !_tgChatId) return;
+        try {
+            console.log('[Daily Brief] Generating AI daily brief...');
+            // Fetch BTC price
+            let btcPrice = '–', btcChange = '–';
+            try {
+                const bp = await fetch('https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT');
+                const bd = await bp.json();
+                btcPrice  = parseFloat(bd.lastPrice).toLocaleString('en-US', {maximumFractionDigits:0});
+                btcChange = parseFloat(bd.priceChangePercent).toFixed(2);
+            } catch (e) {}
+            // Fetch Fear & Greed
+            let fgText = '–';
+            try {
+                const fg = await fetch('https://api.alternative.me/fng/');
+                const fd = await fg.json();
+                fgText = `${fd.data[0].value} (${fd.data[0].value_classification})`;
+            } catch (e) {}
+            const systemPrompt = `Kamu adalah CryptoMind AI, analis kripto profesional yang memberikan daily brief singkat dalam Bahasa Indonesia. Jawab dalam format yang rapi dan informatif.`;
+            const userMsg = `Berikan AI Daily Brief untuk hari ini. Data pasar saat ini:
+- BTC: $${btcPrice} (${btcChange}%)
+- Fear & Greed Index: ${fgText}
+- Waktu: ${new Date().toLocaleString('id-ID', {timeZone:'Asia/Jakarta'})} WIB
+
+Berikan ringkasan pasar, outlook hari ini, dan 2-3 rekomendasi strategi dalam format yang ringkas (maksimal 5 poin). Sertakan emoji untuk memudahkan membaca.`;
+            const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${_aiChatKey}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ model: 'llama3-70b-8192', messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: userMsg }
+                ], max_tokens: 600, temperature: 0.7 })
+            });
+            const data = await resp.json();
+            const brief = data.choices?.[0]?.message?.content || 'Gagal generate brief.';
+            const msg = `🌅 <b>AI Daily Brief — ${new Date().toLocaleDateString('id-ID', {weekday:'long', day:'numeric', month:'long', timeZone:'Asia/Jakarta'})}</b>\n\n${brief}\n\n<i>— CryptoMind AI 🤖</i>`;
+            await fetch(`https://api.telegram.org/bot${_tgBotToken}/sendMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chat_id: _tgChatId, text: msg, parse_mode: 'HTML' })
+            });
+            console.log('[Daily Brief] Sent successfully!');
+        } catch (e) { console.warn('[Daily Brief] Error:', e.message); }
+    }
+
+    // Endpoint manual trigger
+    app.post('/api/ai-daily-brief', async (_, res) => {
+        sendAIDailyBrief();
+        res.json({ ok: true, message: 'Daily brief sedang dikirim ke Telegram...' });
+    });
+
+    // Schedule: cek setiap menit, kirim saat jam 01:00 UTC (08:00 WIB)
+    let _briefSentToday = '';
+    setInterval(() => {
+        const now = new Date();
+        const utcH = now.getUTCHours(), utcM = now.getUTCMinutes();
+        const today = now.toDateString();
+        if (utcH === 1 && utcM === 0 && _briefSentToday !== today) {
+            _briefSentToday = today;
+            sendAIDailyBrief();
+        }
+    }, 60_000);
+    console.log('📰 [Daily Brief] Scheduler aktif — akan kirim setiap 08:00 WIB');
 });
 
 // Pre-warm /periodic refresh for whale-screen to avoid slow first request

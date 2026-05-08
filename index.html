@@ -839,6 +839,26 @@
                     <div class="fab-opt-label">🤖 AI Analyst</div>
                     <button class="fab-opt-btn ai">🤖</button>
                 </div>
+                <!-- Price Alerts -->
+                <div class="fab-opt" onclick="PriceAlerts.openModal();_fabClose()">
+                    <div class="fab-opt-label">🔔 Price Alerts</div>
+                    <button class="fab-opt-btn" style="background:linear-gradient(135deg,#f59e0b,#d97706)">🔔</button>
+                </div>
+                <!-- Risk Calculator -->
+                <div class="fab-opt" onclick="RiskCalc.openModal();_fabClose()">
+                    <div class="fab-opt-label">🎯 Risk Calculator</div>
+                    <button class="fab-opt-btn" style="background:linear-gradient(135deg,#10b981,#059669)">🎯</button>
+                </div>
+                <!-- News Sentiment -->
+                <div class="fab-opt" onclick="NewsSentiment.openModal();_fabClose()">
+                    <div class="fab-opt-label">📰 News Sentiment</div>
+                    <button class="fab-opt-btn" style="background:linear-gradient(135deg,#3b82f6,#1d4ed8)">📰</button>
+                </div>
+                <!-- Correlation Matrix -->
+                <div class="fab-opt" onclick="CorrelationMatrix.openModal();_fabClose()">
+                    <div class="fab-opt-label">🔗 Correlation Matrix</div>
+                    <button class="fab-opt-btn" style="background:linear-gradient(135deg,#8b5cf6,#6d28d9)">🔗</button>
+                </div>
                 <!-- Telegram Settings -->
                 <div class="fab-opt" onclick="TelegramSettings.openModal();_fabClose()">
                     <div class="fab-opt-label">📬 Telegram Alert</div>
@@ -3145,6 +3165,12 @@
                             <div class="hcs-panel-title">🔮 Proyeksi Trend</div>
                             <div id="hcsProjSummary"></div>
                         </div>
+
+                        <!-- MTF Confluence -->
+                        <div class="hcs-panel-section" id="hcsMtfPanel" style="display:none">
+                            <div class="hcs-panel-title">📊 Multi-Timeframe</div>
+                            <div id="hcsMtfContent"></div>
+                        </div>
                     </div>
                 </div>
 
@@ -5365,6 +5391,10 @@
     <script src="market-regime.js"></script>
     <script src="telegram-settings.js"></script>
     <script src="ai-chat.js"></script>
+    <script src="price-alerts.js"></script>
+    <script src="risk-calc-ui.js"></script>
+    <script src="news-sentiment.js"></script>
+    <script src="correlation-matrix.js"></script>
     <script src="home-matrix-bg.js?v=36"></script>
     <script src="home-epic-animations.js?v=36"></script>
     <script src="home-hologram-3d.js?v=36"></script>
@@ -6790,7 +6820,78 @@ ${rnd(CAT_OUTROS)}`,
             if (typeof TelegramSettings !== 'undefined') TelegramSettings.init();
             if (typeof NarrativeIntelligence !== 'undefined') NarrativeIntelligence.init();
             if (typeof AiChat !== 'undefined') AiChat.init();
+            if (typeof PriceAlerts !== 'undefined') PriceAlerts.init();
+            if (typeof RiskCalc !== 'undefined') RiskCalc.init();
+            if (typeof NewsSentiment !== 'undefined') NewsSentiment.init();
+            if (typeof CorrelationMatrix !== 'undefined') CorrelationMatrix.init();
         });
+
+        // ── Keyboard Shortcuts ──
+        document.addEventListener('keydown', function(e) {
+            const tag = document.activeElement?.tagName;
+            // Skip if typing in input/textarea/select
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+            // Skip if modifier keys (except plain key)
+            if (e.ctrlKey || e.metaKey || e.altKey) return;
+            switch(e.key) {
+                case 's': case 'S': {
+                    // Trigger scan
+                    const btn = document.getElementById('scanBtn') || document.querySelector('[onclick*="scan()"]');
+                    if (btn) btn.click();
+                    break;
+                }
+                case 'h': case 'H': {
+                    // Go to Home tab
+                    const home = document.querySelector('[data-tab="home"]') || document.querySelector('[onclick*="home"]');
+                    if (home) home.click();
+                    break;
+                }
+                case 'e': case 'E': {
+                    // Go to Ecosystem tab
+                    const eco = document.querySelector('[data-tab="ecosystem"]') || document.querySelector('[onclick*="ecosystem"]');
+                    if (eco) eco.click();
+                    break;
+                }
+                case '/': {
+                    // Focus HollowCat search
+                    e.preventDefault();
+                    const inp = document.getElementById('hcsSearchInput') || document.getElementById('hcsSym');
+                    if (inp) { inp.focus(); inp.select(); }
+                    break;
+                }
+                case 'a': case 'A': {
+                    // Open AI Chat
+                    if (typeof AiChat !== 'undefined') AiChat.open();
+                    break;
+                }
+                case 'n': case 'N': {
+                    // Open News Sentiment
+                    if (typeof NewsSentiment !== 'undefined') NewsSentiment.openModal();
+                    break;
+                }
+                case 'r': case 'R': {
+                    // Open Risk Calculator
+                    if (typeof RiskCalc !== 'undefined') RiskCalc.openModal();
+                    break;
+                }
+                case 'Escape': {
+                    // Close all modals
+                    if (typeof AiChat !== 'undefined') AiChat.close?.();
+                    if (typeof PriceAlerts !== 'undefined') PriceAlerts.closeModal?.();
+                    if (typeof RiskCalc !== 'undefined') RiskCalc.closeModal?.();
+                    if (typeof NewsSentiment !== 'undefined') NewsSentiment.closeModal?.();
+                    if (typeof CorrelationMatrix !== 'undefined') CorrelationMatrix.closeModal?.();
+                    if (typeof TelegramSettings !== 'undefined') TelegramSettings.closeModal?.();
+                    break;
+                }
+                case '?': {
+                    // Show shortcuts help
+                    alert('⌨️ Keyboard Shortcuts\n\nS — Scan\nH — Tab Home\nE — Tab Ecosystem\n/ — Fokus HollowCat search\nA — Buka AI Chat\nN — Buka News Sentiment\nR — Buka Risk Calculator\nEsc — Tutup semua modal');
+                    break;
+                }
+            }
+        });
+
         if (document.readyState !== 'loading') {
             if (typeof EcosystemPump !== 'undefined') EcosystemPump.init();
             if (typeof WhaleAccumulation !== 'undefined') WhaleAccumulation.init();
@@ -6799,6 +6900,10 @@ ${rnd(CAT_OUTROS)}`,
             if (typeof TelegramSettings !== 'undefined') TelegramSettings.init();
             if (typeof NarrativeIntelligence !== 'undefined') NarrativeIntelligence.init();
             if (typeof AiChat !== 'undefined') AiChat.init();
+            if (typeof PriceAlerts !== 'undefined') PriceAlerts.init();
+            if (typeof RiskCalc !== 'undefined') RiskCalc.init();
+            if (typeof NewsSentiment !== 'undefined') NewsSentiment.init();
+            if (typeof CorrelationMatrix !== 'undefined') CorrelationMatrix.init();
         }
         // Init Signal Terminal saat tab diklik — lazy init
         (function () {
@@ -10815,6 +10920,72 @@ ${rnd(CAT_OUTROS)}`,
             if (s) s.style.display = 'grid';
         }
 
+        /* ── Multi-Timeframe Analysis ──────────────────────────────────── */
+        async function fetchMtfAnalysis(sym, currentTf) {
+            const panel   = document.getElementById('hcsMtfPanel');
+            const content = document.getElementById('hcsMtfContent');
+            if (!panel || !content) return;
+            panel.style.display = 'block';
+
+            const TFS = ['15m','1h','4h','1d'];
+            // Show loading placeholders
+            content.innerHTML = TFS.map(tf => `
+                <div class="mtf-row">
+                    <span class="mtf-tf">${tf}</span>
+                    <span class="mtf-badge loading">⏳</span>
+                </div>`).join('');
+
+            // Fetch each TF in parallel
+            const results = await Promise.all(TFS.map(async tf => {
+                try {
+                    const limit = tf === '1d' ? 100 : 150;
+                    const r = await fetch(`${PROXY}/api/ohlc/${sym}?interval=${tf}&limit=${limit}`);
+                    if (!r.ok) return { tf, trend: 'range', score: 0 };
+                    const d = await r.json();
+                    const candles = d.candles || [];
+                    if (candles.length < 20) return { tf, trend: 'range', score: 0 };
+                    // Simple trend: EMA20 vs EMA50
+                    const ema = (data, period) => {
+                        const k = 2 / (period + 1);
+                        let e = data[0];
+                        for (let i = 1; i < data.length; i++) e = data[i] * k + e * (1 - k);
+                        return e;
+                    };
+                    const closes = candles.map(c => c.close);
+                    const ema20  = ema(closes, 20);
+                    const ema50  = ema(closes, 50);
+                    const last   = closes[closes.length - 1];
+                    const trend  = ema20 > ema50 && last > ema20 ? 'bull' : ema20 < ema50 && last < ema20 ? 'bear' : 'range';
+                    // BOS count
+                    const swings = detectSwings(candles, 3);
+                    const bos    = detectBOS(candles, swings);
+                    const bullBos = bos.filter(b => b.type === 'bullish').length;
+                    const bearBos = bos.filter(b => b.type === 'bearish').length;
+                    const score  = trend === 'bull' ? bullBos - bearBos : bearBos - bullBos;
+                    return { tf, trend, score, ema20, ema50, lastClose: last };
+                } catch (e) { return { tf, trend: 'range', score: 0 }; }
+            }));
+
+            // Confluence
+            const bullCount = results.filter(r => r.trend === 'bull').length;
+            const bearCount = results.filter(r => r.trend === 'bear').length;
+            const confluence = bullCount >= 3 ? 'bullish' : bearCount >= 3 ? 'bearish' : 'mixed';
+            const confText   = bullCount >= 3 ? `🟢 ${bullCount}/4 TF Bullish — Momentum naik kuat` :
+                               bearCount >= 3 ? `🔴 ${bearCount}/4 TF Bearish — Tekanan jual kuat` :
+                               `🟡 Mixed ${bullCount}↑ ${bearCount}↓ — Konfirmasi belum jelas`;
+
+            content.innerHTML = results.map(r => {
+                const cls    = r.trend === 'bull' ? 'bull' : r.trend === 'bear' ? 'bear' : 'range';
+                const label  = r.trend === 'bull' ? '🟢 BULLISH' : r.trend === 'bear' ? '🔴 BEARISH' : '⬛ RANGING';
+                const isCur  = r.tf === currentTf;
+                return `<div class="mtf-row" ${isCur ? 'style="background:#ffffff08;border-radius:6px"' : ''}>
+                    <span class="mtf-tf">${r.tf}${isCur ? ' ●' : ''}</span>
+                    <span class="mtf-badge ${cls}">${label}</span>
+                    <span class="mtf-score">BOS ${r.score >= 0 ? '+' : ''}${r.score}</span>
+                </div>`;
+            }).join('') + `<div class="mtf-confluence ${confluence}">${confText}</div>`;
+        }
+
         /* ══════════════════════════════════════════════════════
            MAIN: fetch → analyse → render
         ══════════════════════════════════════════════════════ */
@@ -10880,6 +11051,8 @@ ${rnd(CAT_OUTROS)}`,
                 generateAnalysis(candles, fvgZones, swings.highs && swings.lows ? [...swings.highs, ...swings.lows] : swings, bosEvents, liqSweeps, projection);
                 generateTweet(candles, fvgZones, swings, bosEvents, liqSweeps, projection);
                 if (lb) lb.textContent = '● LIVE';
+                // MTF Analysis (async background)
+                fetchMtfAnalysis(sym, tf);
 
             } catch(e) {
                 console.error('[HCS] scan error', e);
