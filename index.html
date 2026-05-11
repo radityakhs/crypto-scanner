@@ -3307,6 +3307,51 @@
         </div>
 
         <div id="dex-analyzer" class="tab-content">
+
+            <!-- ══ DEX SNIPER PANEL ══ -->
+            <div style="background:#060f1e;border:1px solid #1e3a5f;border-radius:14px;margin:16px;overflow:hidden">
+              <!-- Header -->
+              <div style="padding:14px 16px;background:#0a1628;border-bottom:1px solid #1e3a5f;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+                <div>
+                  <span style="font-size:16px;font-weight:800;color:#e2e8f0">🎯 DEX Sniper</span>
+                  <span style="font-size:11px;color:#475569;margin-left:8px">Deteksi token sebelum harga loncat</span>
+                </div>
+                <!-- Mode toggle -->
+                <div style="display:flex;gap:6px;margin-left:auto;flex-wrap:wrap">
+                  <button id="ds-mode-early" onclick="DexSniper.setMode('early')"
+                    style="background:#065f46;color:#34d399;border:1px solid #10b981;border-radius:8px;padding:5px 14px;font-size:12px;font-weight:700;cursor:pointer">
+                    🎯 Early Entry
+                  </button>
+                  <button id="ds-mode-momentum" onclick="DexSniper.setMode('momentum')"
+                    style="background:#1e293b;color:#64748b;border:1px solid #1e3a5f;border-radius:8px;padding:5px 14px;font-size:12px;font-weight:700;cursor:pointer">
+                    🚀 Momentum Rider
+                  </button>
+                </div>
+                <!-- Chain selector -->
+                <div style="display:flex;gap:4px">
+                  <button id="ds-chain-solana" onclick="DexSniper.setChain('solana')"
+                    style="background:#1e40af;color:#93c5fd;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer">SOL</button>
+                  <button id="ds-chain-ethereum" onclick="DexSniper.setChain('ethereum')"
+                    style="background:#1e293b;color:#64748b;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer">ETH</button>
+                  <button id="ds-chain-bsc" onclick="DexSniper.setChain('bsc')"
+                    style="background:#1e293b;color:#64748b;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer">BSC</button>
+                  <button id="ds-chain-base" onclick="DexSniper.setChain('base')"
+                    style="background:#1e293b;color:#64748b;border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer">Base</button>
+                </div>
+                <button onclick="DexSniper.runScan()"
+                  style="background:linear-gradient(135deg,#065f46,#10b981);color:#000;border:none;border-radius:8px;padding:6px 18px;font-size:12px;font-weight:800;cursor:pointer">
+                  🔍 Scan
+                </button>
+              </div>
+              <!-- Results body -->
+              <div id="ds-body" style="min-height:200px">
+                <div style="text-align:center;padding:50px;color:#334155">
+                  Pilih mode dan klik <b style="color:#10b981">🔍 Scan</b> untuk mulai
+                </div>
+              </div>
+            </div>
+            <!-- ══ END DEX SNIPER PANEL ══ -->
+
             <div class="dxa-section">
 
                 <!-- ── Top bar: title + Web3 wallet button ─── -->
@@ -5445,6 +5490,7 @@
     <script src="risk-calc-ui.js"></script>
     <script src="news-sentiment.js"></script>
     <script src="correlation-matrix.js"></script>
+    <script src="dex-sniper.js"></script>
     <script src="sniper-scanner.js"></script>
     <script src="home-matrix-bg.js?v=36"></script>
     <script src="home-epic-animations.js?v=36"></script>
@@ -6876,6 +6922,7 @@ ${rnd(CAT_OUTROS)}`,
             if (typeof NewsSentiment !== 'undefined') NewsSentiment.init();
             if (typeof CorrelationMatrix !== 'undefined') CorrelationMatrix.init();
             if (typeof SniperScanner !== 'undefined') SniperScanner.init();
+            if (typeof DexSniper !== 'undefined') DexSniper.init();
         });
 
         // ── Keyboard Shortcuts ──
@@ -6957,6 +7004,7 @@ ${rnd(CAT_OUTROS)}`,
             if (typeof NewsSentiment !== 'undefined') NewsSentiment.init();
             if (typeof CorrelationMatrix !== 'undefined') CorrelationMatrix.init();
             if (typeof SniperScanner !== 'undefined') SniperScanner.init();
+            if (typeof DexSniper !== 'undefined') DexSniper.init();
         }
         // Init Signal Terminal saat tab diklik — lazy init
         (function () {

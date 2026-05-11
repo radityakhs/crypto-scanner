@@ -1554,6 +1554,222 @@ app.post('/api/dex/clear-dead', async (req, res) => {
     }
 });
 
+// ══════════════════════════════════════════════════════════════
+//  DEX SNIPER  — Early Entry + Momentum Rider detector
+//  Sumber data: DEXScreener public API (no key needed)
+// ══════════════════════════════════════════════════════════════
+
+function _dexSniperScore(p, mode) {
+    let score = 0;
+    const signals = {};
+
+    if (mode === 'early') {
+        // ── EARLY ENTRY: baru listing, volume building, belum pump ──
+
+        // 1. Usia token (baru = lebih baik) — maks 25 poin
+        const ageH = p.ageHours || 9999;
+        const ageScore = ageH <= 1 ? 25 : ageH <= 6 ? 20 : ageH <= 24 ? 12 : ageH <= 72 ? 5 : 0;
+        score += ageScore;
+        signals.age = { active: ageScore > 0, score: ageScore, label: `Usia ${ageH < 1 ? '<1j' : ageH.toFixed(0) + 'j'}` };
+
+        // 2. Volume 5m accelerating — maks 20 poin
+        const vol5m = p.vol5m || 0;
+        const vol1h = p.vol1h || 0;
+        const volAccel = vol1h > 0 ? (vol5m * 12) / vol1h : 0; // annualize 5m ke 1h
+        const volScore = volAccel >= 3 ? 20 : volAccel >= 2 ? 14 : volAccel >= 1.2 ? 8 : 0;
+        score += volScore;
+        signals.volume = { active: volScore > 0, score: volScore, label: `Vol Accel ${volAccel.toFixed(1)}x` };
+
+        // 3. Buy pressure — buys >> sells di 5m — maks 20 poin
+        const b5 = p.buys5m || 0, s5 = p.sells5m || 0;
+        const buyRatio = (b5 + s5) > 0 ? b5 / (b5 + s5) : 0.5;
+        const buyScore = buyRatio >= 0.75 ? 20 : buyRatio >= 0.65 ? 14 : buyRatio >= 0.55 ? 7 : 0;
+        score += buyScore;
+        signals.buys = { active: buyScore > 0, score: buyScore, label: `Buy ${(buyRatio*100).toFixed(0)}%` };
+
+        // 4. Liquidity cukup (tidak terlalu kecil = aman) — maks 15 poin
+        const liq = p.liquidityUsd || 0;
+        const liqScore = liq >= 50000 ? 15 : liq >= 20000 ? 10 : liq >= 5000 ? 5 : 0;
+        score += liqScore;
+        signals.liquidity = { active: liqScore > 0, score: liqScore, label: `Liq $${_fmtK(liq)}` };
+
+        // 5. Price belum pump jauh — chg1h < 50% (masih early) — maks 10 poin
+        const chg1h = p.chg1h || 0;
+        const notPumped = chg1h < 50 && chg1h > -10;
+        const noPumpScore = notPumped ? 10 : 0;
+        score += noPumpScore;
+        signals.price = { active: noPumpScore > 0, score: noPumpScore, label: `Chg 1h: ${chg1h > 0 ? '+' : ''}${chg1h.toFixed(1)}%` };
+
+        // 6. FDV rendah = lebih banyak upside — maks 10 poin
+        const fdv = p.fdv || 0;
+        const fdvScore = fdv > 0 && fdv < 500000 ? 10 : fdv < 2000000 ? 6 : fdv < 10000000 ? 3 : 0;
+        score += fdvScore;
+        signals.fdv = { active: fdvScore > 0, score: fdvScore, label: `FDV $${_fmtK(fdv)}` };
+
+    } else {
+        // ── MOMENTUM RIDER: sedang naik tapi potensi masih besar ──
+
+        // 1. Price momentum kuat tapi bukan parabolic — maks 25 poin
+        const chg1h = p.chg1h || 0, chg5m = p.chg5m || 0;
+        const momScore = (chg1h >= 20 && chg1h <= 200) ? 25
+                       : (chg1h >= 10 && chg1h < 20)  ? 18
+                       : (chg1h >= 5  && chg1h < 10)  ? 10 : 0;
+        score += momScore;
+        signals.momentum = { active: momScore > 0, score: momScore, label: `+${chg1h.toFixed(1)}% 1h` };
+
+        // 2. Volume 1h tinggi — maks 20 poin
+        const vol1h = p.vol1h || 0;
+        const momVol = vol1h >= 500000 ? 20 : vol1h >= 100000 ? 14 : vol1h >= 20000 ? 8 : 0;
+        score += momVol;
+        signals.volume = { active: momVol > 0, score: momVol, label: `Vol $${_fmtK(vol1h)}/1h` };
+
+        // 3. Buy tekanan masih dominan di 5m (momentum belum habis) — maks 20 poin
+        const b5 = p.buys5m || 0, s5 = p.sells5m || 0;
+        const buyRatio = (b5 + s5) > 0 ? b5 / (b5 + s5) : 0.5;
+        const buyMom = buyRatio >= 0.65 ? 20 : buyRatio >= 0.55 ? 12 : 0;
+        score += buyMom;
+        signals.buys = { active: buyMom > 0, score: buyMom, label: `Buy ${(buyRatio*100).toFixed(0)}%` };
+
+        // 4. Liquidity kuat = sustainable rally — maks 15 poin
+        const liq = p.liquidityUsd || 0;
+        const liqMom = liq >= 200000 ? 15 : liq >= 50000 ? 10 : liq >= 10000 ? 5 : 0;
+        score += liqMom;
+        signals.liquidity = { active: liqMom > 0, score: liqMom, label: `Liq $${_fmtK(liq)}` };
+
+        // 5. FDV masih wajar (ada ruang naik) — maks 10 poin
+        const fdv = p.fdv || 0;
+        const fdvMom = fdv > 0 && fdv < 5000000 ? 10 : fdv < 20000000 ? 5 : 0;
+        score += fdvMom;
+        signals.fdv = { active: fdvMom > 0, score: fdvMom, label: `FDV $${_fmtK(fdv)}` };
+
+        // 6. Boosts aktif (smart money naruh modal promosi) — maks 10 poin
+        const boosts = p.boosts || 0;
+        const boostScore = boosts >= 10 ? 10 : boosts >= 3 ? 6 : boosts >= 1 ? 3 : 0;
+        score += boostScore;
+        signals.boosts = { active: boostScore > 0, score: boostScore, label: `${boosts} Boosts` };
+    }
+
+    let signal = 'WEAK', signalColor = '#475569';
+    if (score >= 75)     { signal = mode === 'early' ? '🎯 SNIPE NOW' : '🚀 RIDE NOW'; signalColor = '#f59e0b'; }
+    else if (score >= 55){ signal = mode === 'early' ? '👀 WATCH'    : '📈 BUILDING'; signalColor = '#3b82f6'; }
+    else if (score >= 35){ signal = '📋 SETUP'; signalColor = '#8b5cf6'; }
+
+    return { score, signal, signalColor, signals };
+}
+
+function _fmtK(n) {
+    if (n >= 1e9) return (n/1e9).toFixed(1) + 'B';
+    if (n >= 1e6) return (n/1e6).toFixed(1) + 'M';
+    if (n >= 1e3) return (n/1e3).toFixed(1) + 'K';
+    return n.toFixed(0);
+}
+
+app.get('/api/dex-sniper', async (req, res) => {
+    const mode  = req.query.mode === 'momentum' ? 'momentum' : 'early';
+    const chain = req.query.chain || 'solana';
+    try {
+        // Fetch dari beberapa sumber DEXScreener
+        const endpoints = [
+            `https://api.dexscreener.com/token-boosts/latest/v1`,
+            `https://api.dexscreener.com/latest/dex/search?q=new+token+${chain}`,
+            `https://api.dexscreener.com/latest/dex/search?q=pump+sol`,
+        ];
+
+        const seen = new Set();
+        let allPairs = [];
+
+        // Parallel fetch dari semua sumber
+        const fetches = await Promise.allSettled([
+            // Latest boosted tokens
+            fetch('https://api.dexscreener.com/token-boosts/latest/v1').then(r => r.json()),
+            // Search trending
+            fetch(`https://api.dexscreener.com/latest/dex/search?q=solana+meme`).then(r => r.json()),
+            fetch(`https://api.dexscreener.com/latest/dex/search?q=pump+fun`).then(r => r.json()),
+            fetch(`https://api.dexscreener.com/latest/dex/search?q=raydium+new`).then(r => r.json()),
+        ]);
+
+        // Kumpulkan pair addresses dari boosted tokens
+        const boostedAddrs = new Set();
+        if (fetches[0].status === 'fulfilled') {
+            const boosted = Array.isArray(fetches[0].value) ? fetches[0].value : [];
+            boosted.filter(t => t.chainId === chain).forEach(t => boostedAddrs.add(t.tokenAddress));
+        }
+
+        // Kumpulkan semua pairs dari search results
+        for (let i = 1; i < fetches.length; i++) {
+            if (fetches[i].status !== 'fulfilled') continue;
+            const pairs = fetches[i].value?.pairs || [];
+            for (const p of pairs) {
+                if (!p.pairAddress || seen.has(p.pairAddress)) continue;
+                if (chain && p.chainId !== chain) continue;
+                seen.add(p.pairAddress);
+
+                const ageH = p.pairCreatedAt ? (Date.now() - p.pairCreatedAt) / 3_600_000 : 9999;
+                const liq  = parseFloat(p.liquidity?.usd || 0);
+                const vol24 = parseFloat(p.volume?.h24 || 0);
+
+                // Filter dasar: harus ada likuiditas dan volume
+                if (liq < 1000 || vol24 < 500) continue;
+
+                const parsed = {
+                    pairAddress : p.pairAddress,
+                    baseSymbol  : p.baseToken?.symbol || '?',
+                    baseName    : p.baseToken?.name   || '?',
+                    baseMint    : p.baseToken?.address || '',
+                    chain       : p.chainId,
+                    dex         : p.dexId,
+                    url         : p.url || `https://dexscreener.com/${p.chainId}/${p.pairAddress}`,
+                    priceUsd    : parseFloat(p.priceUsd || 0),
+                    ageHours    : ageH,
+                    liquidityUsd: liq,
+                    fdv         : parseFloat(p.fdv || 0),
+                    mcap        : parseFloat(p.marketCap || 0),
+                    vol5m       : parseFloat(p.volume?.m5  || 0),
+                    vol1h       : parseFloat(p.volume?.h1  || 0),
+                    vol24h      : vol24,
+                    chg5m       : parseFloat(p.priceChange?.m5  || 0),
+                    chg1h       : parseFloat(p.priceChange?.h1  || 0),
+                    chg24h      : parseFloat(p.priceChange?.h24 || 0),
+                    buys5m      : p.txns?.m5?.buys  || 0,
+                    sells5m     : p.txns?.m5?.sells || 0,
+                    buys1h      : p.txns?.h1?.buys  || 0,
+                    sells1h     : p.txns?.h1?.sells || 0,
+                    boosts      : boostedAddrs.has(p.baseToken?.address) ? 1 : 0,
+                };
+
+                const { score, signal, signalColor, signals } = _dexSniperScore(parsed, mode);
+                allPairs.push({ ...parsed, score, signal, signalColor, signals });
+            }
+        }
+
+        // Sort by score
+        allPairs.sort((a, b) => b.score - a.score);
+
+        // Ambil top 50
+        const top = allPairs.slice(0, 50);
+
+        // Telegram alert untuk score >= 75
+        const hot = top.filter(t => t.score >= 75);
+        if (hot.length && _tgConfig.botToken && _tgConfig.chatId) {
+            const lines = hot.slice(0, 3).map(t =>
+                `${t.signal} <b>${t.baseSymbol}</b> (${t.baseName})\n` +
+                `   Score: <b>${t.score}/100</b> · FDV: $${_fmtK(t.fdv)} · Liq: $${_fmtK(t.liquidityUsd)}\n` +
+                `   <a href="${t.url}">→ Chart DEXScreener</a>`
+            ).join('\n\n');
+            const emoji = mode === 'early' ? '🎯' : '🚀';
+            const msg = `${emoji} <b>DEX Sniper Alert — ${mode === 'early' ? 'Early Entry' : 'Momentum Rider'}</b>\n\n${lines}`;
+            fetch(`https://api.telegram.org/bot${_tgConfig.botToken}/sendMessage`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chat_id: _tgConfig.chatId, text: msg, parse_mode: 'HTML', disable_web_page_preview: true })
+            }).catch(() => {});
+        }
+
+        res.json({ ok: true, tokens: top, mode, chain, total: allPairs.length, scannedAt: Date.now() });
+    } catch (e) {
+        res.json({ ok: false, error: e.message });
+    }
+});
+
 // POST /api/hunter/start — jalankan memecoin-hunter.js sebagai background process
 app.post('/api/hunter/start', (req, res) => {
     const { execSync, spawn } = require('child_process');
