@@ -79,6 +79,10 @@
                     <span class="nav-icon"><img src="images/ic_stars.svg" alt="Tokens" style="width:18px;height:18px;"></span>
                     <span class="nav-label">New Tokens</span>
                 </button>
+                <button class="tab-btn" data-tab="sniper">
+                    <span class="nav-icon">🎯</span>
+                    <span class="nav-label">Sniper Scanner</span>
+                </button>
             </div>
 
             <div class="nav-group">
@@ -3256,6 +3260,45 @@
              DEX ANALYZER TAB  — DEXScreener-style live scanner
              + deep analysis side panel + Web3 trading
         ═══════════════════════════════════════════════════ -->
+        <!-- ══════════════════════════════════════════════════════════
+             SNIPER SCANNER TAB
+        ════════════════════════════════════════════════════════════ -->
+        <div id="sniper" class="tab-content">
+            <!-- Header bar -->
+            <div style="padding:16px 20px;background:#0a1628;border-bottom:1px solid #1e3a5f;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+                <div>
+                    <div style="font-size:17px;font-weight:800;color:#e2e8f0">🎯 Sniper Scanner</div>
+                    <div style="font-size:12px;color:#64748b;margin-top:2px">Deteksi confluence reversal terkuat dari 30 top crypto</div>
+                </div>
+                <!-- TF Selector -->
+                <div style="display:flex;gap:6px;margin-left:auto">
+                    <button id="sniper-tf-15m" onclick="SniperScanner.setTf('15m')"
+                        style="background:#1e3a5f;border:none;border-radius:8px;padding:5px 12px;color:#64748b;cursor:pointer;font-size:12px;font-weight:600">15m</button>
+                    <button id="sniper-tf-1h" onclick="SniperScanner.setTf('1h')"
+                        style="background:#1e40af;border:none;border-radius:8px;padding:5px 12px;color:#93c5fd;cursor:pointer;font-size:12px;font-weight:600">1h</button>
+                    <button id="sniper-tf-4h" onclick="SniperScanner.setTf('4h')"
+                        style="background:#1e3a5f;border:none;border-radius:8px;padding:5px 12px;color:#64748b;cursor:pointer;font-size:12px;font-weight:600">4h</button>
+                    <button onclick="SniperScanner.runScan()"
+                        style="background:linear-gradient(135deg,#f59e0b,#d97706);border:none;border-radius:8px;padding:5px 16px;color:#000;cursor:pointer;font-size:12px;font-weight:800">🎯 Scan</button>
+                </div>
+            </div>
+
+            <!-- Score legend -->
+            <div style="padding:10px 16px;background:#060f1e;border-bottom:1px solid #0f2035;display:flex;gap:20px;flex-wrap:wrap">
+                <div style="font-size:11px;color:#64748b">Confluence Score:</div>
+                <div style="font-size:11px"><span style="color:#f59e0b;font-weight:700">🎯 SNIPER</span> <span style="color:#475569">≥80 — Setup sangat kuat, risiko rendah</span></div>
+                <div style="font-size:11px"><span style="color:#3b82f6;font-weight:700">👀 WATCH</span> <span style="color:#475569">≥60 — Mulai terbentuk, monitor ketat</span></div>
+                <div style="font-size:11px"><span style="color:#8b5cf6;font-weight:700">📋 SETUP</span> <span style="color:#475569">≥40 — Awal mula, belum konfirmasi</span></div>
+            </div>
+
+            <!-- Hasil scan -->
+            <div id="sniper-body" style="min-height:300px">
+                <div style="text-align:center;padding:60px 20px;color:#475569">
+                    Klik <b style="color:#f59e0b">🎯 Scan</b> untuk mulai analisa sniper entry
+                </div>
+            </div>
+        </div>
+
         <div id="dex-analyzer" class="tab-content">
             <div class="dxa-section">
 
@@ -5395,6 +5438,7 @@
     <script src="risk-calc-ui.js"></script>
     <script src="news-sentiment.js"></script>
     <script src="correlation-matrix.js"></script>
+    <script src="sniper-scanner.js"></script>
     <script src="home-matrix-bg.js?v=36"></script>
     <script src="home-epic-animations.js?v=36"></script>
     <script src="home-hologram-3d.js?v=36"></script>
@@ -6824,6 +6868,7 @@ ${rnd(CAT_OUTROS)}`,
             if (typeof RiskCalc !== 'undefined') RiskCalc.init();
             if (typeof NewsSentiment !== 'undefined') NewsSentiment.init();
             if (typeof CorrelationMatrix !== 'undefined') CorrelationMatrix.init();
+            if (typeof SniperScanner !== 'undefined') SniperScanner.init();
         });
 
         // ── Keyboard Shortcuts ──
@@ -6904,6 +6949,7 @@ ${rnd(CAT_OUTROS)}`,
             if (typeof RiskCalc !== 'undefined') RiskCalc.init();
             if (typeof NewsSentiment !== 'undefined') NewsSentiment.init();
             if (typeof CorrelationMatrix !== 'undefined') CorrelationMatrix.init();
+            if (typeof SniperScanner !== 'undefined') SniperScanner.init();
         }
         // Init Signal Terminal saat tab diklik — lazy init
         (function () {

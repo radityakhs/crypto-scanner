@@ -2081,6 +2081,149 @@ app.get('/api/news-sentiment', async (_, res) => {
 //  - Correlation: seberapa jauh token tertinggal dari L1
 // ══════════════════════════════════════════════════════════════
 
+// ══════════════════════════════════════════════════════════════
+//  SNIPER SCANNER  — Confluence-based bottom-fishing detector
+// ══════════════════════════════════════════════════════════════
+const SNIPER_PAIRS = [
+    'BTC','ETH','SOL','BNB','XRP','AVAX','ADA','LINK','DOT','MATIC',
+    'DOGE','SHIB','UNI','AAVE','OP','ARB','INJ','TIA','SEI','SUI',
+    'WIF','JUP','RAY','PYTH','JTO','WLD','NEAR','APT','ATOM','FTM'
+];
+
+function _sniperCalcRSI(closes, period = 14) {
+    if (closes.length < period + 1) return 50;
+    let gains = 0, losses = 0;
+    for (let i = closes.length - period; i < closes.length; i++) {
+        const d = closes[i] - closes[i - 1];
+        if (d >= 0) gains += d; else losses -= d;
+    }
+    const avgG = gains / period, avgL = losses / period;
+    if (avgL === 0) return 100;
+    return 100 - 100 / (1 + avgG / avgL);
+}
+
+function _sniperAnalyze(candles) {
+    if (!candles || candles.length < 30) return null;
+    const N = candles.length;
+    const opens   = candles.map(c => parseFloat(c[1]));
+    const highs   = candles.map(c => parseFloat(c[2]));
+    const lows    = candles.map(c => parseFloat(c[3]));
+    const closes  = candles.map(c => parseFloat(c[4]));
+    const volumes = candles.map(c => parseFloat(c[5]));
+
+    const last   = N - 1;
+    const price  = closes[last];
+    const ch24h  = (price - closes[last - 24]) / closes[last - 24] * 100;
+
+    // ── 1. Liquidity Sweep (+25) ──────────────────────────────
+    // Harga turun ke bawah swing low 20 candle lalu, lalu close di atas low tersebut
+    const recentLow = Math.min(...lows.slice(last - 20, last - 1));
+    const sweepCandle = lows[last] < recentLow && closes[last] > recentLow;
+    const sweepScore = sweepCandle ? 25 : 0;
+
+    // ── 2. Volume Spike (+20) ─────────────────────────────────
+    const avgVol = volumes.slice(last - 20, last).reduce((a, b) => a + b, 0) / 20;
+    const volRatio = volumes[last] / (avgVol || 1);
+    const volScore = volRatio >= 2.5 ? 20 : volRatio >= 1.8 ? 12 : volRatio >= 1.3 ? 6 : 0;
+
+    // ── 3. Bullish Reversal Candle (+15) ──────────────────────
+    // Candle terakhir: lower wick >= 2x body, close > open (hammer/engulfing)
+    const body   = Math.abs(closes[last] - opens[last]);
+    const lwick  = Math.min(opens[last], closes[last]) - lows[last];
+    const bullCandle = closes[last] > opens[last] && lwick >= 1.5 * body;
+    // Atau: bullish engulfing (close > prev open, open < prev close)
+    const engulf = closes[last] > opens[last - 1] && opens[last] < closes[last - 1];
+    const candleScore = (bullCandle || engulf) ? 15 : 0;
+
+    // ── 4. BOS ke atas (+20) ─────────────────────────────────
+    // Harga break di atas swing high 5 candle terakhir
+    const prev5High = Math.max(...highs.slice(last - 6, last - 1));
+    const bosUp = closes[last] > prev5High;
+    const bosScore = bosUp ? 20 : 0;
+
+    // ── 5. Di area demand / FVG (+10) ─────────────────────────
+    // FVG bullish: gap antara high[i-2] dan low[i] (candle i-1 full gap)
+    let fvgScore = 0;
+    for (let i = last - 5; i <= last - 1; i++) {
+        if (i < 2) continue;
+        const fvgLow  = highs[i - 2];
+        const fvgHigh = lows[i];
+        if (fvgHigh > fvgLow && price >= fvgLow && price <= fvgHigh + (fvgHigh - fvgLow) * 2) {
+            fvgScore = 10; break;
+        }
+    }
+
+    // ── 6. RSI Divergence bullish (+10) ───────────────────────
+    // Harga LL tapi RSI HL dalam 10 candle terakhir
+    const rsiNow  = _sniperCalcRSI(closes.slice(0, last + 1));
+    const rsiPrev = _sniperCalcRSI(closes.slice(0, last - 5));
+    const priceMakesLL = closes[last] < Math.min(...closes.slice(last - 10, last - 1));
+    const rsiDiverg = priceMakesLL && rsiNow > rsiPrev + 3;
+    const rsiScore = (rsiNow < 35 ? 6 : 0) + (rsiDiverg ? 4 : 0);
+
+    const totalScore = sweepScore + volScore + candleScore + bosScore + fvgScore + rsiScore;
+
+    // Sinyal utama
+    let signal = 'WAIT', signalColor = '#94a3b8';
+    if (totalScore >= 80)      { signal = '🎯 SNIPER'; signalColor = '#f59e0b'; }
+    else if (totalScore >= 60) { signal = '👀 WATCH';  signalColor = '#3b82f6'; }
+    else if (totalScore >= 40) { signal = '📋 SETUP';  signalColor = '#8b5cf6'; }
+
+    return {
+        score: totalScore,
+        signal, signalColor, price, ch24h: +ch24h.toFixed(2),
+        rsi: +rsiNow.toFixed(1), volRatio: +volRatio.toFixed(2),
+        signals: {
+            sweep:   { active: sweepScore > 0,   score: sweepScore,   label: 'Liquidity Sweep' },
+            volume:  { active: volScore  > 0,    score: volScore,    label: `Volume Spike ${volRatio.toFixed(1)}x` },
+            candle:  { active: candleScore > 0,  score: candleScore, label: bullCandle ? 'Hammer' : 'Bullish Engulfing' },
+            bos:     { active: bosScore > 0,     score: bosScore,    label: 'BOS ke Atas' },
+            fvg:     { active: fvgScore > 0,     score: fvgScore,    label: 'Di Area FVG/Demand' },
+            rsi:     { active: rsiScore > 0,     score: rsiScore,    label: `RSI ${rsiNow.toFixed(0)}${rsiDiverg ? ' + Divergence' : ''}` },
+        }
+    };
+}
+
+app.get('/api/sniper-scan', async (req, res) => {
+    const tf = req.query.tf || '1h';
+    const validTf = ['15m','1h','4h'].includes(tf) ? tf : '1h';
+    const limit = validTf === '4h' ? 60 : 50;
+    try {
+        const results = await Promise.allSettled(
+            SNIPER_PAIRS.map(async sym => {
+                const r = await fetch(`https://api.binance.com/api/v3/klines?symbol=${sym}USDT&interval=${validTf}&limit=${limit}`);
+                const candles = await r.json();
+                if (!Array.isArray(candles)) return null;
+                const analysis = _sniperAnalyze(candles);
+                if (!analysis) return null;
+                return { symbol: sym, ...analysis };
+            })
+        );
+        let coins = results
+            .filter(r => r.status === 'fulfilled' && r.value)
+            .map(r => r.value)
+            .sort((a, b) => b.score - a.score);
+
+        // Kirim Telegram alert untuk sniper score >= 80
+        const snipers = coins.filter(c => c.score >= 80);
+        if (snipers.length && _tgBotToken && _tgChatId) {
+            const lines = snipers.map(c =>
+                `🎯 <b>${c.symbol}</b> — Score: <b>${c.score}/100</b>\n` +
+                `   Harga: $${c.price.toFixed(4)} (${c.ch24h > 0 ? '+' : ''}${c.ch24h}%) · RSI: ${c.rsi}`
+            ).join('\n\n');
+            const msg = `🎯 <b>SNIPER ENTRY ALERT!</b>\n\n${lines}\n\n<i>Timeframe: ${validTf} · ${new Date().toLocaleString('id-ID', {timeZone:'Asia/Jakarta'})}</i>`;
+            fetch(`https://api.telegram.org/bot${_tgBotToken}/sendMessage`, {
+                method: 'POST', headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({ chat_id: _tgChatId, text: msg, parse_mode: 'HTML' })
+            }).catch(() => {});
+        }
+
+        res.json({ ok: true, coins, tf: validTf, scannedAt: Date.now() });
+    } catch (e) {
+        res.json({ ok: false, error: e.message });
+    }
+});
+
 const ECOSYSTEM_MAP = {
     'solana': {
         name: 'Solana', symbol: 'SOL', emoji: '◎', chain: 'solana', color: '#9945FF',
