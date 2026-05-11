@@ -1868,7 +1868,7 @@ Jangan tulis "Tweet 1:", "Variasi:", atau penjelasan apapun.`;
                 'Authorization': `Bearer ${GROQ_KEY}`,
             },
             body: JSON.stringify({
-                model: 'llama3-8b-8192',
+                model: 'llama-3.1-8b-instant',
                 messages: [
                     { role: 'system', content: systemPrompt },
                     { role: 'user',   content: ctx },
@@ -1937,7 +1937,7 @@ Aturan jawaban:
                 'Authorization': `Bearer ${key}`,
             },
             body: JSON.stringify({
-                model: 'llama3-70b-8192',
+                model: 'llama-3.3-70b-versatile',
                 messages: [
                     { role: 'system', content: systemPrompt },
                     ...userMessages,
@@ -2055,7 +2055,7 @@ app.get('/api/news-sentiment', async (_, res) => {
                 const gr = await fetch('https://api.groq.com/openai/v1/chat/completions', {
                     method: 'POST',
                     headers: { 'Authorization': `Bearer ${_aiChatKey}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ model: 'llama3-70b-8192', messages: [
+                    body: JSON.stringify({ model: 'llama-3.3-70b-versatile', messages: [
                         { role: 'system', content: 'You are a crypto market analyst. Only respond with valid JSON.' },
                         { role: 'user', content: prompt }
                     ], max_tokens: 500, temperature: 0.3 })
@@ -3645,7 +3645,7 @@ Berikan ringkasan pasar, outlook hari ini, dan 2-3 rekomendasi strategi dalam fo
             const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${_aiChatKey}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ model: 'llama3-70b-8192', messages: [
+                body: JSON.stringify({ model: 'llama-3.3-70b-versatile', messages: [
                     { role: 'system', content: systemPrompt },
                     { role: 'user', content: userMsg }
                 ], max_tokens: 600, temperature: 0.7 })
