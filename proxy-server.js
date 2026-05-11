@@ -2084,11 +2084,29 @@ app.get('/api/news-sentiment', async (_, res) => {
 // ══════════════════════════════════════════════════════════════
 //  SNIPER SCANNER  — Confluence-based bottom-fishing detector
 // ══════════════════════════════════════════════════════════════
-const SNIPER_PAIRS = [
-    'BTC','ETH','SOL','BNB','XRP','AVAX','ADA','LINK','DOT','MATIC',
-    'DOGE','SHIB','UNI','AAVE','OP','ARB','INJ','TIA','SEI','SUI',
-    'WIF','JUP','RAY','PYTH','JTO','WLD','NEAR','APT','ATOM','FTM'
-];
+// Fetch top USDT pairs dari Binance by quoteVolume — dinamis, tidak hardcoded
+async function _getSniperPairs(topN = 100) {
+    try {
+        const r = await fetch('https://api.binance.com/api/v3/ticker/24hr');
+        const data = await r.json();
+        return data
+            .filter(t =>
+                t.symbol.endsWith('USDT') &&
+                !t.symbol.includes('DOWN') &&
+                !t.symbol.includes('UP') &&
+                !t.symbol.includes('BEAR') &&
+                !t.symbol.includes('BULL') &&
+                parseFloat(t.quoteVolume) > 500_000   // min $500k volume 24h
+            )
+            .sort((a, b) => parseFloat(b.quoteVolume) - parseFloat(a.quoteVolume))
+            .slice(0, topN)
+            .map(t => t.symbol.replace('USDT', ''));
+    } catch (e) {
+        console.warn('[Sniper] Gagal fetch pairs dari Binance:', e.message);
+        // Fallback minimal kalau Binance tidak bisa diakses
+        return ['BTC','ETH','SOL','BNB','XRP','AVAX','ADA','LINK','DOGE','OP','ARB','SUI','NEAR','APT'];
+    }
+}
 
 function _sniperCalcRSI(closes, period = 14) {
     if (closes.length < period + 1) return 50;
@@ -2185,21 +2203,35 @@ function _sniperAnalyze(candles) {
 }
 
 app.get('/api/sniper-scan', async (req, res) => {
-    const tf = req.query.tf || '1h';
+    const tf    = req.query.tf || '1h';
+    const topN  = Math.min(parseInt(req.query.limit) || 100, 200); // max 200
     const validTf = ['15m','1h','4h'].includes(tf) ? tf : '1h';
-    const limit = validTf === '4h' ? 60 : 50;
+    const klineLimit = validTf === '4h' ? 60 : 50;
     try {
-        const results = await Promise.allSettled(
-            SNIPER_PAIRS.map(async sym => {
-                const r = await fetch(`https://api.binance.com/api/v3/klines?symbol=${sym}USDT&interval=${validTf}&limit=${limit}`);
-                const candles = await r.json();
-                if (!Array.isArray(candles)) return null;
-                const analysis = _sniperAnalyze(candles);
-                if (!analysis) return null;
-                return { symbol: sym, ...analysis };
-            })
-        );
-        let coins = results
+        // Ambil daftar pair dinamis dari Binance
+        const pairs = await _getSniperPairs(topN);
+
+        // Scan semua pair secara paralel (batch 20 agar tidak rate-limit)
+        const BATCH = 20;
+        let allResults = [];
+        for (let i = 0; i < pairs.length; i += BATCH) {
+            const batch = pairs.slice(i, i + BATCH);
+            const batchResults = await Promise.allSettled(
+                batch.map(async sym => {
+                    const r = await fetch(`https://api.binance.com/api/v3/klines?symbol=${sym}USDT&interval=${validTf}&limit=${klineLimit}`);
+                    const candles = await r.json();
+                    if (!Array.isArray(candles)) return null;
+                    const analysis = _sniperAnalyze(candles);
+                    if (!analysis) return null;
+                    return { symbol: sym, ...analysis };
+                })
+            );
+            allResults = allResults.concat(batchResults);
+            // Jeda kecil antar batch agar tidak kena rate-limit
+            if (i + BATCH < pairs.length) await new Promise(r => setTimeout(r, 200));
+        }
+
+        let coins = allResults
             .filter(r => r.status === 'fulfilled' && r.value)
             .map(r => r.value)
             .sort((a, b) => b.score - a.score);
@@ -2218,7 +2250,7 @@ app.get('/api/sniper-scan', async (req, res) => {
             }).catch(() => {});
         }
 
-        res.json({ ok: true, coins, tf: validTf, scannedAt: Date.now() });
+        res.json({ ok: true, coins, tf: validTf, scannedAt: Date.now(), totalScanned: pairs.length });
     } catch (e) {
         res.json({ ok: false, error: e.message });
     }

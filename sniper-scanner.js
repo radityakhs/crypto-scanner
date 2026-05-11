@@ -6,7 +6,8 @@ const SniperScanner = (function () {
     'use strict';
 
     const PROXY = 'http://127.0.0.1:3001';
-    let _tf = '1h';
+    let _tf    = '1h';
+    let _topN  = 100;
     let _autoInterval = null;
     let _lastResults  = [];
 
@@ -29,11 +30,11 @@ const SniperScanner = (function () {
     async function runScan() {
         _renderLoading();
         try {
-            const r = await fetch(`${PROXY}/api/sniper-scan?tf=${_tf}`);
+            const r = await fetch(`${PROXY}/api/sniper-scan?tf=${_tf}&limit=${_topN}`);
             const d = await r.json();
             if (!d.ok) throw new Error(d.error || 'Scan gagal');
             _lastResults = d.coins || [];
-            _renderResults(_lastResults, d.scannedAt);
+            _renderResults(_lastResults, d.scannedAt, d.totalScanned);
         } catch (e) {
             _renderError(e.message);
         }
@@ -49,6 +50,12 @@ const SniperScanner = (function () {
             }
         });
         runScan();
+    }
+
+    function setTopN(n) {
+        _topN = parseInt(n) || 100;
+        const sel = document.getElementById('sniper-topn');
+        if (sel) sel.value = _topN;
     }
 
     // ─── RENDER ───────────────────────────────────────────────
@@ -72,7 +79,7 @@ const SniperScanner = (function () {
         body.innerHTML = `<div style="text-align:center;padding:60px 20px;color:#ef4444">❌ ${msg}</div>`;
     }
 
-    function _renderResults(coins, scannedAt) {
+    function _renderResults(coins, scannedAt, totalScanned) {
         const body = document.getElementById('sniper-body');
         if (!body) return;
 
@@ -81,11 +88,12 @@ const SniperScanner = (function () {
         const setups  = coins.filter(c => c.score >= 40 && c.score < 60);
 
         const ts = scannedAt ? new Date(scannedAt).toLocaleTimeString('id-ID') : '–';
+        const scanned = totalScanned || coins.length;
 
         // Summary bar
         let html = `
 <div style="padding:12px 16px;background:#0a1628;border-bottom:1px solid #1e3a5f;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-  <div style="font-size:12px;color:#64748b">📡 Scan selesai ${ts}</div>
+  <div style="font-size:12px;color:#64748b">📡 Scan selesai ${ts} · <b style="color:#94a3b8">${scanned} coin</b> dipindai</div>
   <div style="display:flex;gap:10px;flex-wrap:wrap">
     <span style="background:#f59e0b22;color:#f59e0b;padding:3px 10px;border-radius:99px;font-size:12px;font-weight:700">🎯 ${snipers.length} Sniper</span>
     <span style="background:#3b82f622;color:#3b82f6;padding:3px 10px;border-radius:99px;font-size:12px;font-weight:700">👀 ${watches.length} Watch</span>
@@ -198,5 +206,5 @@ const SniperScanner = (function () {
         }, 300);
     }
 
-    return { init, runScan, setTf, openChart };
+    return { init, runScan, setTf, setTopN, openChart };
 })();

@@ -3278,6 +3278,13 @@
                         style="background:#1e40af;border:none;border-radius:8px;padding:5px 12px;color:#93c5fd;cursor:pointer;font-size:12px;font-weight:600">1h</button>
                     <button id="sniper-tf-4h" onclick="SniperScanner.setTf('4h')"
                         style="background:#1e3a5f;border:none;border-radius:8px;padding:5px 12px;color:#64748b;cursor:pointer;font-size:12px;font-weight:600">4h</button>
+                    <select id="sniper-topn" onchange="SniperScanner.setTopN(this.value)"
+                        style="background:#1e3a5f;border:1px solid #2d4a6f;border-radius:8px;padding:5px 8px;color:#94a3b8;cursor:pointer;font-size:12px">
+                        <option value="50">Top 50</option>
+                        <option value="100" selected>Top 100</option>
+                        <option value="150">Top 150</option>
+                        <option value="200">Top 200</option>
+                    </select>
                     <button onclick="SniperScanner.runScan()"
                         style="background:linear-gradient(135deg,#f59e0b,#d97706);border:none;border-radius:8px;padding:5px 16px;color:#000;cursor:pointer;font-size:12px;font-weight:800">🎯 Scan</button>
                 </div>
