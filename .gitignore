@@ -5,6 +5,7 @@
 # ── Secrets & Environment ────────────────────────
 .env
 .env.*
+telegram-config.json
 *.secret
 *.key
 

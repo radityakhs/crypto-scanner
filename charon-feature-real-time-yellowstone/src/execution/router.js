@@ -1,0 +1,71 @@
+import { now, json } from '../utils.js';
+import { numSetting, boolSetting } from '../db/settings.js';
+import { dbRun } from '../db/connection.js';
+import { WSOL_MINT, LIVE_MIN_SOL_RESERVE_LAMPORTS } from '../config.js';
+import { escapeHtml, fmtSol } from '../format.js';
+import { executeJupiterSwap, liveWalletBalanceLamports, fetchLiveTokenBalance } from '../liveExecutor.js';
+import { activeStrategy } from '../db/settings.js';
+import { createLivePosition, canOpenMorePositions, openPositionCount } from '../db/positions.js';
+import { intentById } from '../db/intents.js';
+import { logDecisionEvent } from '../db/decisions.js';
+import { refreshCandidateForExecution } from './positions.js';
+import { bot } from '../telegram/bot.js';
+import { candidateSummary } from '../telegram/format.js';
+import { sendPositionOpen, sendTelegram } from '../telegram/send.js';
+import { updateCandidateStatus } from '../db/candidates.js';
+import { createTradeIntent } from '../db/intents.js';
+
+export async function executeLiveBuy(selectedRow, decision, batchId, rows = [], triggerCandidateId = null) {
+  const strat = await activeStrategy();
+  const amountLamports = Math.floor((strat.position_size_sol ?? await numSetting('dry_run_buy_sol', 0.1)) * 1_000_000_000);
+  const balance = await liveWalletBalanceLamports();
+  if (balance < amountLamports + LIVE_MIN_SOL_RESERVE_LAMPORTS) throw new Error(`Insufficient SOL balance. Need ${fmtSol((amountLamports + LIVE_MIN_SOL_RESERVE_LAMPORTS) / 1_000_000_000)} SOL including reserve.`);
+  const swap = await executeJupiterSwap({ inputMint: WSOL_MINT, outputMint: selectedRow.candidate.token.mint, amount: amountLamports });
+  if (!swap.outputAmount) swap.outputAmount = await fetchLiveTokenBalance(selectedRow.candidate.token.mint) || swap.outputAmount;
+  const positionId = await createLivePosition(selectedRow.id, selectedRow.candidate, decision, swap, `live_batch_${batchId}`);
+  await logDecisionEvent({ batchId, triggerCandidateId, selectedRow, rows, decision, mode: 'live', action: 'live_entry_executed', guardrails: { balanceLamports: balance, amountLamports, minReserveLamports: LIVE_MIN_SOL_RESERVE_LAMPORTS }, execution: { positionId, swap } });
+  await sendPositionOpen(positionId);
+}
+
+export async function executeLiveSell(position, reason) {
+  const amount = position.token_amount_raw || position.token_amount_est;
+  if (!amount || Number(amount) <= 0) throw new Error('Live position has no token amount to sell.');
+  return executeJupiterSwap({ inputMint: position.mint, outputMint: WSOL_MINT, amount });
+}
+
+export async function executeConfirmedIntent(chatId, intentId) {
+  const intent = await intentById(intentId);
+  if (!intent || intent.status !== 'pending_confirmation') return bot.sendMessage(chatId, 'Pending intent not found.');
+  if (!await canOpenMorePositions()) return bot.sendMessage(chatId, `Max open positions reached (${await openPositionCount()}/${await numSetting('max_open_positions', 3)}).`);
+  const { decision } = intent.payload;
+  try {
+    const freshRow = await refreshCandidateForExecution({ id: intent.candidate_id, candidate: intent.payload.candidate });
+    if (!freshRow.candidate.filters?.passed) {
+      await dbRun('UPDATE trade_intents SET status=@p0, updated_at_ms=@p1 WHERE id=@p2', ['rejected_stale', now(), intentId]);
+      return bot.sendMessage(chatId, ['🛑 <b>Trade intent rejected on fresh check</b>', '', candidateSummary(freshRow.candidate, decision), '', `Failures: ${escapeHtml((freshRow.candidate.filters?.failures || []).join('; ') || 'fresh execution guard failed')}`].join('\n'), { parse_mode: 'HTML', disable_web_page_preview: true });
+    }
+    const strat = await activeStrategy();
+    const amountLamports = Math.floor((strat.position_size_sol ?? await numSetting('dry_run_buy_sol', 0.1)) * 1_000_000_000);
+    const balance = await liveWalletBalanceLamports();
+    if (balance < amountLamports + LIVE_MIN_SOL_RESERVE_LAMPORTS) {
+      await dbRun('UPDATE trade_intents SET status=@p0, updated_at_ms=@p1 WHERE id=@p2', ['rejected_insufficient_balance', now(), intentId]);
+      return bot.sendMessage(chatId, `Insufficient SOL balance. Need ${fmtSol((amountLamports + LIVE_MIN_SOL_RESERVE_LAMPORTS) / 1_000_000_000)} SOL.`, { parse_mode: 'HTML' });
+    }
+    const swap = await executeJupiterSwap({ inputMint: WSOL_MINT, outputMint: freshRow.candidate.token.mint, amount: amountLamports });
+    if (!swap.outputAmount) swap.outputAmount = await fetchLiveTokenBalance(freshRow.candidate.token.mint) || swap.outputAmount;
+    const positionId = await createLivePosition(intent.candidate_id, freshRow.candidate, decision, swap, `confirmed_intent_${intentId}`);
+    await dbRun('UPDATE trade_intents SET status=@p0, updated_at_ms=@p1 WHERE id=@p2', ['executed_live', now(), intentId]);
+    await logDecisionEvent({ batchId: null, triggerCandidateId: intent.candidate_id, selectedRow: freshRow, rows: [], decision, mode: 'live', action: 'confirmed_intent_executed', guardrails: { balanceLamports: balance, amountLamports, intentId }, execution: { positionId, swap } });
+    return sendPositionOpen(positionId);
+  } catch (err) {
+    await dbRun('UPDATE trade_intents SET status=@p0, updated_at_ms=@p1 WHERE id=@p2', ['execution_failed', now(), intentId]);
+    return bot.sendMessage(chatId, `Live execution failed: ${escapeHtml(err.message)}`, { parse_mode: 'HTML' });
+  }
+}
+
+export async function rejectIntent(chatId, intentId) {
+  const intent = await intentById(intentId);
+  if (!intent) return bot.sendMessage(chatId, 'Intent not found.');
+  await dbRun('UPDATE trade_intents SET status=@p0, updated_at_ms=@p1 WHERE id=@p2', ['rejected', now(), intentId]);
+  return bot.sendMessage(chatId, `Rejected trade intent #${intentId}.`);
+}

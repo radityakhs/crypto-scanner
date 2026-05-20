@@ -173,7 +173,15 @@
                 <div class="nav-group-label" style="color:#a78bfa">AI Intelligence</div>
                 <button class="tab-btn" data-tab="narrative-intelligence" style="border-left:2px solid #7c3aed">
                     <span class="nav-icon">🧠</span>
-                    <span class="nav-label">AI Narrative</span>
+                    <span class="nav-label">Smart Intelligence</span>
+                </button>
+            </div>
+
+            <div class="nav-group">
+                <div class="nav-group-label" style="color:#4ade80">Solana Bot</div>
+                <button class="tab-btn" data-tab="charon-bot" style="border-left:2px solid #22c55e">
+                    <span class="nav-icon">🤖</span>
+                    <span class="nav-label">Charon Bot</span>
                 </button>
             </div>
 
@@ -5101,9 +5109,15 @@
          ║         DEX HUNTER — Memecoin Trader    ║
          ╚══════════════════════════════════════════╝ -->
     <div id="dex-hunter" class="tab-content">
-        <style>
-            .dh-wrap   { padding:20px; font-family:'Inter',system-ui,sans-serif; }
-            .dh-header { display:flex; align-items:center; gap:12px; margin-bottom:18px; flex-wrap:wrap; }
+        <div id="dex-hunter-panel" style="min-height:400px">
+            <div style="display:flex;align-items:center;justify-content:center;height:300px;color:#475569;font-size:13px">
+                <div style="text-align:center">
+                    <div style="width:28px;height:28px;border:2px solid #1e293b;border-top-color:#3b82f6;border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 12px"></div>
+                    Loading DEX Hunter AI…
+                </div>
+            </div>
+        </div>
+    </div><!-- /#dex-hunter -->
             .dh-title  { font-size:22px; font-weight:800; color:#e2e8f0; }
             .dh-badge  { padding:4px 12px; border-radius:20px; font-size:12px; font-weight:700; }
             .dh-badge-dry  { background:#1a3a1a; color:#4ade80; border:1px solid #16a34a; }
@@ -5249,69 +5263,6 @@
                 </table>
             </div>
 
-            <!-- Strategy Info -->
-            <div class="dh-section-title">🧠 Strategi & Parameter</div>
-            <div class="dh-info-grid">
-                <div class="dh-info-card">
-                    <div class="dh-info-card-title" style="color:#4ade80">🔍 Entry Filter</div>
-                    <div class="dh-info-card-body">
-                        Age: &lt; 24 jam | Vol24h: &gt; $10K<br>
-                        Txns24h: &gt; 200 | chg24h: &gt; +150%<br>
-                        Vol1h: &gt; $500 (masih aktif)<br>
-                        Min Score: 60/100
-                    </div>
-                </div>
-                <div class="dh-info-card">
-                    <div class="dh-info-card-title" style="color:#60a5fa">📊 Scoring Engine</div>
-                    <div class="dh-info-card-body">
-                        Momentum (30pt): chg24h, 1h, 5m<br>
-                        Volume (25pt): vol1h, txns, buy/sell ratio<br>
-                        Makers (20pt): distribusi wallet unik<br>
-                        Age Sweet Spot (15pt): 1–6h ideal<br>
-                        FDV (10pt): semakin kecil semakin early
-                    </div>
-                </div>
-                <div class="dh-info-card">
-                    <div class="dh-info-card-title" style="color:#fbbf24">🎯 Exit Strategy</div>
-                    <div class="dh-info-card-body">
-                        TP1: +50% → jual 50% posisi<br>
-                        TP2: +100% → jual 30% posisi<br>
-                        TP3: +300% → jual 20% sisa<br>
-                        Trailing SL: -25% dari peak<br>
-                        Initial SL: -30% dari entry
-                    </div>
-                </div>
-                <div class="dh-info-card">
-                    <div class="dh-info-card-title" style="color:#f87171">🚫 Rug Filter</div>
-                    <div class="dh-info-card-body">
-                        5m dump &gt; -25% saat 24h masih &gt; +300%<br>
-                        Sell &gt;&gt; Buy 5m (4:1 ratio)<br>
-                        Vol1h = $0 saat 24h besar (dead coin)<br>
-                        Nama mengandung kata suspicious<br>
-                        FDV terlalu besar (&gt;$10M)
-                    </div>
-                </div>
-                <div class="dh-info-card">
-                    <div class="dh-info-card-title" style="color:#c084fc">💰 Position Sizing</div>
-                    <div class="dh-info-card-body">
-                        Fixed $20 per trade (DRY RUN)<br>
-                        Maks 5 posisi bersamaan<br>
-                        Circuit breaker: stop jika daily loss &gt; $50<br>
-                        Max hold: 48 jam
-                    </div>
-                </div>
-                <div class="dh-info-card">
-                    <div class="dh-info-card-title" style="color:#34d399">[LINK] Live Trading Setup</div>
-                    <div class="dh-info-card-body">
-                        1. Deposit SOL ke wallet Solana<br>
-                        2. Set <code>.env</code>: SOLANA_WALLET_ADDRESS<br>
-                        3. Set <code>.env</code>: SOLANA_PRIVATE_KEY<br>
-                        4. <code>node memecoin-hunter.js --live</code><br>
-                        Swap via Jupiter aggregator
-                    </div>
-                </div>
-            </div>
-        </div>
     </div><!-- /#dex-hunter -->
 
     <!-- ╔══════════════════════════════════════════╗
@@ -5384,18 +5335,43 @@
     </div>
 
     <!-- ╔══════════════════════════════════════════╗
-         ║       AI NARRATIVE INTELLIGENCE          ║
+         ║  SMART NARRATIVE & LIQUIDITY INTEL      ║
          ╚══════════════════════════════════════════╝ -->
     <div id="narrative-intelligence" class="tab-content">
-        <div style="padding:60px 20px;text-align:center;color:#64748b;font-family:-apple-system,sans-serif;">
-            <div style="font-size:2.5rem;margin-bottom:12px">🧠</div>
-            <div style="font-size:16px;font-weight:700;color:#a78bfa;margin-bottom:8px">AI Narrative Intelligence</div>
-            <div style="font-size:13px;margin-bottom:20px">Panel ini sekarang ada di tab <b style="color:#e2e8f0">🏠 Home</b> — scroll ke bawah setelah Whale Accumulation.</div>
-            <button onclick="document.querySelector('[data-tab=home]').click()"
-                style="background:linear-gradient(135deg,#7c3aed,#3b82f6);border:none;color:#fff;
-                       padding:10px 24px;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer">
-                ← Kembali ke Home
-            </button>
+        <div id="siPanel"></div>
+    </div>
+
+    <!-- ╔══════════════════════════════════════════╗
+         ║          CHARON BOT PANEL               ║
+         ╚══════════════════════════════════════════╝ -->
+    <div id="charon-bot" class="tab-content">
+        <div class="charon-wrap">
+            <!-- Header -->
+            <div class="charon-header">
+                <div>
+                    <div class="charon-title">🤖 Charon Bot — Solana Memecoin Trader</div>
+                    <div class="charon-subtitle">Real-time signal detection · LLM decisions · Position management · Learning engine</div>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center">
+                    <button onclick="window.charonRefresh()" class="charon-btn-refresh">🔄 Refresh</button>
+                    <a href="charon-feature-real-time-yellowstone/README.md" target="_blank" class="charon-btn-docs">📖 Docs</a>
+                </div>
+            </div>
+
+            <!-- Status bar -->
+            <div id="charonStatusBar" class="charon-status-bar">⏳ Checking Charon status…</div>
+
+            <!-- Sub-nav -->
+            <div id="charonNav" class="charon-nav"></div>
+
+            <!-- Sections (visibility managed by charon-panel.js) -->
+            <div id="charonSec_signals"   class="charon-section"></div>
+            <div id="charonSec_positions" class="charon-section"></div>
+            <div id="charonSec_decisions" class="charon-section"></div>
+            <div id="charonSec_alerts"    class="charon-section"></div>
+            <div id="charonSec_strategy"  class="charon-section"></div>
+            <div id="charonSec_lessons"   class="charon-section"></div>
+            <div id="charonSec_wallets"   class="charon-section"></div>
         </div>
     </div>
 
@@ -5404,6 +5380,28 @@
     </div><!-- /.app-shell -->
 
     <style>
+    /* ── Charon Bot Panel Styles ── */
+    .charon-wrap { padding: 0 0 60px; font-family: -apple-system, 'Segoe UI', sans-serif; }
+    .charon-header { display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;flex-wrap:wrap;gap:12px; }
+    .charon-title { font-size:22px;font-weight:800;color:#f1f5f9;margin:0 0 4px; }
+    .charon-subtitle { font-size:13px;color:#64748b;margin:0; }
+    .charon-status-bar { background:#0f172a;border:1px solid #1e3a5f;border-radius:8px;padding:8px 14px;font-size:12px;color:#94a3b8;margin-bottom:14px; }
+    .charon-nav { display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px; }
+    .charon-nav-btn { padding:6px 14px;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;background:#1e293b;border:1px solid #334155;color:#94a3b8;transition:all .15s; }
+    .charon-nav-btn:hover { background:#334155;color:#e2e8f0; }
+    .charon-nav-btn.active { background:linear-gradient(135deg,#22c55e22,#16a34a33);border-color:#22c55e66;color:#4ade80; }
+    .charon-section { animation: fadeInUp .25s ease; }
+    .charon-section-title { font-size:15px;font-weight:700;color:#e2e8f0;margin:0 0 12px;padding-bottom:6px;border-bottom:1px solid #1e293b; }
+    .charon-btn-refresh { padding:6px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;background:#1e293b;border:1px solid #334155;color:#94a3b8;transition:background .15s; }
+    .charon-btn-refresh:hover { background:#334155; }
+    .charon-btn-docs { padding:6px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;background:#1e293b;border:1px solid #334155;color:#a78bfa;text-decoration:none;display:inline-flex;align-items:center; }
+    .charon-table { width:100%;border-collapse:collapse;font-size:12px; }
+    .charon-table thead th { background:#0f172a;color:#64748b;text-align:left;padding:7px 10px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid #1e293b; }
+    .charon-table tbody tr { border-bottom:1px solid #0f172a;transition:background .1s; }
+    .charon-table tbody tr:hover { background:#1e293b44; }
+    .charon-table tbody td { padding:7px 10px;color:#cbd5e1;vertical-align:middle; }
+    .charon-table .mono { font-family:'SF Mono','Fira Code',monospace;font-size:11px; }
+
     /* ── Auto-Screener & Whale Panel shared styles ── */
     .screener-wrap, .whale-wrap { padding: 0 0 40px; }
     .screener-header, .whale-header { display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;flex-wrap:wrap;gap:12px; }
@@ -5482,6 +5480,8 @@
     <script src="ecosystem-pump.js"></script>
     <script src="whale-accumulation.js"></script>
     <script src="narrative-intelligence.js"></script>
+    <script src="smart-intelligence.js"></script>
+    <script src="charon-panel.js"></script>
     <script src="signal-accuracy.js"></script>
     <script src="market-regime.js"></script>
     <script src="telegram-settings.js"></script>
@@ -7084,10 +7084,11 @@ ${rnd(CAT_OUTROS)}`,
             document.addEventListener('tabchange', function (e) {
                 if (e.detail !== 'dex-hunter') return;
                 if (typeof dexHunterUI !== 'undefined') {
-                    dexHunterUI.fetchState();
                     if (!_inited) {
                         _inited = true;
-                        dexHunterUI.startPolling(8000);
+                        dexHunterUI.init();
+                    } else {
+                        dexHunterUI.fetchState();
                     }
                 }
             });
@@ -11689,6 +11690,46 @@ ${rnd(CAT_OUTROS)}`,
         });
 
         return { init, scan };
+    })();
+    </script>
+
+    <script>
+    // ── Charon Bot tab init/destroy via tabchange event ──────────────
+    (function() {
+        let _charonActive = false;
+        document.addEventListener('tabchange', function(e) {
+            if (e.detail === 'charon-bot') {
+                if (!_charonActive) {
+                    _charonActive = true;
+                    if (window._charonInit) window._charonInit();
+                }
+            } else {
+                if (_charonActive) {
+                    _charonActive = false;
+                    if (window._charonDestroy) window._charonDestroy();
+                }
+            }
+        });
+    })();
+    </script>
+
+    <script>
+    // ── Smart Intelligence tab init/destroy ───────────────────────────
+    (function() {
+        let _siActive = false;
+        document.addEventListener('tabchange', function(e) {
+            if (e.detail === 'narrative-intelligence') {
+                if (!_siActive) {
+                    _siActive = true;
+                    if (window.SmartIntelligence) SmartIntelligence.init();
+                }
+            } else {
+                if (_siActive) {
+                    _siActive = false;
+                    if (window.SmartIntelligence) SmartIntelligence.destroy();
+                }
+            }
+        });
     })();
     </script>
 </body>

@@ -4,7 +4,7 @@
   "description": "Dashboard crypto berbasis web untuk analisa pasar, sinyal whale, dan expert analysis (moon phase, MA/EMA/MACD, support & resistance) lengkap dengan rekomendasi futures.",
   "main": "advanced-analysis.js",
   "scripts": {
-  "test": "mocha",
+    "test": "mocha",
     "start": "node proxy-server.js",
     "dev": "nodemon --watch .env --watch proxy-server.js --delay 1 --exec \"node proxy-server.js\""
   },
@@ -18,11 +18,12 @@
     "dotenv": "^17.3.1",
     "ethers": "^6.16.0",
     "express": "^5.2.1",
+    "mssql": "^12.5.4",
     "node-fetch": "^2.7.0",
     "puppeteer": "^24.40.0"
   },
   "devDependencies": {
-    "nodemon": "^3.1.14",
-    "mocha": "^10.2.0"
+    "mocha": "^10.2.0",
+    "nodemon": "^3.1.14"
   }
 }

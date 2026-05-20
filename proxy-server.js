@@ -3930,6 +3930,1201 @@ Berikan ringkasan pasar, outlook hari ini, dan 2-3 rekomendasi strategi dalam fo
     console.log('📰 [Daily Brief] Scheduler aktif — akan kirim setiap 08:00 WIB');
 });
 
+// ══════════════════════════════════════════════════════════════════════════
+//  SMART NARRATIVE & LIQUIDITY INTELLIGENCE PLATFORM
+//  5 Engines: Market Regime · Liquidity · Fake Breakout · Composite Score
+// ══════════════════════════════════════════════════════════════════════════
+
+// ── Engine 1: Market Regime Classifier ───────────────────────────────────
+let _regimeCache = null, _regimeCacheTs = 0;
+const REGIME_TTL = 5 * 60_000;
+
+app.get('/api/intelligence/regime', async (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    const force = req.query.refresh === '1';
+    if (!force && _regimeCache && (Date.now() - _regimeCacheTs) < REGIME_TTL) {
+        return res.json({ ok: true, cached: true, ..._regimeCache });
+    }
+    try {
+        const [globalR, btcFundR, ethFundR, solFundR, fgR] = await Promise.allSettled([
+            fetch('https://api.coingecko.com/api/v3/global', { signal: AbortSignal.timeout(8000) }),
+            fetch('https://fapi.binance.com/fapi/v1/premiumIndex?symbol=BTCUSDT', { signal: AbortSignal.timeout(5000) }),
+            fetch('https://fapi.binance.com/fapi/v1/premiumIndex?symbol=ETHUSDT', { signal: AbortSignal.timeout(5000) }),
+            fetch('https://fapi.binance.com/fapi/v1/premiumIndex?symbol=SOLUSDT', { signal: AbortSignal.timeout(5000) }),
+            fetch('https://api.alternative.me/fng/?limit=1', { signal: AbortSignal.timeout(5000) }),
+        ]);
+
+        let globalData = null, btcFund = 0, ethFund = 0, solFund = 0, fgVal = 50;
+        if (globalR.status === 'fulfilled' && globalR.value.ok) {
+            const g = await globalR.value.json();
+            globalData = g.data;
+        }
+        if (btcFundR.status === 'fulfilled' && btcFundR.value.ok) {
+            const d = await btcFundR.value.json();
+            btcFund = parseFloat(d.lastFundingRate || 0) * 100;
+        }
+        if (ethFundR.status === 'fulfilled' && ethFundR.value.ok) {
+            const d = await ethFundR.value.json();
+            ethFund = parseFloat(d.lastFundingRate || 0) * 100;
+        }
+        if (solFundR.status === 'fulfilled' && solFundR.value.ok) {
+            const d = await solFundR.value.json();
+            solFund = parseFloat(d.lastFundingRate || 0) * 100;
+        }
+        if (fgR.status === 'fulfilled' && fgR.value.ok) {
+            const d = await fgR.value.json();
+            fgVal = parseInt(d.data?.[0]?.value ?? 50);
+        }
+
+        const btcDom = globalData?.market_cap_percentage?.btc ?? 0;
+        const ethDom = globalData?.market_cap_percentage?.eth ?? 0;
+        const totalMcap = globalData?.total_market_cap?.usd ?? 0;
+        const altcoinMcap = totalMcap * (1 - (btcDom + ethDom) / 100);
+        const totalVolume = globalData?.total_volume?.usd ?? 0;
+
+        // Compute regime score
+        const avgFunding = (btcFund + ethFund + solFund) / 3;
+        const fundingSignal = avgFunding > 0.05 ? 'OVERHEATED' : avgFunding > 0.02 ? 'BULLISH' : avgFunding > -0.01 ? 'NEUTRAL' : 'BEARISH';
+        const fgSignal = fgVal >= 75 ? 'EXTREME_GREED' : fgVal >= 55 ? 'GREED' : fgVal >= 45 ? 'NEUTRAL' : fgVal >= 25 ? 'FEAR' : 'EXTREME_FEAR';
+        const btcDomSignal = btcDom > 58 ? 'BTC_DOMINANCE' : btcDom > 52 ? 'BTC_FAVOR' : btcDom < 45 ? 'ALT_SEASON' : 'TRANSITION';
+
+        // Overall regime
+        let regime, regimeColor, regimeDesc, riskLevel;
+        if (fgVal >= 75 && avgFunding > 0.04) {
+            regime = 'OVERHEATED 🔴'; regimeColor = '#ef4444';
+            regimeDesc = 'Market overheated — funding tinggi + extreme greed. HATI-HATI, kemungkinan correction tinggi.';
+            riskLevel = 'VERY_HIGH';
+        } else if (fgVal >= 55 && avgFunding > 0.01 && btcDom < 55) {
+            regime = 'RISK-ON ALTSEASON 🟢'; regimeColor = '#22c55e';
+            regimeDesc = 'Kondisi optimal untuk altcoins. BTC dominance turun + market greed + funding positif.';
+            riskLevel = 'MEDIUM';
+        } else if (fgVal >= 55 && btcDom > 52) {
+            regime = 'BTC-LED BULLISH 🟡'; regimeColor = '#f59e0b';
+            regimeDesc = 'BTC leading. Altcoins mungkin lag. Fokus ke BTC pair atau large-cap altcoins.';
+            riskLevel = 'MEDIUM';
+        } else if (fgVal <= 35 && avgFunding < 0) {
+            regime = 'RISK-OFF BEARISH 🔴'; regimeColor = '#ef4444';
+            regimeDesc = 'Fear tinggi + funding negatif. Potensi bounce besar tapi risiko tinggi. Tunggu konfirmasi.';
+            riskLevel = 'HIGH';
+        } else if (fgVal <= 25) {
+            regime = 'EXTREME FEAR — BUY ZONE 🟢'; regimeColor = '#4ade80';
+            regimeDesc = 'Historically zona akumulasi terbaik. Smart money buy when others fear.';
+            riskLevel = 'LOW';
+        } else {
+            regime = 'SIDEWAYS / TRANSITION ⚪'; regimeColor = '#94a3b8';
+            regimeDesc = 'Market dalam transisi. Tunggu konfirmasi direction sebelum entry besar.';
+            riskLevel = 'MEDIUM';
+        }
+
+        const result = {
+            regime, regimeColor, regimeDesc, riskLevel,
+            btcDom: +btcDom.toFixed(2), ethDom: +ethDom.toFixed(2),
+            totalMcap, altcoinMcap, totalVolume,
+            funding: { btc: +btcFund.toFixed(4), eth: +ethFund.toFixed(4), sol: +solFund.toFixed(4), avg: +avgFunding.toFixed(4) },
+            fundingSignal, fgVal, fgSignal, btcDomSignal,
+            altSeason: btcDom < 46,
+            fetchedAt: new Date().toISOString(),
+        };
+        _regimeCache = result;
+        _regimeCacheTs = Date.now();
+        res.json({ ok: true, cached: false, ...result });
+    } catch (e) {
+        if (_regimeCache) return res.json({ ok: true, cached: true, stale: true, ..._regimeCache });
+        res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ── Engine 2: Liquidity Intelligence ─────────────────────────────────────
+let _liqCache = null, _liqCacheTs = 0;
+const LIQ_TTL = 3 * 60_000;
+
+const LIQ_SYMBOLS = ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','SUIUSDT','XRPUSDT','DOGEUSDT','AVAXUSDT'];
+
+app.get('/api/intelligence/liquidity', async (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    const force = req.query.refresh === '1';
+    if (!force && _liqCache && (Date.now() - _liqCacheTs) < LIQ_TTL) {
+        return res.json({ ok: true, cached: true, ..._liqCache });
+    }
+    try {
+        const [oiResults, fundResults] = await Promise.all([
+            Promise.allSettled(LIQ_SYMBOLS.map(sym =>
+                fetch(`https://fapi.binance.com/fapi/v1/openInterest?symbol=${sym}`, { signal: AbortSignal.timeout(5000) })
+                    .then(r => r.json())
+            )),
+            Promise.allSettled(LIQ_SYMBOLS.map(sym =>
+                fetch(`https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${sym}`, { signal: AbortSignal.timeout(5000) })
+                    .then(r => r.json())
+            )),
+        ]);
+
+        const oiData = [], liquidationMap = [];
+
+        for (let i = 0; i < LIQ_SYMBOLS.length; i++) {
+            const sym = LIQ_SYMBOLS[i];
+            const oiRaw = oiResults[i].status === 'fulfilled' ? oiResults[i].value : null;
+            const fundRaw = fundResults[i].status === 'fulfilled' ? fundResults[i].value : null;
+
+            if (!oiRaw?.openInterest) continue;
+
+            const oi = parseFloat(oiRaw.openInterest);
+            const price = parseFloat(fundRaw?.markPrice || 0);
+            const fundRate = parseFloat(fundRaw?.lastFundingRate || 0) * 100;
+            const oiUsd = oi * price;
+
+            // Squeeze probability: high OI + extreme funding = squeeze setup
+            const sqzProb = Math.min(100, Math.round(
+                Math.abs(fundRate) * 500 +
+                (oiUsd > 1e9 ? 20 : oiUsd > 5e8 ? 10 : 0)
+            ));
+
+            // Direction: if funding very positive → likely short squeeze setup (longs overloaded → pullback OR shorts will squeeze IF price holds)
+            const sqzDir = fundRate > 0.05 ? 'SHORT_SQUEEZE_RISK' :
+                           fundRate > 0.02 ? 'LONGS_HEAVY' :
+                           fundRate < -0.03 ? 'LONG_SQUEEZE_RISK' :
+                           fundRate < -0.01 ? 'SHORTS_HEAVY' : 'BALANCED';
+
+            // Estimated liquidation cluster (rough approximation from funding extremity)
+            const liqBelowPct = fundRate > 0.03 ? -(4 + Math.abs(fundRate) * 300) : null;
+            const liqAbovePct = fundRate < -0.02 ? (4 + Math.abs(fundRate) * 300) : null;
+
+            oiData.push({
+                symbol: sym.replace('USDT', ''),
+                oi, oiUsd, price, fundRate: +fundRate.toFixed(4),
+                sqzProb, sqzDir,
+                liqBelowPct: liqBelowPct ? +liqBelowPct.toFixed(1) : null,
+                liqAbovePct: liqAbovePct ? +liqAbovePct.toFixed(1) : null,
+            });
+        }
+
+        oiData.sort((a, b) => b.oiUsd - a.oiUsd);
+        const totalOiUsd = oiData.reduce((s, x) => s + x.oiUsd, 0);
+        const topSqueeze = oiData.filter(x => x.sqzProb >= 30).sort((a, b) => b.sqzProb - a.sqzProb).slice(0, 3);
+
+        const result = {
+            oiData, totalOiUsd, topSqueeze,
+            alert: topSqueeze.length > 0
+                ? `⚠️ ${topSqueeze[0].symbol} squeeze probability ${topSqueeze[0].sqzProb}% — ${topSqueeze[0].sqzDir.replace(/_/g,' ')}`
+                : null,
+            fetchedAt: new Date().toISOString(),
+        };
+        _liqCache = result;
+        _liqCacheTs = Date.now();
+        res.json({ ok: true, cached: false, ...result });
+    } catch (e) {
+        if (_liqCache) return res.json({ ok: true, cached: true, stale: true, ..._liqCache });
+        res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ── Engine 3: Fake Breakout Detector ─────────────────────────────────────
+let _fboCache = null, _fboCacheTs = 0;
+const FBO_TTL = 10 * 60_000;
+
+const FBO_SYMBOLS = ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','SUIUSDT','XRPUSDT','DOGEUSDT','AVAXUSDT','LINKUSDT','NEARUSDT'];
+
+app.get('/api/intelligence/fake-breakout', async (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    const force = req.query.refresh === '1';
+    if (!force && _fboCache && (Date.now() - _fboCacheTs) < FBO_TTL) {
+        return res.json({ ok: true, cached: true, ..._fboCache });
+    }
+    try {
+        // Fetch 4h candles: 50 candles per coin
+        const candleResults = await Promise.allSettled(FBO_SYMBOLS.map(sym =>
+            fetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${sym}&interval=4h&limit=50`, { signal: AbortSignal.timeout(8000) })
+                .then(r => r.json())
+        ));
+
+        const detections = [];
+
+        for (let i = 0; i < FBO_SYMBOLS.length; i++) {
+            const sym = FBO_SYMBOLS[i];
+            const candles = candleResults[i].status === 'fulfilled' ? candleResults[i].value : null;
+            if (!Array.isArray(candles) || candles.length < 20) continue;
+
+            // candle format: [ts, open, high, low, close, volume, ...]
+            const closes = candles.map(c => parseFloat(c[4]));
+            const highs  = candles.map(c => parseFloat(c[2]));
+            const lows   = candles.map(c => parseFloat(c[3]));
+            const vols   = candles.map(c => parseFloat(c[5]));
+
+            const last  = closes.length - 1;
+            const price = closes[last];
+
+            // Rolling 20-candle high (resistance)
+            const res20  = Math.max(...highs.slice(last - 20, last));
+            const avgVol = vols.slice(last - 20, last).reduce((s, v) => s + v, 0) / 20;
+            const lastVol = vols[last];
+            const volRatio = lastVol / Math.max(avgVol, 1);
+
+            // Last 3 candles analysis
+            const c1 = { o: parseFloat(candles[last-2][1]), h: highs[last-2], l: lows[last-2], c: closes[last-2], v: vols[last-2] };
+            const c2 = { o: parseFloat(candles[last-1][1]), h: highs[last-1], l: lows[last-1], c: closes[last-1], v: vols[last-1] };
+            const c3 = { o: parseFloat(candles[last][1]),   h: highs[last],   l: lows[last],   c: closes[last],   v: vols[last] };
+
+            // Pattern 1: Fakeout above resistance — candle broke above but closed below
+            const breakAbove = c2.h > res20 * 1.002;
+            const closedBelow = c2.c < res20;
+            const lowerFollowThrough = c3.c < c2.c;
+            const fakeoutAbove = breakAbove && closedBelow && lowerFollowThrough;
+
+            // Pattern 2: Bearish engulfing after new high
+            const bearEngulf = c3.o > c2.c && c3.c < c2.o && (c3.o - c3.c) > (c2.c - c2.o) * 0.8;
+
+            // Pattern 3: Volume anomaly without price follow-through
+            const volSpike = volRatio > 2.5;
+            const flatPrice = Math.abs(c3.c - c3.o) / c3.o < 0.005;
+            const volumeFakeout = volSpike && flatPrice;
+
+            // Pattern 4: Wick rejection at resistance
+            const wickReject = c2.h > res20 * 1.005 && (c2.h - Math.max(c2.o, c2.c)) / (c2.h - c2.l + 0.0001) > 0.5;
+
+            if (!fakeoutAbove && !bearEngulf && !volumeFakeout && !wickReject) continue;
+
+            const patterns = [];
+            if (fakeoutAbove) patterns.push('FAKEOUT_BREAKOUT');
+            if (bearEngulf) patterns.push('BEARISH_ENGULF');
+            if (volumeFakeout) patterns.push('VOL_ANOMALY');
+            if (wickReject) patterns.push('WICK_REJECTION');
+
+            // Confidence score
+            const confidence = Math.min(100, patterns.length * 25 + (volRatio > 2 ? 20 : 0) + (wickReject ? 15 : 0));
+            const resistanceLevel = +res20.toFixed(4);
+            const distFromRes = +((price - res20) / res20 * 100).toFixed(2);
+
+            detections.push({
+                symbol: sym.replace('USDT', ''),
+                price: +price.toFixed(4),
+                resistanceLevel,
+                distFromRes,
+                patterns,
+                confidence,
+                volRatio: +volRatio.toFixed(2),
+                verdict: confidence >= 60 ? 'STRONG_FAKEOUT' : confidence >= 35 ? 'LIKELY_FAKEOUT' : 'WATCH',
+                warning: `${sym.replace('USDT','')} — ${patterns.join(' + ')} di area $${resistanceLevel.toFixed(4)}`,
+            });
+        }
+
+        detections.sort((a, b) => b.confidence - a.confidence);
+        const result = {
+            detections,
+            strongFakeouts: detections.filter(d => d.verdict === 'STRONG_FAKEOUT').length,
+            likelyFakeouts: detections.filter(d => d.verdict === 'LIKELY_FAKEOUT').length,
+            fetchedAt: new Date().toISOString(),
+        };
+        _fboCache = result;
+        _fboCacheTs = Date.now();
+        res.json({ ok: true, cached: false, ...result });
+    } catch (e) {
+        if (_fboCache) return res.json({ ok: true, cached: true, stale: true, ..._fboCache });
+        res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ── Engine 4: Composite AI Score ─────────────────────────────────────────
+let _compCache = null, _compCacheTs = 0;
+const COMP_TTL = 5 * 60_000;
+
+const COMP_SYMBOLS = [
+    { sym: 'BTCUSDT', cgId: 'bitcoin', name: 'Bitcoin', narrative: 'BTC Season' },
+    { sym: 'ETHUSDT', cgId: 'ethereum', name: 'Ethereum', narrative: 'ETH DeFi' },
+    { sym: 'SOLUSDT', cgId: 'solana', name: 'Solana', narrative: 'Solana Meme' },
+    { sym: 'SUIUSDT', cgId: 'sui', name: 'Sui', narrative: 'Sui Ecosystem' },
+    { sym: 'BNBUSDT', cgId: 'binancecoin', name: 'BNB', narrative: 'BSC' },
+    { sym: 'XRPUSDT', cgId: 'ripple', name: 'XRP', narrative: 'Payments' },
+    { sym: 'DOGEUSDT', cgId: 'dogecoin', name: 'DOGE', narrative: 'Meme' },
+    { sym: 'AVAXUSDT', cgId: 'avalanche-2', name: 'AVAX', narrative: 'L1' },
+    { sym: 'LINKUSDT', cgId: 'chainlink', name: 'LINK', narrative: 'Oracle' },
+    { sym: 'NEARUSDT', cgId: 'near', name: 'NEAR', narrative: 'AI/Infra' },
+    { sym: 'UNIUSDT', cgId: 'uniswap', name: 'UNI', narrative: 'DeFi' },
+    { sym: 'AAVEUSDT', cgId: 'aave', name: 'AAVE', narrative: 'DeFi Lending' },
+];
+
+app.get('/api/intelligence/composite', async (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    const force = req.query.refresh === '1';
+    if (!force && _compCache && (Date.now() - _compCacheTs) < COMP_TTL) {
+        return res.json({ ok: true, cached: true, ..._compCache });
+    }
+    try {
+        const cgIds = COMP_SYMBOLS.map(x => x.cgId).join(',');
+        const [cgRes, fundRes, oiRes] = await Promise.allSettled([
+            fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${cgIds}&vs_currencies=usd&include_24hr_change=true&include_1h_change=true&include_7d_change=true&include_market_cap=true&include_24hr_vol=true`, { signal: AbortSignal.timeout(10000) }),
+            Promise.allSettled(COMP_SYMBOLS.map(x =>
+                fetch(`https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${x.sym}`, { signal: AbortSignal.timeout(5000) }).then(r => r.json()).catch(() => null)
+            )),
+            Promise.allSettled(COMP_SYMBOLS.map(x =>
+                fetch(`https://fapi.binance.com/fapi/v1/openInterest?symbol=${x.sym}`, { signal: AbortSignal.timeout(5000) }).then(r => r.json()).catch(() => null)
+            )),
+        ]);
+
+        const cgData = cgRes.status === 'fulfilled' && cgRes.value.ok ? await cgRes.value.json() : {};
+        const fundData = fundRes.status === 'fulfilled' ? fundRes.value : [];
+        const oiData   = oiRes.status === 'fulfilled' ? oiRes.value : [];
+
+        const scores = [];
+        for (let i = 0; i < COMP_SYMBOLS.length; i++) {
+            const { sym, cgId, name, narrative } = COMP_SYMBOLS[i];
+            const cg = cgData[cgId] || {};
+            const fund = fundData[i]?.status === 'fulfilled' ? fundData[i].value : null;
+            const oi   = oiData[i]?.status === 'fulfilled' ? oiData[i].value : null;
+
+            const price   = cg.usd || 0;
+            const ch24h   = cg.usd_24h_change || 0;
+            const ch1h    = cg.usd_1h_change || 0;
+            const ch7d    = cg.usd_7d_change || 0;
+            const mcap    = cg.usd_market_cap || 0;
+            const vol24h  = cg.usd_24h_vol || 0;
+            const fundRate = parseFloat(fund?.lastFundingRate || 0) * 100;
+            const oiVal   = oi ? parseFloat(oi.openInterest) * price : 0;
+            const volMcRatio = mcap > 0 ? (vol24h / mcap * 100) : 0;
+
+            // ── Composite Score Formula ───────────────────────────────────
+            // Momentum (40%): ch1h*0.15 + ch24h*0.25 / 40 * 100
+            const momentumScore = Math.min(100, Math.max(0,
+                (ch1h * 0.15 + ch24h * 0.25 + ch7d * 0.10) / 30 * 50 + 50
+            ));
+            // Volume signal (20%): high vol/mcap = accumulation
+            const volScore = Math.min(100, volMcRatio * 5);
+            // Funding signal (20%): optimal = slightly positive (0.01-0.03%)
+            const fundScore = fundRate >= 0.01 && fundRate <= 0.04 ? 80
+                : fundRate > 0.04 ? Math.max(0, 80 - (fundRate - 0.04) * 2000)
+                : fundRate < 0 ? 50 + fundRate * 1000
+                : 60;
+            // OI signal (20%): high OI + positive momentum = bullish
+            const oiScore = oiVal > 2e9 ? Math.min(100, 50 + ch24h * 2) :
+                            oiVal > 5e8 ? Math.min(100, 40 + ch24h * 2) : 30 + ch24h;
+
+            const composite = Math.round(
+                momentumScore * 0.40 +
+                volScore      * 0.20 +
+                fundScore     * 0.20 +
+                oiScore       * 0.20
+            );
+
+            const grade = composite >= 75 ? 'A' : composite >= 60 ? 'B' : composite >= 45 ? 'C' : composite >= 30 ? 'D' : 'F';
+            const signal = composite >= 70 && ch24h > 2 ? 'STRONG_BUY'
+                : composite >= 60 ? 'BUY'
+                : composite >= 45 ? 'NEUTRAL'
+                : composite >= 30 ? 'CAUTION'
+                : 'AVOID';
+
+            scores.push({
+                symbol: sym.replace('USDT',''), name, narrative,
+                price, ch1h: +ch1h.toFixed(2), ch24h: +ch24h.toFixed(2), ch7d: +ch7d.toFixed(2),
+                mcap, vol24h, volMcRatio: +volMcRatio.toFixed(2),
+                fundRate: +fundRate.toFixed(4), oiUsd: +oiVal.toFixed(0),
+                scores: {
+                    momentum: Math.round(momentumScore),
+                    volume: Math.round(volScore),
+                    funding: Math.round(fundScore),
+                    oi: Math.round(oiScore),
+                    composite,
+                },
+                composite, grade, signal,
+            });
+        }
+
+        scores.sort((a, b) => b.composite - a.composite);
+        const topBuy = scores.filter(s => s.signal === 'STRONG_BUY' || s.signal === 'BUY').slice(0, 3);
+
+        const result = {
+            scores, topBuy,
+            fetchedAt: new Date().toISOString(),
+        };
+        _compCache = result;
+        _compCacheTs = Date.now();
+        res.json({ ok: true, cached: false, ...result });
+    } catch (e) {
+        if (_compCache) return res.json({ ok: true, cached: true, stale: true, ..._compCache });
+        res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ── Engine 5: AI Market Analyst ───────────────────────────────────────────
+// Aggregates all 4 engine outputs → builds detailed prompt → calls Groq LLM
+// Returns structured written market analysis in Indonesian
+let _aiAnalysisCache = null, _aiAnalysisCacheTs = 0;
+const AI_ANALYSIS_TTL = 15 * 60_000; // 15 menit (LLM call mahal)
+
+app.post('/api/intelligence/ai-analysis', express.json(), async (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    const force   = req.body?.force === true;
+    const apiKey  = req.body?.apiKey || GROQ_KEY;
+    const focus   = req.body?.focus || 'general'; // 'general' | 'altseason' | 'risk' | 'entry'
+
+    if (!apiKey) {
+        return res.status(503).json({
+            ok: false,
+            error: 'GROQ_API_KEY belum diset. Masukkan API key di Settings atau set di .env (GROQ_API_KEY).',
+        });
+    }
+
+    if (!force && _aiAnalysisCache && (Date.now() - _aiAnalysisCacheTs) < AI_ANALYSIS_TTL) {
+        return res.json({ ok: true, cached: true, ..._aiAnalysisCache });
+    }
+
+    try {
+        // ── Kumpulkan semua data dari 4 engine secara paralel ─────────────
+        const [regR, liqR, fboR, compR, fgR, narrR] = await Promise.allSettled([
+            fetch(`http://127.0.0.1:${PORT}/api/intelligence/regime`).then(r => r.json()),
+            fetch(`http://127.0.0.1:${PORT}/api/intelligence/liquidity`).then(r => r.json()),
+            fetch(`http://127.0.0.1:${PORT}/api/intelligence/fake-breakout`).then(r => r.json()),
+            fetch(`http://127.0.0.1:${PORT}/api/intelligence/composite`).then(r => r.json()),
+            fetch(`http://127.0.0.1:${PORT}/api/fear-greed`).then(r => r.json()),
+            fetch(`http://127.0.0.1:${PORT}/api/narrative/overview`).then(r => r.json()).catch(() => null),
+        ]);
+
+        const reg  = regR.status  === 'fulfilled' ? regR.value  : null;
+        const liq  = liqR.status  === 'fulfilled' ? liqR.value  : null;
+        const fbo  = fboR.status  === 'fulfilled' ? fboR.value  : null;
+        const comp = compR.status === 'fulfilled' ? compR.value : null;
+        const fg   = fgR.status   === 'fulfilled' ? fgR.value   : null;
+        const narr = narrR.status === 'fulfilled' ? narrR.value : null;
+
+        // ── Build context block untuk prompt ──────────────────────────────
+        const regCtx = reg ? `
+=== MARKET REGIME ===
+Regime: ${reg.regime}
+Risk Level: ${reg.riskLevel}
+BTC Dominance: ${reg.btcDom}% (${reg.btcDomSignal})
+Alt Season: ${reg.altSeason ? 'YES ✅' : 'NO ❌'}
+Fear & Greed: ${reg.fgVal} (${reg.fgSignal})
+Avg Funding Rate: ${(reg.funding?.avg * 100)?.toFixed(4)}% → ${reg.fundingSignal}
+Funding BTC/ETH/SOL: ${(reg.funding?.btc*100)?.toFixed(4)}% / ${(reg.funding?.eth*100)?.toFixed(4)}% / ${(reg.funding?.sol*100)?.toFixed(4)}%
+Total Market Cap: $${(reg.totalMcap/1e12)?.toFixed(2)}T
+Regime Description: ${reg.regimeDesc}` : '';
+
+        const compTop5 = comp?.scores?.slice(0, 5).map(s =>
+            `  ${s.symbol}: Score=${s.composite} Grade=${s.grade} Signal=${s.signal} | 24h=${s.ch24h > 0 ? '+' : ''}${s.ch24h}% 7d=${s.ch7d > 0 ? '+' : ''}${s.ch7d}% | Funding=${(s.fundRate*100)?.toFixed(4)}%`
+        ).join('\n') || '';
+        const compBottom3 = comp?.scores?.slice(-3).map(s =>
+            `  ${s.symbol}: Score=${s.composite} Grade=${s.grade} Signal=${s.signal}`
+        ).join('\n') || '';
+        const compCtx = comp ? `
+=== COMPOSITE AI SCORES (Top 5) ===
+${compTop5}
+Weakest:
+${compBottom3}` : '';
+
+        const liqTop = liq?.oiData?.slice(0, 5).map(x =>
+            `  ${x.symbol}: OI=$${(x.oiUsd/1e9)?.toFixed(2)}B Funding=${(x.fundRate*100)?.toFixed(4)}% SqzProb=${x.sqzProb}% Dir=${x.sqzDir}`
+        ).join('\n') || '';
+        const liqCtx = liq ? `
+=== OPEN INTEREST & SQUEEZE RADAR ===
+Total OI: $${(liq.totalOiUsd/1e9)?.toFixed(1)}B
+Top 5 by OI:
+${liqTop}
+Top Squeeze Setups: ${liq.topSqueeze?.map(x => `${x.symbol}(${x.sqzProb}%)`).join(', ') || 'None'}
+${liq.alert ? 'ALERT: ' + liq.alert : ''}` : '';
+
+        const fboCtx = fbo ? `
+=== FAKE BREAKOUT DETECTOR ===
+Strong Fakeouts: ${fbo.strongFakeouts}
+Likely Fakeouts: ${fbo.likelyFakeouts}
+Detections: ${fbo.detections?.slice(0,4).map(x =>
+    `${x.symbol}(${x.verdict}, conf=${x.confidence}%, patterns=${x.patterns.join('+')})`
+).join(' | ') || 'None'}` : '';
+
+        const fgCtx = fg ? `
+=== FEAR & GREED ===
+Value: ${fg.value} — ${fg.classification}
+Market Phase: ${fg.marketPhase?.label}
+7-day avg: ${fg.avg7d}
+Regime Warning: ${fg.regime?.warn}` : '';
+
+        const narrTop3 = narr?.narratives?.slice(0,3).map(n =>
+            `  ${n.emoji} ${n.name}: Score=${n.score} Signal=${n.rotationSignal} Leader=${n.leader?.symbol}(${n.leader?.ch24h > 0 ? '+' : ''}${n.leader?.ch24h}%24h)`
+        ).join('\n') || '';
+        const narrCtx = narr ? `
+=== NARRATIVE ROTATION (Top 3) ===
+${narrTop3}
+Breakout Imminent: ${narr.breakoutImminent?.map(n => n.name).join(', ') || 'None'}
+AI Predictions Count: ${narr.predictions?.length || 0}` : '';
+
+        const focusInstructions = {
+            general:   'Berikan analisa lengkap kondisi pasar saat ini, risiko, dan peluang.',
+            altseason: 'Fokus pada potensi alt season: apakah kondisi mendukung? Narrative mana yang paling menarik?',
+            risk:      'Fokus pada risk management: apa risiko terbesar saat ini? Bagaimana mitigasinya?',
+            entry:     'Fokus pada entry opportunities: coin mana yang paling menarik untuk entry sekarang dan mengapa?',
+        }[focus] || 'Berikan analisa lengkap kondisi pasar saat ini.';
+
+        const now = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
+
+        // ── System prompt ─────────────────────────────────────────────────
+        const systemPrompt = `Kamu adalah seorang hedge fund analyst profesional level senior yang spesialisasi di crypto market. Nama kamu adalah "Market Oracle AI".
+
+Gaya analisa kamu:
+- Data-driven, tajam, dan langsung ke intinya
+- Seperti laporan dari prop trading desk — bukan sekedar tutorial
+- Selalu lihat big picture tapi juga tactical entry/exit
+- Gunakan bahasa Indonesia yang profesional
+- Format dengan section headers yang jelas
+- Sertakan confidence level untuk setiap rekomendasi
+- Selalu tambahkan disclaimer singkat di akhir
+
+Struktur jawaban (wajib ikuti):
+1. 📊 **KONDISI PASAR SEKARANG** — snapshot regime + sentiment
+2. ⚡ **SINYAL KRITIS** — hal paling penting yang harus diperhatikan SEKARANG
+3. 🎯 **PELUANG TERTINGGI** — top 3 coin/narrative yang menarik + reasoning
+4. 🚨 **RISIKO UTAMA** — apa yang bisa salah + kapan cut
+5. 📐 **TACTICAL PLAYBOOK** — concrete action plan (entry zone, sizing, SL)
+6. ⏱️ **TIME HORIZON OUTLOOK** — short/mid/long term view
+
+Jawaban harus tajam dan actionable, bukan generik.`;
+
+        const userMsg = `Waktu analisa: ${now} WIB
+
+DATA PASAR REAL-TIME:
+${regCtx}
+${fgCtx}
+${compCtx}
+${liqCtx}
+${fboCtx}
+${narrCtx}
+
+FOKUS ANALISA: ${focusInstructions}
+
+Berikan analisa crypto market yang komprehensif dan actionable berdasarkan semua data di atas.`;
+
+        // ── Call Groq LLM ─────────────────────────────────────────────────
+        const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify({
+                model: 'llama-3.3-70b-versatile',
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: userMsg },
+                ],
+                max_tokens: 2048,
+                temperature: 0.45, // lebih deterministic untuk analisa keuangan
+            }),
+            signal: AbortSignal.timeout(45000),
+        });
+
+        if (!groqRes.ok) {
+            const errText = await groqRes.text();
+            return res.status(groqRes.status).json({ ok: false, error: `Groq API error: ${errText}` });
+        }
+
+        const groqData = await groqRes.json();
+        const analysis = groqData.choices?.[0]?.message?.content || '';
+        const tokens   = groqData.usage?.total_tokens || 0;
+
+        const result = {
+            analysis,
+            focus,
+            model: groqData.model,
+            tokens,
+            dataSnapshot: {
+                regime:      reg?.regime,
+                fgVal:       fg?.value,
+                btcDom:      reg?.btcDom,
+                altSeason:   reg?.altSeason,
+                topCoin:     comp?.scores?.[0]?.symbol,
+                topScore:    comp?.scores?.[0]?.composite,
+                sqzAlerts:   liq?.topSqueeze?.length || 0,
+                fakeouts:    fbo?.detections?.length || 0,
+            },
+            generatedAt: new Date().toISOString(),
+        };
+
+        _aiAnalysisCache  = result;
+        _aiAnalysisCacheTs = Date.now();
+        res.json({ ok: true, cached: false, ...result });
+
+    } catch (e) {
+        if (_aiAnalysisCache) return res.json({ ok: true, cached: true, stale: true, ..._aiAnalysisCache });
+        res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+app.options('/api/intelligence/ai-analysis', (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.sendStatus(200);
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  DEX HUNTER AI INTELLIGENCE LAYER
+//  /api/dex/trenches  — advanced 9-dim scored token scanner
+//  /api/dex/ai-signal — Groq AI signal (LONG/SHORT/SCALP) for a token
+//  /api/dex/narratives — narrative + ecosystem detection from top gainers
+// ══════════════════════════════════════════════════════════════════════════════
+
+const _trenchesCache = { data: null, ts: 0, ttl: 45_000 };   // 45s
+const _narrativesCache = { data: null, ts: 0, ttl: 300_000 }; // 5min
+
+// ── /api/dex/trenches  ────────────────────────────────────────────────────────
+app.get('/api/dex/trenches', async (req, res) => {
+    if (_trenchesCache.data && Date.now() - _trenchesCache.ts < _trenchesCache.ttl) {
+        return res.json(_trenchesCache.data);
+    }
+    try {
+        const DSC = 'https://api.dexscreener.com';
+        const queries = ['pump sol', 'solana meme', 'pumpfun', 'bonk sol', 'raydium', 'sol ai', 'sol dog', 'sol cat'];
+        const seen = new Set();
+        const allPairs = [];
+
+        await Promise.all(queries.map(async q => {
+            try {
+                const r = await fetch(`${DSC}/latest/dex/search?q=${encodeURIComponent(q)}`, { signal: AbortSignal.timeout(8000) });
+                if (!r.ok) return;
+                const d = await r.json();
+                for (const p of (d.pairs || [])) {
+                    if (p?.pairAddress && !seen.has(p.pairAddress) && p.chainId === 'solana') {
+                        seen.add(p.pairAddress);
+                        allPairs.push(p);
+                    }
+                }
+            } catch {}
+        }));
+
+        const now = Date.now();
+        const scored = [];
+        for (const raw of allPairs) {
+            if (!raw?.baseToken) continue;
+            const ageH     = raw.pairCreatedAt ? (now - raw.pairCreatedAt) / 3_600_000 : 9999;
+            const vol24h   = raw.volume?.h24  || 0;
+            const vol1h    = raw.volume?.h1   || 0;
+            const vol5m    = raw.volume?.m5   || 0;
+            const chg24h   = raw.priceChange?.h24 || 0;
+            const chg1h    = raw.priceChange?.h1  || 0;
+            const chg5m    = raw.priceChange?.m5  || 0;
+            const buys5m   = raw.txns?.m5?.buys   || 0;
+            const sells5m  = raw.txns?.m5?.sells  || 0;
+            const buys1h   = raw.txns?.h1?.buys   || 0;
+            const sells1h  = raw.txns?.h1?.sells  || 0;
+            const buys24   = raw.txns?.h24?.buys  || 0;
+            const sells24  = raw.txns?.h24?.sells || 0;
+            const txns24h  = buys24 + sells24;
+            const fdv      = raw.fdv || 0;
+            const liq      = raw.liquidity?.usd || 0;
+            const price    = parseFloat(raw.priceUsd || 0);
+            const boosts   = raw.boosts?.active || 0;
+
+            if (vol24h < 5000)  continue;
+            if (price <= 0)     continue;
+            if (ageH > 48)      continue;
+
+            // ── 9-dim score ──
+            let score = 0;
+            const dims = {};
+
+            // 1. Momentum (0-20)
+            let mom = 0;
+            if (chg24h >= 2000) mom = 20;
+            else if (chg24h >= 500) mom = 16;
+            else if (chg24h >= 200) mom = 12;
+            else if (chg24h >= 100) mom = 7;
+            else if (chg24h >= 20)  mom = 3;
+            if (chg1h > 15) mom = Math.min(20, mom + 4);
+            if (chg5m > 3)  mom = Math.min(20, mom + 2);
+            dims.momentum = mom;
+
+            // 2. Volume (0-15)
+            let vol = 0;
+            const avg5mEst = vol24h / 288;
+            if (avg5mEst > 0 && vol5m > avg5mEst * 4) { vol += 6; }
+            if (vol1h >= 50000) vol += 9;
+            else if (vol1h >= 10000) vol += 6;
+            else if (vol1h >= 2000)  vol += 3;
+            dims.volume = Math.min(15, vol);
+
+            // 3. Buy pressure (0-15)
+            let bp = 0;
+            const ratio5m = sells5m > 0 ? buys5m / sells5m : (buys5m > 0 ? 5 : 1);
+            const ratio1h  = sells1h > 0 ? buys1h / sells1h : 1;
+            if (ratio5m >= 3)       bp += 8;
+            else if (ratio5m >= 2)  bp += 5;
+            else if (ratio5m >= 1.3)bp += 2;
+            if (ratio1h >= 2)       bp += 7;
+            else if (ratio1h >= 1.5)bp += 4;
+            dims.buyPressure = Math.min(15, bp);
+
+            // 4. Age sweet spot (0-12)
+            let age = 0;
+            if (ageH >= 0.5 && ageH < 2)    age = 12;
+            else if (ageH < 4)               age = 10;
+            else if (ageH < 8)               age = 7;
+            else if (ageH < 24)              age = 4;
+            else                             age = 1;
+            dims.age = age;
+
+            // 5. FDV opportunity (0-10)
+            let fdvScore = 0;
+            if (fdv > 0 && fdv < 50000)      fdvScore = 10;
+            else if (fdv < 200000)            fdvScore = 8;
+            else if (fdv < 500000)            fdvScore = 5;
+            else if (fdv < 1000000)           fdvScore = 2;
+            dims.fdv = fdvScore;
+
+            // 6. Liquidity health (0-10)
+            let liqScore = 0;
+            if (liq >= 100000)      liqScore = 10;
+            else if (liq >= 30000)  liqScore = 7;
+            else if (liq >= 10000)  liqScore = 4;
+            else if (liq >= 2000)   liqScore = 2;
+            dims.liquidity = liqScore;
+
+            // 7. Transaction density (0-10)
+            let txScore = 0;
+            if (txns24h >= 5000)    txScore = 10;
+            else if (txns24h >= 1000) txScore = 7;
+            else if (txns24h >= 300)  txScore = 4;
+            else if (txns24h >= 100)  txScore = 2;
+            dims.txDensity = txScore;
+
+            // 8. Rug risk (penalty, 0 to -15)
+            let rugRisk = 0;
+            if (chg5m < -20 && chg24h > 200) rugRisk -= 15; // pump & dump
+            if (sells5m > buys5m * 4 && txns24h > 50) rugRisk -= 10;
+            if (vol1h < 100 && vol24h > 50000) rugRisk -= 8; // dead
+            if (liq < 1000) rugRisk -= 5; // no liquidity
+            dims.rugRisk = rugRisk;
+
+            // 9. Social signals (0-8)
+            let social = 0;
+            if (boosts >= 500)      social = 8;
+            else if (boosts >= 100) social = 5;
+            else if (boosts >= 20)  social = 3;
+            dims.social = social;
+
+            score = Math.max(0, Math.min(100,
+                dims.momentum + dims.volume + dims.buyPressure + dims.age +
+                dims.fdv + dims.liquidity + dims.txDensity + dims.rugRisk + dims.social
+            ));
+
+            // Rugpull probability
+            let rugProb = 'LOW';
+            if (dims.rugRisk <= -10)      rugProb = 'HIGH';
+            else if (dims.rugRisk <= -5)  rugProb = 'MEDIUM';
+            else if (liq < 5000 || fdv > 5_000_000) rugProb = 'MEDIUM';
+
+            // Entry / TP / SL estimate (simple, no chart data)
+            const tp1 = price * 1.5;
+            const tp2 = price * 2.5;
+            const tp3 = price * 5.0;
+            const sl  = price * 0.72; // -28%
+
+            scored.push({
+                pairAddress : raw.pairAddress,
+                symbol      : raw.baseToken.symbol,
+                name        : raw.baseToken.name,
+                mint        : raw.baseToken.address,
+                url         : raw.url,
+                chain       : 'solana',
+                dex         : raw.dexId,
+                price, ageH, vol5m, vol1h, vol24h, chg5m, chg1h, chg24h,
+                buys5m, sells5m, buys1h, sells1h, txns24h, fdv, liq, boosts,
+                score, dims, rugProb, tp1, tp2, tp3, sl,
+                pairCreatedAt: raw.pairCreatedAt || null,
+            });
+        }
+
+        scored.sort((a, b) => b.score - a.score);
+        const result = { ok: true, count: scored.length, tokens: scored.slice(0, 100), fetchedAt: Date.now() };
+        _trenchesCache.data = result;
+        _trenchesCache.ts   = Date.now();
+        res.json(result);
+    } catch (e) {
+        res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ── /api/dex/ai-signal (POST)  ────────────────────────────────────────────────
+// Body: { symbol, name, price, chg24h, chg1h, chg5m, vol24h, vol1h, liq, fdv, rugProb, ageH, apiKey? }
+const _signalCache = new Map(); // key=symbol+price, val={data,ts}
+const SIGNAL_TTL = 10 * 60_000; // 10 min
+
+app.options('/api/dex/ai-signal', (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.sendStatus(200);
+});
+
+app.post('/api/dex/ai-signal', async (req, res) => {
+    const apiKey = req.body?.apiKey || GROQ_KEY;
+    if (!apiKey) return res.json({ ok: false, error: 'GROQ_API_KEY tidak ditemukan. Set di .env atau kirim via body.' });
+
+    const { symbol='', name='', price=0, chg24h=0, chg1h=0, chg5m=0,
+            vol24h=0, vol1h=0, liq=0, fdv=0, rugProb='UNKNOWN', ageH=0,
+            buys5m=0, sells5m=0, buys1h=0, sells1h=0, txns24h=0,
+            score=0, force=false } = req.body || {};
+
+    const cacheKey = `${symbol}_${Math.round(price * 1e6)}`;
+    const cached = _signalCache.get(cacheKey);
+    if (!force && cached && Date.now() - cached.ts < SIGNAL_TTL) {
+        return res.json({ ...cached.data, cached: true });
+    }
+
+    try {
+        // Fetch market context
+        let btcDom = '?', fearGreed = '?', btcChg = '?';
+        try {
+            const gc = await fetch('https://api.coingecko.com/api/v3/global', { signal: AbortSignal.timeout(5000) });
+            if (gc.ok) { const gd = await gc.json(); btcDom = (gd.data?.market_cap_percentage?.btc || 0).toFixed(1); }
+        } catch {}
+        try {
+            const fg = await fetch('https://api.alternative.me/fng/?limit=1', { signal: AbortSignal.timeout(5000) });
+            if (fg.ok) { const fd = await fg.json(); fearGreed = fd.data?.[0]?.value_classification || '?'; }
+        } catch {}
+
+        const fmtUsd = n => n >= 1e9 ? `$${(n/1e9).toFixed(2)}B` : n >= 1e6 ? `$${(n/1e6).toFixed(1)}M` : n >= 1e3 ? `$${(n/1e3).toFixed(0)}K` : `$${n.toFixed(2)}`;
+        const fmtPrc = p => p < 0.000001 ? p.toExponential(3) : p < 0.001 ? p.toFixed(8) : p < 1 ? p.toFixed(6) : p.toFixed(4);
+
+        const context = `
+TOKEN ANALYSIS REQUEST
+======================
+Symbol     : ${symbol} (${name})
+Price      : $${fmtPrc(price)}
+Age        : ${ageH.toFixed(1)} hours
+AI Score   : ${score}/100
+Rug Risk   : ${rugProb}
+
+PRICE ACTION
+- 24h change : ${chg24h >= 0 ? '+' : ''}${chg24h.toFixed(1)}%
+- 1h change  : ${chg1h >= 0 ? '+' : ''}${chg1h.toFixed(1)}%
+- 5m change  : ${chg5m >= 0 ? '+' : ''}${chg5m.toFixed(2)}%
+
+VOLUME & ACTIVITY
+- Vol 24h    : ${fmtUsd(vol24h)}
+- Vol 1h     : ${fmtUsd(vol1h)}
+- Liquidity  : ${fmtUsd(liq)}
+- FDV        : ${fdv > 0 ? fmtUsd(fdv) : 'unknown'}
+- Txns 24h   : ${txns24h}
+- Buys/Sells 5m : ${buys5m}/${sells5m} (ratio ${sells5m > 0 ? (buys5m/sells5m).toFixed(2) : 'inf'})
+- Buys/Sells 1h : ${buys1h}/${sells1h} (ratio ${sells1h > 0 ? (buys1h/sells1h).toFixed(2) : 'inf'})
+
+MARKET CONTEXT
+- BTC Dominance : ${btcDom}%
+- Fear & Greed  : ${fearGreed}
+`;
+
+        const systemPrompt = `Kamu adalah AI crypto analyst khusus meme coin dan DEX trenches di Solana. 
+Tugas kamu: menganalisa satu token dan memberikan signal trading yang actionable.
+
+PENTING: Jawab HANYA dalam format JSON berikut, tanpa teks tambahan di luar JSON:
+{
+  "signal": "STRONG_BUY|BUY|WATCH|NEUTRAL|AVOID|SELL",
+  "signalType": "SCALP|SWING|BREAKOUT|AVOID",
+  "confidence": 0-100,
+  "entry": { "low": number, "high": number },
+  "tp1": number, "tp2": number, "tp3": number,
+  "sl": number,
+  "riskLevel": "LOW|MEDIUM|HIGH|EXTREME",
+  "rugProbability": "LOW|MEDIUM|HIGH",
+  "reasoning": ["point 1", "point 2", "point 3", "point 4", "point 5"],
+  "catalysts": ["catalyst 1", "catalyst 2"],
+  "risks": ["risk 1", "risk 2"],
+  "holdTime": "15m|1h|4h|24h|avoid",
+  "summary": "satu kalimat ringkasan"
+}
+
+Gunakan analisa: momentum, buy/sell ratio, volume spike, age, FDV, liquidity depth, rug signals.
+Untuk meme coin Solana: SCALP jika ageH < 4h dan momentum kuat. AVOID jika rugRisk HIGH.
+Entry zone = harga sekarang ± 3-5%. TP berdasarkan fibonacci extension (1.5x, 2.5x, 5x untuk scalp).
+SL = -25% sampai -35% dari entry untuk meme coin.`;
+
+        const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method : 'POST',
+            headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+            body   : JSON.stringify({
+                model      : 'llama-3.3-70b-versatile',
+                messages   : [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: context },
+                ],
+                max_tokens  : 700,
+                temperature : 0.3,
+            }),
+            signal: AbortSignal.timeout(30_000),
+        });
+
+        if (!groqRes.ok) {
+            const err = await groqRes.text();
+            return res.json({ ok: false, error: `Groq error ${groqRes.status}: ${err.slice(0, 200)}` });
+        }
+
+        const gd   = await groqRes.json();
+        const raw  = gd.choices?.[0]?.message?.content || '{}';
+        const json = raw.match(/\{[\s\S]*\}/)?.[0] || '{}';
+        let analysis;
+        try { analysis = JSON.parse(json); } catch { analysis = { signal: 'NEUTRAL', confidence: 0, summary: 'Parse error', reasoning: [raw.slice(0, 200)] }; }
+
+        const result = { ok: true, symbol, price, analysis, context, generatedAt: Date.now() };
+        _signalCache.set(cacheKey, { data: result, ts: Date.now() });
+        res.json(result);
+    } catch (e) {
+        res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ── /api/dex/narratives  ──────────────────────────────────────────────────────
+app.get('/api/dex/narratives', async (req, res) => {
+    if (_narrativesCache.data && Date.now() - _narrativesCache.ts < _narrativesCache.ttl) {
+        return res.json(_narrativesCache.data);
+    }
+    try {
+        // Fetch top gainers from CoinGecko
+        const gainersRes = await fetch(
+            'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=percent_change_24h_desc&per_page=100&page=1&price_change_percentage=24h',
+            { signal: AbortSignal.timeout(10_000) }
+        );
+
+        let gainers = [];
+        if (gainersRes.ok) {
+            const gd = await gainersRes.json();
+            gainers = Array.isArray(gd) ? gd : [];
+        }
+
+        // Narrative keywords
+        const NARRATIVES = {
+            'AI & DePIN'   : ['ai', 'gpt', 'agent', 'neural', 'learn', 'agi', 'depin', 'fetch', 'render', 'ocean'],
+            'RWA'          : ['rwa', 'real', 'estate', 'gold', 'asset', 'bond', 'ondo', 'centri', 'maple'],
+            'Meme'         : ['doge', 'shib', 'pepe', 'floki', 'bonk', 'wif', 'mew', 'popcat', 'cat', 'dog', 'frog', 'inu'],
+            'Gaming & NFT' : ['game', 'play', 'nft', 'metaverse', 'axie', 'illuvium', 'pixel', 'gala'],
+            'DeFi'         : ['defi', 'swap', 'lend', 'yield', 'aave', 'uniswap', 'curve', 'compound', 'maker'],
+            'Solana Eco'   : ['sol', 'bonk', 'wif', 'jup', 'jito', 'ray', 'msol', 'drift', 'pyth', 'helium'],
+            'Base Eco'     : ['base', 'brett', 'toshi', 'aerodrome', 'degen'],
+            'TON Eco'      : ['ton', 'toncoin', 'dogs', 'notcoin', 'hamster'],
+            'L2 / ETH Eco' : ['arb', 'op', 'matic', 'zk', 'stark', 'scroll', 'linea', 'blast'],
+            'BTC Ecosystem': ['btc', 'sats', 'ordi', 'rune', 'merlin', 'stacks'],
+        };
+
+        const narrativeScores = {};
+        const narrativeCoins  = {};
+
+        for (const coin of gainers) {
+            const id   = (coin.id || '').toLowerCase();
+            const sym  = (coin.symbol || '').toLowerCase();
+            const name = (coin.name || '').toLowerCase();
+            const chg  = coin.price_change_percentage_24h || 0;
+
+            for (const [narr, keys] of Object.entries(NARRATIVES)) {
+                const match = keys.some(k => id.includes(k) || sym.includes(k) || name.includes(k));
+                if (match) {
+                    narrativeScores[narr] = (narrativeScores[narr] || 0) + Math.max(0, chg);
+                    if (!narrativeCoins[narr]) narrativeCoins[narr] = [];
+                    if (narrativeCoins[narr].length < 5) {
+                        narrativeCoins[narr].push({
+                            symbol: coin.symbol?.toUpperCase(),
+                            name  : coin.name,
+                            chg24h: chg,
+                            price : coin.current_price,
+                            mcap  : coin.market_cap,
+                        });
+                    }
+                }
+            }
+        }
+
+        // Sort narratives by total score
+        const narrativeList = Object.entries(narrativeScores)
+            .map(([name, score]) => ({
+                name,
+                score     : Math.round(score),
+                strength  : score > 500 ? 'STRONG' : score > 150 ? 'MODERATE' : 'WEAK',
+                coins     : narrativeCoins[name] || [],
+                momentum  : score > 500 ? '🔥🔥🔥' : score > 150 ? '🔥🔥' : '🔥',
+            }))
+            .sort((a, b) => b.score - a.score);
+
+        // Ecosystem correlation map (hardcoded intelligence)
+        const ecosystemMap = {
+            'SOL'  : { ecosystem: 'Solana', relatedCoins: ['JUP', 'BONK', 'WIF', 'JTO', 'PYTH', 'DRIFT', 'RAY', 'MSOL'] },
+            'ETH'  : { ecosystem: 'Ethereum L2', relatedCoins: ['ARB', 'OP', 'MATIC', 'ZK', 'STARKNET', 'SCROLL', 'BLAST'] },
+            'BNB'  : { ecosystem: 'BNB Chain', relatedCoins: ['CAKE', 'XVS', 'ALPACA', 'BSCS'] },
+            'TON'  : { ecosystem: 'TON Ecosystem', relatedCoins: ['DOGS', 'NOTCOIN', 'HAMSTER', 'MAJOR'] },
+            'AVAX' : { ecosystem: 'Avalanche', relatedCoins: ['JOE', 'QI', 'BENQI', 'PANGOLIN'] },
+            'SUI'  : { ecosystem: 'Sui Ecosystem', relatedCoins: ['CETUS', 'TURBOS', 'NAVI', 'SCALLOP'] },
+            'APT'  : { ecosystem: 'Aptos Ecosystem', relatedCoins: ['CELL', 'AMNIS', 'ECHO', 'ARIES'] },
+            'BASE' : { ecosystem: 'Base Ecosystem', relatedCoins: ['BRETT', 'TOSHI', 'AERO', 'DEGEN'] },
+        };
+
+        const result = { ok: true, narratives: narrativeList, ecosystemMap, fetchedAt: Date.now(), totalCoinsAnalyzed: gainers.length };
+        _narrativesCache.data = result;
+        _narrativesCache.ts   = Date.now();
+        res.json(result);
+    } catch (e) {
+        res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ── CHARON BOT API BRIDGE ─────────────────────────────────────────────────
+// Reads data from Charon's SQL Server (charon_db) and exposes it via REST endpoints.
+// Charon bot must be running separately in charon-feature-real-time-yellowstone/
+{
+    const mssql = require('mssql');
+    const charonDbConfig = {
+        server: process.env.MSSQL_SERVER || '127.0.0.1',
+        port: parseInt(process.env.MSSQL_PORT || '1433'),
+        user: process.env.MSSQL_USER || 'SA',
+        password: process.env.MSSQL_PASSWORD || 'Bni1234/',
+        database: process.env.MSSQL_DATABASE || 'charon_db',
+        options: { trustServerCertificate: true, enableArithAbort: true },
+        connectionTimeout: 5000,
+        requestTimeout: 10000,
+    };
+    let _charonPool = null;
+    async function getCharonPool() {
+        if (_charonPool && _charonPool.connected) return _charonPool;
+        _charonPool = await mssql.connect(charonDbConfig);
+        return _charonPool;
+    }
+    async function charonQuery(sql_str, params = []) {
+        const pool = await getCharonPool();
+        const req = pool.request();
+        params.forEach((v, i) => {
+            if (typeof v === 'number' && Number.isInteger(v)) req.input(`p${i}`, mssql.Int, v);
+            else if (typeof v === 'number') req.input(`p${i}`, mssql.Float, v);
+            else req.input(`p${i}`, mssql.NVarChar, v == null ? null : String(v));
+        });
+        const result = await req.query(sql_str.replace(/\?/g, (_, j) => `@p${j}`));
+        return result.recordset || [];
+    }
+    async function withCharonDb(res, fn) {
+        try {
+            const data = await fn();
+            return res.json({ ok: true, data });
+        } catch (e) {
+            console.log('[Charon bridge]', e.message);
+            return res.json({ ok: false, error: e.message, data: [] });
+        }
+    }
+    function tryParse(str) {
+        if (!str) return null;
+        try { return JSON.parse(str); } catch { return str; }
+    }
+
+    // GET /api/charon/status
+    app.get('/api/charon/status', async (req, res) => {
+        try {
+            await getCharonPool();
+            res.json({ ok: true, dbExists: true, dbPath: 'SQL Server: charon_db' });
+        } catch (e) {
+            res.json({ ok: false, dbExists: false, error: e.message });
+        }
+    });
+
+    // GET /api/charon/positions?limit=50
+    app.get('/api/charon/positions', (req, res) => {
+        const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+        withCharonDb(res, async () => {
+            const pool = await getCharonPool();
+            const r = pool.request(); r.input('lim', mssql.Int, limit);
+            const rows = (await r.query(`SELECT TOP (@lim) id, mint, status, execution_mode AS mode, entry_price, entry_mcap, exit_price, pnl_percent, pnl_sol, open_at_ms AS entry_at_ms, closed_at_ms, exit_reason, tp_percent, sl_percent, size_sol AS position_size_sol, symbol AS token_symbol, name AS token_name, candidate_json, decision_json FROM dry_run_positions ORDER BY open_at_ms DESC`)).recordset;
+            return rows.map(r => ({ ...r, candidate: tryParse(r.candidate_json), decision: tryParse(r.decision_json), candidate_json: undefined, decision_json: undefined }));
+        });
+    });
+
+    // GET /api/charon/candidates?limit=50&status=all
+    app.get('/api/charon/candidates', (req, res) => {
+        const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+        const status = (req.query.status || '').replace(/[^a-z_]/g, '');
+        withCharonDb(res, async () => {
+            const pool = await getCharonPool();
+            const r = pool.request(); r.input('lim', mssql.Int, limit);
+            const where = status && status !== 'all' ? `WHERE status = '${status}'` : '';
+            const rows = (await r.query(`SELECT TOP (@lim) id, mint, status, created_at_ms, updated_at_ms, signal_key AS signature, candidate_json, filter_result_json FROM candidates ${where} ORDER BY created_at_ms DESC`)).recordset;
+            return rows.map(r => ({ ...r, candidate: tryParse(r.candidate_json), filters: tryParse(r.filter_result_json), candidate_json: undefined, filter_result_json: undefined }));
+        });
+    });
+
+    // GET /api/charon/decisions?limit=50
+    app.get('/api/charon/decisions', (req, res) => {
+        const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+        withCharonDb(res, async () => {
+            const pool = await getCharonPool();
+            const r = pool.request(); r.input('lim', mssql.Int, limit);
+            const rows = (await r.query(`SELECT TOP (@lim) id, candidate_id, mint, created_at_ms, verdict, confidence, reason, risks_json, raw_json FROM llm_decisions ORDER BY created_at_ms DESC`)).recordset;
+            return rows.map(r => ({ ...r, risks: tryParse(r.risks_json), risks_json: undefined }));
+        });
+    });
+
+    // GET /api/charon/alerts
+    app.get('/api/charon/alerts', (req, res) => {
+        const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+        withCharonDb(res, async () => {
+            const pool = await getCharonPool();
+            const r = pool.request(); r.input('lim', mssql.Int, limit);
+            return (await r.query(`SELECT TOP (@lim) id, mint, strategy_id, alert_type, target_price, status, created_at_ms, expires_at_ms, triggered_at_ms FROM price_alerts ORDER BY created_at_ms DESC`)).recordset;
+        });
+    });
+
+    // GET /api/charon/settings
+    app.get('/api/charon/settings', (req, res) => {
+        withCharonDb(res, async () => {
+            const pool = await getCharonPool();
+            const rows = (await pool.request().query(`SELECT [key], value FROM settings ORDER BY [key]`)).recordset;
+            const obj = {};
+            for (const row of rows) { try { obj[row.key] = JSON.parse(row.value); } catch { obj[row.key] = row.value; } }
+            return obj;
+        });
+    });
+
+    // GET /api/charon/strategies
+    app.get('/api/charon/strategies', (req, res) => {
+        withCharonDb(res, async () => {
+            const pool = await getCharonPool();
+            const rows = (await pool.request().query(`SELECT * FROM strategies ORDER BY id`)).recordset;
+            return rows.map(r => ({ ...r, config: tryParse(r.config_json), config_json: undefined }));
+        });
+    });
+
+    // GET /api/charon/lessons
+    app.get('/api/charon/lessons', (req, res) => {
+        withCharonDb(res, async () => {
+            const pool = await getCharonPool();
+            const rows = (await pool.request().query(`SELECT TOP 50 id, lesson, status, evidence_json, created_at_ms FROM learning_lessons ORDER BY id DESC`)).recordset;
+            return rows.map(r => ({ ...r, evidence: tryParse(r.evidence_json), evidence_json: undefined }));
+        });
+    });
+
+    // GET /api/charon/wallets
+    app.get('/api/charon/wallets', (req, res) => {
+        withCharonDb(res, async () => {
+            const pool = await getCharonPool();
+            return (await pool.request().query(`SELECT label, address, created_at_ms FROM saved_wallets ORDER BY label`)).recordset;
+        });
+    });
+
+    // GET /api/charon/pnl-summary
+    app.get('/api/charon/pnl-summary', (req, res) => {
+        withCharonDb(res, async () => {
+            const pool = await getCharonPool();
+            const all = (await pool.request().query(`SELECT status, execution_mode AS mode, pnl_percent, pnl_sol, exit_reason FROM dry_run_positions`)).recordset;
+            const closed = all.filter(r => r.status === 'closed');
+            const open = all.filter(r => r.status === 'open');
+            const wins = closed.filter(r => (r.pnl_percent || 0) > 0).length;
+            const losses = closed.filter(r => (r.pnl_percent || 0) <= 0).length;
+            const totalPnlPct = closed.reduce((s, r) => s + (r.pnl_percent || 0), 0);
+            const avgPnlPct = closed.length ? totalPnlPct / closed.length : 0;
+            return { total: all.length, open: open.length, closed: closed.length, wins, losses, winRate: closed.length ? Math.round((wins / closed.length) * 100) : 0, avgPnlPct: Math.round(avgPnlPct * 100) / 100, totalPnlPct: Math.round(totalPnlPct * 100) / 100 };
+        });
+    });
+
+    // GET /api/charon/signal-events?limit=50
+    app.get('/api/charon/signal-events', (req, res) => {
+        const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+        withCharonDb(res, async () => {
+            const pool = await getCharonPool();
+            const r = pool.request(); r.input('lim', mssql.Int, limit);
+            const rows = (await r.query(`SELECT TOP (@lim) id, mint, source, event_type, created_at_ms, payload_json FROM signal_events ORDER BY created_at_ms DESC`)).recordset;
+            return rows.map(r => ({ ...r, payload: tryParse(r.payload_json), payload_json: undefined }));
+        });
+    });
+
+    console.log('🤖 [Charon] API bridge aktif → /api/charon/* (SQL Server)');
+}
+
 // Pre-warm /periodic refresh for whale-screen to avoid slow first request
 // Use a fire-and-forget fetch with a longer timeout and safer logging so
 // a slow upstream (or AbortSignal) doesn't spam an abort error on startup.

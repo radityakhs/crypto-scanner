@@ -33,7 +33,7 @@ const DEX_BASE           = 'https://api.dexscreener.com';
 const DEX_VOL_SPIKE_X    = 3.0;         // spike jika vol5m > 3x rata-rata vol5m historis
 const DEX_BUYSELL_RATIO  = 2.5;         // imbalance jika buys/sells > 2.5 atau < 0.4
 const DEX_MIN_VOL_USD    = 50_000;      // abaikan pair dengan vol24h < $50k
-const DEX_TOP_N          = 40;          // scan top 40 pasang Solana
+const DEX_TOP_N          = 200;         // scan top 200 pasang Solana
 
 // Cache internal agar tidak over-fetch
 const _cache = {
@@ -176,23 +176,40 @@ async function getDexWhaleAlerts(chain = 'solana') {
 async function _fetchTopDexPairs(chain) {
     if (_isCacheValid(_cache.dexPairs)) return _cache.dexPairs.data;
 
-    const queries = ['sol', 'solana', 'pump', 'bonk'];
+    // Banyak query supaya dapat 200+ pair unik di Solana
+    const queries = [
+        'sol', 'solana', 'pump', 'bonk',
+        'meme', 'dog', 'cat', 'ai',
+        'pepe', 'shib', 'inu', 'moon',
+        'baby', 'degen', 'chad', 'based',
+        'elon', 'gme', 'trump', 'fart',
+    ];
     const seen    = new Set();
     const results = [];
 
-    for (const q of queries) {
-        try {
-            const { status, body } = await _fetchJson(`${DEX_BASE}/latest/dex/search?q=${q}`);
-            if (status !== 200 || !Array.isArray(body.pairs)) continue;
-            for (const p of body.pairs) {
-                if (!p?.pairAddress || seen.has(p.pairAddress)) continue;
-                if (chain && p.chainId !== chain) continue;
-                if ((p.volume?.h24 || 0) < DEX_MIN_VOL_USD) continue;
-                seen.add(p.pairAddress);
-                results.push(p);
-            }
-        } catch { /* skip query */ }
+    // Jalankan semua query secara paralel (3 batch agar tidak flood)
+    const BATCH = 5;
+    for (let i = 0; i < queries.length; i += BATCH) {
+        const batch = queries.slice(i, i + BATCH);
+        await Promise.all(batch.map(async q => {
+            try {
+                const { status, body } = await _fetchJson(`${DEX_BASE}/latest/dex/search?q=${q}`);
+                if (status !== 200 || !Array.isArray(body.pairs)) return;
+                for (const p of body.pairs) {
+                    if (!p?.pairAddress || seen.has(p.pairAddress)) continue;
+                    if (chain && p.chainId !== chain) continue;
+                    if ((p.volume?.h24 || 0) < DEX_MIN_VOL_USD) continue;
+                    seen.add(p.pairAddress);
+                    results.push(p);
+                }
+            } catch { /* skip query */ }
+        }));
+        // Jeda kecil antar batch agar tidak kena rate-limit
+        if (i + BATCH < queries.length) await new Promise(r => setTimeout(r, 300));
     }
+
+    // Sort by volume 24h tertinggi dulu
+    results.sort((a, b) => (b.volume?.h24 || 0) - (a.volume?.h24 || 0));
 
     _cache.dexPairs = { data: results, ts: Date.now(), ttl: 120_000 };
     return results;
