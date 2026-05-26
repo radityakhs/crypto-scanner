@@ -4427,6 +4427,26 @@ app.post('/api/telegram-test', express.json(), async (req, res) => {
     res.json({ ok, message: ok ? 'Test message sent!' : 'Gagal kirim — cek token & chatId' });
 });
 
+// POST /api/whale-alert-tg — kirim Whale Alert Signals dari frontend ke Telegram
+app.post('/api/whale-alert-tg', express.json(), async (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    try { _tgConfig = { ..._tgConfig, ...JSON.parse(fs.readFileSync(TG_CONFIG_FILE, 'utf8')) }; } catch(_) {}
+    const { message } = req.body || {};
+    if (!message) return res.status(400).json({ ok: false, error: 'No message provided' });
+    if (!_tgConfig.botToken || !_tgConfig.chatId)
+        return res.status(400).json({ ok: false, error: 'Telegram belum dikonfigurasi — isi Bot Token & Chat ID di panel Alerts dulu' });
+    const ok = await sendTelegram(message);
+    res.json({ ok, error: ok ? null : 'Gagal kirim ke Telegram — cek token & chatId' });
+});
+
+// OPTIONS preflight whale-alert-tg
+app.options('/api/whale-alert-tg', (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.sendStatus(204);
+});
+
 // ══════════════════════════════════════════════════════════════
 //  WHALE WALLET MONITOR
 //  Frontend sync saved wallets → server memonitor setiap 5 menit

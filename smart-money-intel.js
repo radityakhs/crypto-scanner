@@ -1412,26 +1412,39 @@ const SmartMoneyIntel = (() => {
 
         el.innerHTML = `<div class="smi-content">
             <!-- Whale Wallet Monitor -->
-            <div style="background:#0a0e1a;border:1px solid #1e3a5f;border-radius:10px;padding:16px;margin-bottom:16px">
+            <div style="background:#0a0e1a;border:1px solid ${_tgCfg.configured?'#1e3a5f':'#3b1f1f'};border-radius:10px;padding:16px;margin-bottom:16px">
                 <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
                     <div style="font-size:14px;font-weight:700;color:#fbbf24">🔍 Whale Wallet Monitor</div>
                     <span style="padding:3px 10px;border-radius:20px;font-size:10px;font-weight:700;
                         background:${_monSt.walletCount>0?'rgba(34,197,94,.15)':'rgba(100,116,139,.1)'};
                         color:${_monSt.walletCount>0?'#22c55e':'#64748b'};
                         border:1px solid ${_monSt.walletCount>0?'rgba(34,197,94,.3)':'#1e293b'}">
-                        ${_monSt.walletCount>0?`✅ ${_monSt.walletCount} wallet dimonitor`:'⏸ Belum ada wallet'}
+                        ${_monSt.walletCount>0?`✅ ${_monSt.walletCount} wallet aktif`:'⏸ Belum ada wallet'}
                     </span>
-                    <span style="font-size:11px;color:#334155;margin-left:auto">📡 Polling setiap 5 menit · via Solana RPC</span>
+                    <!-- Telegram status badge — pakai config yang sama di bawah -->
+                    <span style="padding:3px 10px;border-radius:20px;font-size:10px;font-weight:700;
+                        background:${_tgCfg.configured?'rgba(96,165,250,.1)':'rgba(239,68,68,.1)'};
+                        color:${_tgCfg.configured?'#60a5fa':'#ef4444'};
+                        border:1px solid ${_tgCfg.configured?'rgba(96,165,250,.2)':'rgba(239,68,68,.2)'}">
+                        ${_tgCfg.configured?'📱 Telegram OK':'⚠️ Telegram belum diset'}
+                    </span>
+                    <span style="font-size:10px;color:#334155;margin-left:auto">📡 Polling 5 menit · Solana RPC</span>
                 </div>
+                ${!_tgCfg.configured ? `
+                <div style="background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.2);border-radius:6px;padding:8px 12px;margin-bottom:10px;font-size:11px;color:#fca5a5">
+                    ⚠️ Telegram belum dikonfigurasi — isi Bot Token & Chat ID di panel di bawah dulu, kemudian sync wallet.
+                </div>` : ''}
                 <div style="font-size:11px;color:#475569;line-height:1.7;margin-bottom:10px">
-                    Bot akan otomatis kirim Telegram alert saat mendeteksi <b style="color:#22c55e">Akumulasi</b> 
-                    atau <b style="color:#ef4444">Distribusi</b> dari wallet yang kamu monitor.
-                    Sync dulu saved wallets kamu ke server ↓
+                    Bot otomatis kirim alert ke <b style="color:#60a5fa">Telegram yang sama</b> saat mendeteksi 
+                    <b style="color:#22c55e">Akumulasi</b> atau <b style="color:#ef4444">Distribusi</b> dari wallet tersimpan.
+                    Cooldown 15 menit per wallet untuk mencegah spam.
                 </div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-                    <button class="smi-btn-primary" style="background:linear-gradient(135deg,#d97706,#f59e0b)"
-                        onclick="SmartMoneyIntel.syncWalletMonitor()"
-                        title="Kirim ${savedWallets.length} saved wallet kamu ke server untuk dimonitor">
+                    <button class="smi-btn-primary"
+                        style="background:${_tgCfg.configured?'linear-gradient(135deg,#d97706,#f59e0b)':'linear-gradient(135deg,#374151,#4b5563)'};
+                               opacity:${_tgCfg.configured?'1':'0.6'};cursor:${_tgCfg.configured?'pointer':'not-allowed'}"
+                        onclick="${_tgCfg.configured?'SmartMoneyIntel.syncWalletMonitor()':'void(0)'}"
+                        title="${_tgCfg.configured?`Sync ${savedWallets.length} saved wallet ke server`:'Setup Telegram dulu di bawah'}">
                         📤 Sync ${savedWallets.length} Wallet ke Monitor
                     </button>
                     <span id="smiMonSt" style="font-size:11px;color:#475569"></span>
@@ -1457,6 +1470,10 @@ const SmartMoneyIntel = (() => {
                     <span style="font-size:11px;color:#334155;margin-left:auto">
                         Config disimpan di <code style="background:#0f172a;padding:1px 5px;border-radius:3px;color:#7dd3fc;font-size:10px">telegram-config.json</code> (server)
                     </span>
+                </div>
+                <div style="font-size:11px;color:#475569;margin-bottom:10px;line-height:1.6">
+                    Config ini dipakai oleh <b style="color:#fbbf24">Whale Monitor</b>, 
+                    <b style="color:#a78bfa">DEX Sniper</b>, dan <b style="color:#34d399">Scheduled Alert</b> — satu config untuk semua.
                 </div>
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
                     <div>
@@ -1556,6 +1573,18 @@ Dex: Raydium · Chain: Solana
 
     async function syncWalletMonitor() {
         const st = document.getElementById('smiMonSt');
+        // Cek apakah Telegram sudah dikonfigurasi
+        try {
+            const r = await fetch(`${BASE}/api/telegram-config`);
+            const d = await r.json();
+            if (!d.configured) {
+                if(st) st.textContent='⚠️ Setup Telegram dulu di panel di bawah!';
+                setTimeout(() => { const s=document.getElementById('smiMonSt'); if(s) s.textContent=''; }, 4000);
+                // Scroll ke Telegram config
+                document.getElementById('smiTgToken')?.scrollIntoView({ behavior:'smooth', block:'center' });
+                return;
+            }
+        } catch(_) {}
         const wallets = _swLoad();
         if (!wallets.length) { if(st) st.textContent='⚠️ Belum ada saved wallet'; return; }
         if(st) st.textContent='⏳ Syncing…';

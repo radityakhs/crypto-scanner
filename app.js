@@ -1014,6 +1014,64 @@ function wapFilter(btn, filter) {
     });
 }
 
+/* ── Kirim Whale Alert Signals ke Telegram ── */
+async function sendWhaleAlertsToTg(btn) {
+    const origText = btn ? btn.textContent : '';
+    if (btn) { btn.textContent = '⏳ Mengirim…'; btn.disabled = true; }
+
+    try {
+        const alerts = await buildWhaleAlerts();
+        if (!alerts.length) {
+            if (btn) { btn.textContent = '⚠️ Tidak ada sinyal'; btn.disabled = false; }
+            setTimeout(() => { if(btn) { btn.textContent = origText; } }, 2500);
+            return;
+        }
+
+        const timeStr = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
+        const buys    = alerts.filter(a => a.action === 'BUY');
+        const sells   = alerts.filter(a => a.action === 'SELL');
+
+        const fmt = v => (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
+        const fmtVol = v => (v * 100).toFixed(1) + '%';
+
+        const lines = alerts.map((a, i) => {
+            const emoji  = a.action === 'BUY' ? '🟢' : a.action === 'SELL' ? '🔴' : '🟡';
+            const medal  = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}.`;
+            const dir    = a.action === 'BUY' ? 'AKUMULASI' : a.action === 'SELL' ? 'DISTRIBUSI' : 'WATCH';
+            const score  = a.action === 'BUY' ? a.buyScore : a.action === 'SELL' ? a.sellScore : Math.max(a.buyScore, a.sellScore);
+            const top2   = (a.reasons || []).slice(0, 2).map(r => `  • ${r}`).join('\n');
+            return `${medal} ${emoji} <b>${a.name}</b> (${a.symbol})  Score: <b>${score}/60</b>\n` +
+                   `   ${dir} · 1H: ${fmt(a.ch1h)} · 24H: ${fmt(a.ch24h)} · Vol/MC: ${fmtVol(a.volRatio)}\n` +
+                   (top2 ? top2 : '');
+        }).join('\n\n');
+
+        const msg =
+            `🐋 <b>WHALE ALERT SIGNALS</b>\n` +
+            `🕐 ${timeStr} WIB\n` +
+            `📊 ${alerts.length} sinyal · ${buys.length} BUY · ${sells.length} SELL\n\n` +
+            `${lines}\n\n` +
+            `⚠️ <i>Bukan financial advice. DYOR sebelum trading.</i>`;
+
+        const PROXY = window.PROXY_BASE || 'http://localhost:3001';
+        const r = await fetch(`${PROXY}/api/whale-alert-tg`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: msg }),
+        });
+        const d = await r.json();
+
+        if (d.ok) {
+            if (btn) btn.textContent = '✅ Terkirim!';
+        } else {
+            if (btn) btn.textContent = '❌ ' + (d.error || 'Gagal');
+        }
+    } catch (e) {
+        if (btn) btn.textContent = '❌ Server offline';
+    }
+
+    setTimeout(() => { if(btn) { btn.textContent = origText; btn.disabled = false; } }, 3000);
+}
+
 /* ═══════════════════════════════════════════════════════════════════════
    MARKET BUBBLE GRAPH — D3.js Force Simulation
    Data source: cryptoData (CoinGecko, no extra API)
