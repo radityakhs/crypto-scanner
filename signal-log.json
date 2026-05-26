@@ -4551,7 +4551,7 @@
     "signalLabel": "📈 Lagging Opportunity",
     "ts": 1779675613625,
     "outcome4h": 0.38,
-    "outcome24h": null
+    "outcome24h": -1.41
   },
   {
     "symbol": "goldfinch",
@@ -4562,7 +4562,7 @@
     "signalLabel": "📈 Lagging Opportunity",
     "ts": 1779675613627,
     "outcome4h": -0.48,
-    "outcome24h": null
+    "outcome24h": 0.65
   },
   {
     "symbol": "degen-base",
@@ -4573,7 +4573,7 @@
     "signalLabel": "📈 Lagging Opportunity",
     "ts": 1779680399543,
     "outcome4h": 2.11,
-    "outcome24h": null
+    "outcome24h": -6.64
   },
   {
     "symbol": "aerodrome-finance",
@@ -4584,7 +4584,7 @@
     "signalLabel": "📈 Lagging Opportunity",
     "ts": 1779681253348,
     "outcome4h": 0.51,
-    "outcome24h": null
+    "outcome24h": -3.25
   },
   {
     "symbol": "based-brett",
@@ -4595,7 +4595,7 @@
     "signalLabel": "📈 Lagging Opportunity",
     "ts": 1779681253350,
     "outcome4h": 1.88,
-    "outcome24h": null
+    "outcome24h": -2.78
   },
   {
     "symbol": "ski-mask-dog",
@@ -4606,7 +4606,7 @@
     "signalLabel": "📈 Lagging Opportunity",
     "ts": 1779681253351,
     "outcome4h": 0.36,
-    "outcome24h": null
+    "outcome24h": -2.4
   },
   {
     "symbol": "game-by-virtuals",
@@ -4617,7 +4617,7 @@
     "signalLabel": "📈 Lagging Opportunity",
     "ts": 1779681253351,
     "outcome4h": 2.78,
-    "outcome24h": null
+    "outcome24h": 2.74
   },
   {
     "symbol": "higher",
@@ -4628,7 +4628,7 @@
     "signalLabel": "📈 Lagging Opportunity",
     "ts": 1779687820384,
     "outcome4h": -0.76,
-    "outcome24h": null
+    "outcome24h": -2.4
   },
   {
     "symbol": "coreum",
@@ -4639,7 +4639,7 @@
     "signalLabel": "💡 Reversal Catch",
     "ts": 1779688324582,
     "outcome4h": 0,
-    "outcome24h": null
+    "outcome24h": -0.19
   },
   {
     "symbol": "aerodrome-finance",
@@ -4650,7 +4650,7 @@
     "signalLabel": "📈 Lagging Opportunity",
     "ts": 1779695984092,
     "outcome4h": -2.47,
-    "outcome24h": null
+    "outcome24h": -1.09
   },
   {
     "symbol": "ski-mask-dog",
@@ -4661,7 +4661,7 @@
     "signalLabel": "📈 Lagging Opportunity",
     "ts": 1779695984096,
     "outcome4h": -0.69,
-    "outcome24h": null
+    "outcome24h": -2.82
   },
   {
     "symbol": "game-by-virtuals",
@@ -4672,7 +4672,7 @@
     "signalLabel": "📈 Lagging Opportunity",
     "ts": 1779698287734,
     "outcome4h": 3.4,
-    "outcome24h": null
+    "outcome24h": 3.52
   },
   {
     "symbol": "based-brett",
@@ -4683,7 +4683,7 @@
     "signalLabel": "📈 Lagging Opportunity",
     "ts": 1779698683849,
     "outcome4h": 0.13,
-    "outcome24h": null
+    "outcome24h": -2.68
   },
   {
     "symbol": "degen-base",
@@ -4694,7 +4694,7 @@
     "signalLabel": "📈 Lagging Opportunity",
     "ts": 1779698873750,
     "outcome4h": -1.61,
-    "outcome24h": null
+    "outcome24h": -8.38
   },
   {
     "symbol": "higher",
@@ -4705,7 +4705,7 @@
     "signalLabel": "📈 Lagging Opportunity",
     "ts": 1779703065902,
     "outcome4h": -0.59,
-    "outcome24h": null
+    "outcome24h": -1.84
   },
   {
     "symbol": "aurora-near",
@@ -4814,7 +4814,7 @@
     "lagScore24h": 8.41,
     "signalLabel": "📈 Lagging Opportunity",
     "ts": 1779740850852,
-    "outcome4h": null,
+    "outcome4h": 0.12,
     "outcome24h": null
   },
   {
@@ -4825,7 +4825,7 @@
     "lagScore24h": 11.96,
     "signalLabel": "📈 Lagging Opportunity",
     "ts": 1779746933150,
-    "outcome4h": null,
+    "outcome4h": 0.08,
     "outcome24h": null
   },
   {
@@ -4836,7 +4836,7 @@
     "lagScore24h": 8.06,
     "signalLabel": "📈 Lagging Opportunity",
     "ts": 1779746933152,
-    "outcome4h": null,
+    "outcome4h": -0.74,
     "outcome24h": null
   },
   {
@@ -4847,7 +4847,7 @@
     "lagScore24h": 6.62,
     "signalLabel": "📈 Lagging Opportunity",
     "ts": 1779746933166,
-    "outcome4h": null,
+    "outcome4h": 0,
     "outcome24h": null
   },
   {
@@ -4858,7 +4858,7 @@
     "lagScore24h": 6.35,
     "signalLabel": "📈 Lagging Opportunity",
     "ts": 1779746933167,
-    "outcome4h": null,
+    "outcome4h": 0.27,
     "outcome24h": null
   },
   {
@@ -4869,7 +4869,7 @@
     "lagScore24h": 9.71,
     "signalLabel": "📈 Lagging Opportunity",
     "ts": 1779761547559,
-    "outcome4h": null,
+    "outcome4h": 3.6,
     "outcome24h": null
   },
   {
@@ -4880,6 +4880,204 @@
     "lagScore24h": 8.84,
     "signalLabel": "📈 Lagging Opportunity",
     "ts": 1779761547561,
+    "outcome4h": 0.38,
+    "outcome24h": null
+  },
+  {
+    "symbol": "osmosis",
+    "ecoSymbol": "ATOM",
+    "signal": "LONG",
+    "price": 0.052412,
+    "lagScore24h": 8.16,
+    "signalLabel": "📈 Lagging Opportunity",
+    "ts": 1779762447570,
+    "outcome4h": 0.94,
+    "outcome24h": null
+  },
+  {
+    "symbol": "kava",
+    "ecoSymbol": "ATOM",
+    "signal": "LONG",
+    "price": 0.0583,
+    "lagScore24h": 9.18,
+    "signalLabel": "📈 Lagging Opportunity",
+    "ts": 1779762447573,
+    "outcome4h": 1.58,
+    "outcome24h": null
+  },
+  {
+    "symbol": "stride",
+    "ecoSymbol": "ATOM",
+    "signal": "LONG",
+    "price": 0.02944217,
+    "lagScore24h": 11.76,
+    "signalLabel": "📈 Lagging Opportunity",
+    "ts": 1779762447576,
+    "outcome4h": 1.1,
+    "outcome24h": null
+  },
+  {
+    "symbol": "persistence",
+    "ecoSymbol": "ATOM",
+    "signal": "LONG",
+    "price": 0.00583162,
+    "lagScore24h": 6.47,
+    "signalLabel": "📈 Lagging Opportunity",
+    "ts": 1779762447578,
+    "outcome4h": -5.68,
+    "outcome24h": null
+  },
+  {
+    "symbol": "injective-protocol",
+    "ecoSymbol": "ATOM",
+    "signal": "LONG",
+    "price": 5.61,
+    "lagScore24h": -3.38,
+    "signalLabel": "⚡ Early Signal (1h Lag)",
+    "ts": 1779763541499,
+    "outcome4h": -0.18,
+    "outcome24h": null
+  },
+  {
+    "symbol": "coreum",
+    "ecoSymbol": "ATOM",
+    "signal": "LONG",
+    "price": 0.01197283,
+    "lagScore24h": 6.07,
+    "signalLabel": "📈 Lagging Opportunity",
+    "ts": 1779763541503,
+    "outcome4h": 0,
+    "outcome24h": null
+  },
+  {
+    "symbol": "game-by-virtuals",
+    "ecoSymbol": "VIRTUAL",
+    "signal": "LONG",
+    "price": 0.00830385,
+    "lagScore24h": 2.17,
+    "signalLabel": "⚡ Early Signal (1h Lag)",
+    "ts": 1779775938886,
+    "outcome4h": 3.27,
+    "outcome24h": null
+  },
+  {
+    "symbol": "aurora-near",
+    "ecoSymbol": "NEAR",
+    "signal": "LONG",
+    "price": 0.03022016,
+    "lagScore24h": 9.1,
+    "signalLabel": "📈 Lagging Opportunity",
+    "ts": 1779776162759,
+    "outcome4h": 13.73,
+    "outcome24h": null
+  },
+  {
+    "symbol": "ninja-protocol",
+    "ecoSymbol": "INJ",
+    "signal": "LONG",
+    "price": 0.00050411,
+    "lagScore24h": 6.96,
+    "signalLabel": "📈 Lagging Opportunity",
+    "ts": 1779776162763,
+    "outcome4h": 0.29,
+    "outcome24h": null
+  },
+  {
+    "symbol": "padre",
+    "ecoSymbol": "VIRTUAL",
+    "signal": "LONG",
+    "price": 0.0005788,
+    "lagScore24h": 6.52,
+    "signalLabel": "📈 Lagging Opportunity",
+    "ts": 1779786979345,
+    "outcome4h": null,
+    "outcome24h": null
+  },
+  {
+    "symbol": "ninja-protocol",
+    "ecoSymbol": "INJ",
+    "signal": "LONG",
+    "price": 0.00050418,
+    "lagScore24h": 6.21,
+    "signalLabel": "📈 Lagging Opportunity",
+    "ts": 1779790773819,
+    "outcome4h": null,
+    "outcome24h": null
+  },
+  {
+    "symbol": "linear-protocol",
+    "ecoSymbol": "NEAR",
+    "signal": "LONG",
+    "price": 3.8,
+    "lagScore24h": 3.22,
+    "signalLabel": "⚡ Early Signal (1h Lag)",
+    "ts": 1779791493423,
+    "outcome4h": null,
+    "outcome24h": null
+  },
+  {
+    "symbol": "aurora-near",
+    "ecoSymbol": "NEAR",
+    "signal": "LONG",
+    "price": 0.0338314,
+    "lagScore24h": -1.81,
+    "signalLabel": "⚡ Early Signal (1h Lag)",
+    "ts": 1779792213366,
+    "outcome4h": null,
+    "outcome24h": null
+  },
+  {
+    "symbol": "celestia",
+    "ecoSymbol": "ATOM",
+    "signal": "LONG",
+    "price": 0.479439,
+    "lagScore24h": -5.73,
+    "signalLabel": "⚡ Early Signal (1h Lag)",
+    "ts": 1779794424107,
+    "outcome4h": null,
+    "outcome24h": null
+  },
+  {
+    "symbol": "stride",
+    "ecoSymbol": "ATOM",
+    "signal": "LONG",
+    "price": 0.02981346,
+    "lagScore24h": 10.71,
+    "signalLabel": "💡 Reversal Catch",
+    "ts": 1779794424109,
+    "outcome4h": null,
+    "outcome24h": null
+  },
+  {
+    "symbol": "persistence",
+    "ecoSymbol": "ATOM",
+    "signal": "LONG",
+    "price": 0.00556483,
+    "lagScore24h": 11.96,
+    "signalLabel": "💡 Reversal Catch",
+    "ts": 1779794424110,
+    "outcome4h": null,
+    "outcome24h": null
+  },
+  {
+    "symbol": "meta-pool",
+    "ecoSymbol": "NEAR",
+    "signal": "LONG",
+    "price": 0.00935148,
+    "lagScore24h": 5.2,
+    "signalLabel": "⚡ Early Signal (1h Lag)",
+    "ts": 1779794703938,
+    "outcome4h": null,
+    "outcome24h": null
+  },
+  {
+    "symbol": "dasha",
+    "ecoSymbol": "VIRTUAL",
+    "signal": "LONG",
+    "price": 0.00025796,
+    "lagScore24h": 6.09,
+    "signalLabel": "📈 Lagging Opportunity",
+    "ts": 1779794703940,
     "outcome4h": null,
     "outcome24h": null
   }
