@@ -4737,8 +4737,9 @@ async function _wwmCheckWallet(wallet) {
 
 async function _wwmRun() {
     if (!_wwmWallets.length) return;
+    // Reload Telegram config (bisa dikonfigurasi kapan saja)
     try { _tgConfig = { ..._tgConfig, ...JSON.parse(fs.readFileSync(TG_CONFIG_FILE, 'utf8')) }; } catch(_) {}
-    if (!_tgConfig.botToken || !_tgConfig.chatId) return;
+    // Telegram opsional — monitor tetap jalan, alert tetap masuk ke feed UI
 
     console.log(`[WhaleMonitor] Checking ${_wwmWallets.length} wallets…`);
     for (const wallet of _wwmWallets) {
@@ -4746,6 +4747,46 @@ async function _wwmRun() {
         await new Promise(r => setTimeout(r, 500)); // throttle RPC
     }
 }
+
+// POST /api/whale-monitor/run-now — trigger manual check (untuk testing)
+app.post('/api/whale-monitor/run-now', (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    if (!_wwmWallets.length) return res.json({ ok: false, message: 'Belum ada wallet yang dimonitor. Sync dulu dari frontend.' });
+    _wwmRun().catch(e => console.warn('[WhaleMonitor] run-now error:', e.message));
+    res.json({ ok: true, message: `Memulai check ${_wwmWallets.length} wallet…`, wallets: _wwmWallets.map(w => w.label) });
+});
+
+// POST /api/whale-monitor/test-alert — inject dummy alert untuk test UI feed
+app.post('/api/whale-monitor/test-alert', (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    const patterns = ['AKUMULASI','DISTRIBUSI','WHALE BUY','WHALE SELL'];
+    const pattern  = req.body?.pattern || patterns[Math.floor(Math.random()*patterns.length)];
+    const isAkum   = pattern === 'AKUMULASI' || pattern === 'WHALE BUY';
+    const testAddr = req.body?.addr || 'So11111111111111111111111111111111111111112';
+    const testLabel= req.body?.label || 'Test Wallet';
+    const shortAddr= testAddr.slice(0,6) + '…' + testAddr.slice(-4);
+    _wwmAlertLog.unshift({
+        id:        Date.now(),
+        ts:        Date.now(),
+        addr:      testAddr,
+        label:     testLabel,
+        shortAddr,
+        solscanUrl: `https://solscan.io/account/${testAddr}`,
+        pattern,
+        alertEmoji: isAkum ? '🟢' : '🔴',
+        txCount:   3,
+        events: [
+            { type: isAkum ? 'BUY' : 'SELL', deltaSOL: isAkum ? -2.5 : 3.1, tokens: [{ mint: 'JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN', symbol: 'JUP', diff: isAkum ? 500 : -400 }] },
+            { type: isAkum ? 'BUY' : 'SELL', deltaSOL: isAkum ? -1.8 : 2.2, tokens: [{ mint: 'JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN', symbol: 'JUP', diff: isAkum ? 350 : -280 }] },
+        ],
+        topToken:  'JUP',
+        topDelta:  isAkum ? 850 : -680,
+        sent:      false,
+        _test:     true,
+    });
+    if (_wwmAlertLog.length > 100) _wwmAlertLog = _wwmAlertLog.slice(0, 100);
+    res.json({ ok: true, message: `Test alert '${pattern}' ditambahkan ke feed`, total: _wwmAlertLog.length });
+});
 
 // ══════════════════════════════════════════════════════════════
 //  SIGNAL ACCURACY TRACKER

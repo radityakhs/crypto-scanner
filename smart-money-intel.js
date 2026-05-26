@@ -1503,7 +1503,11 @@ const SmartMoneyIntel = (() => {
             <!-- Alert Feed -->
             <div class="smi-sec-title" style="display:flex;align-items:center;justify-content:space-between">
                 <span>🚨 Smart Money Alert Feed</span>
-                <button onclick="SmartMoneyIntel.refreshAlerts()" style="background:none;border:1px solid #1e293b;color:#475569;padding:3px 10px;border-radius:6px;font-size:10px;cursor:pointer">↻ Refresh</button>
+                <div style="display:flex;gap:6px">
+                    <button onclick="SmartMoneyIntel.runMonitorNow(this)" style="background:linear-gradient(135deg,#16a34a,#15803d);border:none;color:#fff;padding:3px 10px;border-radius:6px;font-size:10px;cursor:pointer">▶ Run Check</button>
+                    <button onclick="SmartMoneyIntel.injectTestAlert(this)" style="background:linear-gradient(135deg,#7c3aed,#6d28d9);border:none;color:#fff;padding:3px 10px;border-radius:6px;font-size:10px;cursor:pointer">🧪 Test Alert</button>
+                    <button onclick="SmartMoneyIntel.refreshAlerts()" style="background:none;border:1px solid #1e293b;color:#475569;padding:3px 10px;border-radius:6px;font-size:10px;cursor:pointer">↻ Refresh</button>
+                </div>
             </div>
             <div id="smiAlertFeed">
                 <div class="smi-empty">⏳ Memuat alert log…</div>
@@ -1663,11 +1667,59 @@ const SmartMoneyIntel = (() => {
         await _loadAlertFeed();
     }
 
+    async function runMonitorNow(btn) {
+        const orig = btn.textContent;
+        btn.textContent = '⏳ Checking…';
+        btn.disabled = true;
+        try {
+            const r = await fetch(`${BASE}/api/whale-monitor/run-now`, { method: 'POST' });
+            const d = await r.json();
+            if (d.ok) {
+                btn.textContent = '✅ Running!';
+                btn.style.background = 'linear-gradient(135deg,#16a34a,#15803d)';
+                // Refresh feed setelah 8 detik (beri waktu cek selesai)
+                setTimeout(() => refreshAlerts(), 8000);
+            } else {
+                btn.textContent = '⚠️ No Wallets';
+                btn.style.background = '#dc2626';
+                alert('Belum ada wallet yang dimonitor.\n\nCara menambahkan:\n1. Pergi ke tab Smart Money Intel\n2. Buka sub-menu "Wallet Tracer"\n3. Simpan wallet ke "Saved Wallets"\n4. Kembali ke Alerts → klik "Sync ke Monitor"');
+            }
+        } catch (e) {
+            btn.textContent = '❌ Error';
+        }
+        setTimeout(() => { btn.textContent = orig; btn.disabled = false; btn.style.background = 'linear-gradient(135deg,#16a34a,#15803d)'; }, 3000);
+    }
+
+    async function injectTestAlert(btn) {
+        const orig = btn.textContent;
+        btn.textContent = '⏳…';
+        btn.disabled = true;
+        try {
+            const patterns = ['AKUMULASI','DISTRIBUSI','WHALE BUY','WHALE SELL'];
+            const pattern = patterns[Math.floor(Math.random() * patterns.length)];
+            const r = await fetch(`${BASE}/api/whale-monitor/test-alert`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pattern }),
+            });
+            const d = await r.json();
+            if (d.ok) {
+                btn.textContent = '✅ Done';
+                await refreshAlerts();
+            } else {
+                btn.textContent = '❌';
+            }
+        } catch(e) {
+            btn.textContent = '❌ Error';
+        }
+        setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000);
+    }
+
     // ── Public API ────────────────────────────────────────────────
     return { render, switchSub, refresh, trace, compare, preset, resetGraph, searchGraph,
              saveWallet, removeWallet, loadSavedToTracer, loadSavedToGraph,
              _wtExportSaved, _exportLedger,
              saveTg, testTg, openWalletDetail,
              syncWalletMonitor, removeFromMonitor,
-             refreshAlerts, _copyAddr };
+             refreshAlerts, runMonitorNow, injectTestAlert, _copyAddr };
 })();
