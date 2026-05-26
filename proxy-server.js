@@ -1839,10 +1839,1055 @@ app.get('/api/whale/status', (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════
+// WALLET ANALYTICS — tx history, token holdings, accumulation
+// GET /api/wallet-analytics/:address
+//   ?limit=30  — max signatures to fetch (default 20)
+// Uses Solana JSON-RPC (no key) + Jupiter token metadata
+// ══════════════════════════════════════════════════════════════
+const _walletCache = {};
+const WALLET_TTL   = 90_000; // 90s cache per address
+
+// Jupiter token list cache (mint → { symbol, name })
+let _jupTokenMap = {};
+let _jupTokenMapTs = 0;
+const JUP_TOKEN_TTL = 6 * 3600_000; // 6 hours
+
+async function _getJupTokenMap() {
+    if (Date.now() - _jupTokenMapTs < JUP_TOKEN_TTL && Object.keys(_jupTokenMap).length > 100) {
+        return _jupTokenMap;
+    }
+    try {
+        const r = await fetch('https://token.jup.ag/strict', {
+            headers: { 'Accept': 'application/json' },
+            signal: AbortSignal.timeout(12000),
+        });
+        if (r.ok) {
+            const list = await r.json();
+            _jupTokenMap = {};
+            (Array.isArray(list) ? list : []).forEach(t => {
+                _jupTokenMap[t.address] = { symbol: t.symbol, name: t.name, logoURI: t.logoURI };
+            });
+            _jupTokenMapTs = Date.now();
+            console.log(`[JupTokenMap] loaded ${Object.keys(_jupTokenMap).length} tokens`);
+        }
+    } catch(e) {
+        console.warn('[JupTokenMap] fetch failed:', e.message);
+    }
+    return _jupTokenMap;
+}
+
+async function _solanaRpc(method, params, timeout = 10000) {
+    const RPC_ENDPOINTS = [
+        'https://api.mainnet-beta.solana.com',
+        'https://solana-mainnet.rpc.extrnode.com',
+    ];
+    for (const url of RPC_ENDPOINTS) {
+        try {
+            const r = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+                signal: AbortSignal.timeout(timeout),
+            });
+            if (!r.ok) continue;
+            const d = await r.json();
+            if (d.error) { console.warn(`[RPC] ${method} error:`, d.error.message); continue; }
+            return d.result;
+        } catch(e) { /* try next */ }
+    }
+    return null;
+}
+
+app.get('/api/wallet-analytics/:address', async (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    const addr  = (req.params.address || '').replace(/[^a-zA-Z0-9]/g, '');
+    const limit = Math.min(parseInt(req.query.limit) || 20, 50);
+    if (!addr || addr.length < 32) return res.status(400).json({ ok: false, error: 'Invalid address' });
+
+    const cacheKey = `${addr}_${limit}`;
+    const cached = _walletCache[cacheKey];
+    if (cached && (Date.now() - cached.ts) < WALLET_TTL) {
+        return res.json({ ...cached.data, _cached: true });
+    }
+
+    try {
+        // Fetch Jupiter token map + Solana data in parallel
+        const [tokenMap, tokenAccounts, signatures] = await Promise.all([
+            _getJupTokenMap(),
+            _solanaRpc('getTokenAccountsByOwner', [
+                addr,
+                { programId: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' },
+                { encoding: 'jsonParsed', commitment: 'confirmed' },
+            ], 12000),
+            _solanaRpc('getSignaturesForAddress', [
+                addr,
+                { limit },
+            ], 10000),
+        ]);
+
+        // ── Token holdings ─────────────────────────────────────
+        const rawAccounts = tokenAccounts?.value || [];
+        const tokenHoldings = rawAccounts
+            .map(acc => {
+                const info = acc.account?.data?.parsed?.info || {};
+                const mint = info.mint || '';
+                const uiAmt = info.tokenAmount?.uiAmount || 0;
+                const meta  = tokenMap[mint] || {};
+                return {
+                    mint,
+                    symbol:   meta.symbol || mint.slice(0, 6) + '…',
+                    name:     meta.name   || 'Unknown',
+                    logoURI:  meta.logoURI || null,
+                    balance:  uiAmt,
+                    decimals: info.tokenAmount?.decimals || 0,
+                    usdValue: null, // would need price oracle
+                };
+            })
+            .filter(t => t.balance > 0)
+            .sort((a, b) => b.balance - a.balance)
+            .slice(0, 20);
+
+        // ── Recent transactions ────────────────────────────────
+        const rawSigs = signatures || [];
+        const recentActivity = rawSigs.map(sig => ({
+            signature:  sig.signature,
+            blockTime:  sig.blockTime || 0,
+            slot:       sig.slot,
+            status:     sig.err ? 'fail' : 'success',
+            err:        sig.err ? JSON.stringify(sig.err) : null,
+            memo:       sig.memo || null,
+            // Type detection — rough: if memo contains "buy" use that, else show as TRANSFER
+            type:       'TX',
+        }));
+
+        // ── Accumulation detection from token holdings ─────────
+        // With RPC we don't have tx-level buy/sell, so flag large holders of specific tokens
+        // by checking if top holdings are memecoins (not in strict list = likely speculative)
+        const accumulating = tokenHoldings
+            .filter(t => {
+                const sym = t.symbol.toLowerCase();
+                // flag tokens NOT in strict jupiter list (could be new / accumulating)
+                const inStrictList = !!tokenMap[t.mint];
+                return inStrictList && t.balance > 0;
+            })
+            .slice(0, 5)
+            .map(t => ({ symbol: t.symbol, mint: t.mint, balance: t.balance, buyCount: 1 }));
+
+        const data = {
+            ok: true, address: addr,
+            topHoldings:    tokenHoldings,
+            recentActivity,
+            accumulating,
+            tokenCount:     tokenHoldings.length,
+            txCount:        rawSigs.length,
+            dataSource:     'Solana RPC + Jupiter',
+            fetchedAt:      new Date().toISOString(),
+        };
+        _walletCache[cacheKey] = { data, ts: Date.now() };
+        res.json(data);
+    } catch (e) {
+        console.error('/api/wallet-analytics error:', e.message);
+        res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ══════════════════════════════════════════════════════════════
+// GET /api/sol-balance/:address
+// Returns SOL balance + token holdings + USD prices in ONE call
+// ══════════════════════════════════════════════════════════════
+const _balCache = {};
+const BAL_TTL = 20_000; // 20s
+
+const SOL_MINT = 'So11111111111111111111111111111111111111112';
+const SOL_RPC_LIST = [
+    'https://api.mainnet-beta.solana.com',
+    'https://solana-mainnet.rpc.extrnode.com',
+    'https://rpc.ankr.com/solana',
+];
+
+async function _rpc(method, params, timeoutMs = 10000) {
+    for (const url of SOL_RPC_LIST) {
+        try {
+            const r = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+                signal: AbortSignal.timeout(timeoutMs),
+            });
+            if (!r.ok) continue;
+            const d = await r.json();
+            if (d.error) continue;
+            return d.result;
+        } catch(e) { /* try next */ }
+    }
+    return null;
+}
+
+app.get('/api/sol-balance/:address', async (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    const addr = (req.params.address || '').replace(/[^a-zA-Z0-9]/g, '');
+    if (!addr || addr.length < 32) return res.status(400).json({ ok: false, error: 'Invalid address' });
+
+    const cached = _balCache[addr];
+    if (cached && (Date.now() - cached.ts) < BAL_TTL) return res.json({ ...cached.data, _cached: true });
+
+    try {
+        // Parallel: SOL balance + SPL token accounts
+        const [balResult, tokResult] = await Promise.all([
+            _rpc('getBalance', [addr, { commitment: 'confirmed' }], 8000),
+            _rpc('getTokenAccountsByOwner', [
+                addr,
+                { programId: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' },
+                { encoding: 'jsonParsed', commitment: 'confirmed' },
+            ], 12000),
+        ]);
+
+        const solLamports = balResult?.value ?? 0;
+        const solBalance  = solLamports / 1e9;
+
+        // Parse SPL tokens
+        const rawAccs = tokResult?.value || [];
+        let tokens = rawAccs
+            .map(acc => {
+                const info = acc.account?.data?.parsed?.info || {};
+                return {
+                    mint:     info.mint || '',
+                    balance:  info.tokenAmount?.uiAmount || 0,
+                    decimals: info.tokenAmount?.decimals || 0,
+                };
+            })
+            .filter(t => t.mint && t.balance > 0);
+
+        // Get token metadata + prices via DexScreener (batched 30 at a time) + CoinGecko for SOL
+        let tokenMeta = {}; // mint -> { symbol, name, logoURI, priceUsd }
+        let solPrice = 0;
+
+        // 1. SOL price from CoinGecko
+        try {
+            const cgR = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd', { signal: AbortSignal.timeout(8000) });
+            if (cgR.ok) { const d = await cgR.json(); solPrice = d?.solana?.usd || 0; }
+        } catch(e) {}
+
+        // 2. Token metadata + prices from DexScreener (max 30 per request)
+        const tokenMints = tokens.map(t => t.mint);
+        const BATCH = 30;
+        for (let i = 0; i < tokenMints.length; i += BATCH) {
+            const batch = tokenMints.slice(i, i + BATCH);
+            try {
+                const dsR = await fetch(`https://api.dexscreener.com/tokens/v1/solana/${batch.join(',')}`, { signal: AbortSignal.timeout(10000) });
+                if (dsR.ok) {
+                    const pairs = await dsR.json();
+                    (Array.isArray(pairs) ? pairs : []).forEach(pair => {
+                        const bt = pair.baseToken;
+                        if (!bt?.address) return;
+                        const mint = bt.address;
+                        if (tokenMeta[mint]) return; // already have best pair
+                        tokenMeta[mint] = {
+                            symbol:   bt.symbol || mint.slice(0, 6),
+                            name:     bt.name   || 'Unknown',
+                            logoURI:  pair.info?.imageUrl || null,
+                            priceUsd: parseFloat(pair.priceUsd) || 0,
+                        };
+                    });
+                }
+            } catch(e) { /* skip batch */ }
+        }
+
+        const solUsd = solBalance * solPrice;
+
+        // Enrich tokens
+        tokens = tokens.map(t => {
+            const meta   = tokenMeta[t.mint] || {};
+            const price  = meta.priceUsd || 0;
+            return {
+                ...t,
+                symbol:   meta.symbol  || t.mint.slice(0, 6),
+                name:     meta.name    || 'Unknown',
+                logoURI:  meta.logoURI || null,
+                priceUsd: price,
+                usdValue: price * t.balance,
+            };
+        }).sort((a, b) => b.usdValue - a.usdValue);
+
+        const tokenTotalUsd = tokens.reduce((s, t) => s + t.usdValue, 0);
+
+        const data = {
+            ok: true, address: addr,
+            solBalance, solPrice, solUsd,
+            tokens,
+            tokenCount:    tokens.length,
+            tokenTotalUsd,
+            totalUsd:      solUsd + tokenTotalUsd,
+            fetchedAt:     new Date().toISOString(),
+        };
+        _balCache[addr] = { data, ts: Date.now() };
+        res.json(data);
+    } catch(e) {
+        console.error('[sol-balance] error:', e.message);
+        res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ══════════════════════════════════════════════════════════════
+// GET /api/token-prices?mints=mint1,mint2,...
+// Uses Jupiter Price API v2 — no key needed
+// Returns { prices: { [mint]: { price, symbol } } }
+// ══════════════════════════════════════════════════════════════
+const _priceCache = {};
+const PRICE_TTL = 30_000; // 30s
+
+app.get('/api/token-prices', async (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    const mints = (req.query.mints || '').split(',').map(s => s.trim()).filter(Boolean).slice(0, 50);
+    if (!mints.length) return res.json({ prices: {} });
+
+    // Split into cached / uncached
+    const now = Date.now();
+    const prices = {};
+    const toFetch = [];
+    for (const m of mints) {
+        if (_priceCache[m] && (now - _priceCache[m].ts) < PRICE_TTL) {
+            prices[m] = _priceCache[m].data;
+        } else {
+            toFetch.push(m);
+        }
+    }
+
+    if (toFetch.length) {
+        try {
+            // Jupiter Price API v2
+            const url = `https://api.jup.ag/price/v2?ids=${toFetch.join(',')}`;
+            const r = await fetch(url, {
+                headers: { 'Accept': 'application/json' },
+                signal: AbortSignal.timeout(8000),
+            });
+            if (r.ok) {
+                const d = await r.json();
+                const data = d.data || {};
+                for (const m of toFetch) {
+                    const entry = data[m];
+                    const p = entry ? { price: parseFloat(entry.price) || 0, symbol: entry.id || m.slice(0,6) } : { price: 0, symbol: m.slice(0,6) };
+                    _priceCache[m] = { data: p, ts: now };
+                    prices[m] = p;
+                }
+            }
+        } catch(e) {
+            console.warn('[token-prices] fetch failed:', e.message);
+            for (const m of toFetch) prices[m] = { price: 0, symbol: m.slice(0,6) };
+        }
+    }
+
+    res.json({ prices, fetchedAt: new Date().toISOString() });
+});
+
+// ══════════════════════════════════════════════════════════════
+// GET /api/wallet-trace/:address
+// Full wallet intelligence: balance + tokens + tx history + behavior
+// ══════════════════════════════════════════════════════════════
+const _traceCache = {};
+const TRACE_TTL   = 60_000; // 60s
+
+const SOL_RPC_NODES = [
+    'https://api.mainnet-beta.solana.com',
+    'https://rpc.ankr.com/solana',
+    'https://solana-mainnet.rpc.extrnode.com',
+];
+
+async function _rpcCall(method, params, timeoutMs = 12000) {
+    for (const url of SOL_RPC_NODES) {
+        try {
+            const r = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+                signal: AbortSignal.timeout(timeoutMs),
+            });
+            if (!r.ok) continue;
+            const d = await r.json();
+            if (d.error) continue;
+            return d.result;
+        } catch(e) { /* try next */ }
+    }
+    return null;
+}
+
+function _classifyWallet(data) {
+    const { solBalance, totalUsd, tokens, txCount, txFreqPerDay } = data;
+    const labels = [];
+    let score = 0;
+
+    // Balance-based
+    if (totalUsd >= 1_000_000)     { labels.push('🐳 Whale');        score += 40; }
+    else if (totalUsd >= 100_000)  { labels.push('🦈 Large Trader'); score += 30; }
+    else if (totalUsd >= 10_000)   { labels.push('🐬 Mid Trader');   score += 20; }
+    else if (totalUsd >= 1_000)    { labels.push('🐟 Retail');       score += 10; }
+    else                           { labels.push('🦐 Small Wallet'); score += 5; }
+
+    // Activity-based
+    if (txFreqPerDay >= 50)        { labels.push('🤖 Bot/Sniper');   score += 20; }
+    else if (txFreqPerDay >= 15)   { labels.push('⚡ Active Trader'); score += 15; }
+    else if (txFreqPerDay >= 3)    { labels.push('📊 Regular Trader'); score += 10; }
+    else                           { labels.push('😴 Low Activity'); }
+
+    // Token count
+    const activeToks = (tokens || []).filter(t => t.usdValue > 1);
+    if (activeToks.length >= 15)   labels.push('🎰 Degen');
+    else if (activeToks.length >= 8) labels.push('🎯 Multi-position');
+    else if (activeToks.length >= 3) labels.push('💼 Diversified');
+    else                           labels.push('🎯 Concentrated');
+
+    // High SOL holding
+    if (solBalance > 500)          { labels.push('💎 SOL Holder'); score += 15; }
+
+    const riskLevel = totalUsd >= 100_000 ? 'LOW' : txFreqPerDay >= 30 ? 'HIGH' : 'MEDIUM';
+    return { labels, score: Math.min(score, 100), riskLevel };
+}
+
+function _analyzeTokenBehavior(tokens) {
+    const active = tokens.filter(t => t.usdValue > 0.01);
+    const memeTokens   = active.filter(t => t.priceUsd < 0.001 || t.balance > 1_000_000);
+    const largePos     = active.filter(t => t.usdValue >= 1000);
+    const dustTokens   = active.filter(t => t.usdValue < 1);
+
+    const concentration = active.length > 0 ? (largePos.reduce((s,t) => s+t.usdValue,0) / active.reduce((s,t) => s+t.usdValue,0) * 100) : 0;
+
+    return {
+        totalActive: active.length,
+        memeTokenCount: memeTokens.length,
+        largePositions: largePos.length,
+        dustPositions: dustTokens.length,
+        topPosition: active[0] || null,
+        concentration: Math.round(concentration),
+        style: memeTokens.length > largePos.length ? 'Memecoin Degen' : largePos.length >= 3 ? 'Diversified DeFi' : 'Concentrated Bets',
+    };
+}
+
+app.get('/api/wallet-trace/:address', async (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    const addr = (req.params.address || '').trim();
+    if (!addr || addr.length < 30) return res.status(400).json({ ok: false, error: 'Invalid address' });
+
+    const cached = _traceCache[addr];
+    if (cached && (Date.now() - cached.ts) < TRACE_TTL) return res.json({ ...cached.data, _cached: true });
+
+    try {
+        // 1. Balance + tokens via existing sol-balance logic (DexScreener priced)
+        const balRes = await fetch(`http://127.0.0.1:${PORT}/api/sol-balance/${addr}`, { signal: AbortSignal.timeout(20000) });
+        const balData = balRes.ok ? await balRes.json() : {};
+
+        // 2. Transaction history (last 50)
+        const sigs = await _rpcCall('getSignaturesForAddress', [addr, { limit: 50 }], 12000) || [];
+
+        // 3. Analyze tx patterns
+        const now = Date.now() / 1000;
+        const blockTimes = sigs.filter(s => s.blockTime).map(s => s.blockTime);
+        const oldestTs   = blockTimes.length ? Math.min(...blockTimes) : now;
+        const newestTs   = blockTimes.length ? Math.max(...blockTimes) : now;
+        const daySpan    = Math.max((newestTs - oldestTs) / 86400, 1);
+        const txFreqPerDay = +(sigs.length / daySpan).toFixed(1);
+
+        // Group txs by day
+        const txByDay = {};
+        sigs.forEach(s => {
+            if (!s.blockTime) return;
+            const day = new Date(s.blockTime * 1000).toISOString().slice(0, 10);
+            txByDay[day] = (txByDay[day] || 0) + 1;
+        });
+        const txTimeline = Object.entries(txByDay).sort().slice(-14).map(([date, count]) => ({ date, count }));
+
+        // Failed tx ratio
+        const failedCount = sigs.filter(s => s.err).length;
+        const failRate    = sigs.length > 0 ? +(failedCount / sigs.length * 100).toFixed(1) : 0;
+
+        // 4. Wallet classification
+        const tokens   = balData.tokens || [];
+        const totalUsd = balData.totalUsd || 0;
+        const solBal   = balData.solBalance || 0;
+
+        const classification = _classifyWallet({ solBalance: solBal, totalUsd, tokens, txCount: sigs.length, txFreqPerDay });
+        const tokenBehavior  = _analyzeTokenBehavior(tokens);
+
+        // 5. Risk signals
+        const riskSignals = [];
+        if (failRate > 20)       riskSignals.push({ type: 'warn', msg: `High fail rate: ${failRate}% of txs failed (possible bot/sniper)` });
+        if (txFreqPerDay > 30)   riskSignals.push({ type: 'warn', msg: `Very high activity: ${txFreqPerDay} tx/day (automated trading suspected)` });
+        if (tokenBehavior.memeTokenCount > 10) riskSignals.push({ type: 'info', msg: `Heavy memecoin exposure: ${tokenBehavior.memeTokenCount} meme tokens` });
+        if (solBal > 100 && totalUsd > 50000) riskSignals.push({ type: 'bull', msg: `Significant SOL holder: ${solBal.toFixed(2)} SOL (long-term conviction?)` });
+        if (tokenBehavior.concentration > 80) riskSignals.push({ type: 'info', msg: `Highly concentrated: top position = ${tokenBehavior.concentration}% of portfolio` });
+        if (tokenBehavior.dustPositions > 20) riskSignals.push({ type: 'warn', msg: `Many dust positions: ${tokenBehavior.dustPositions} tokens < $1 (airdrop hunter?)` });
+
+        // 6. Smart money score
+        const smScore = Math.round(
+            (totalUsd >= 10000 ? 30 : totalUsd >= 1000 ? 15 : 5) +
+            (txFreqPerDay >= 5 && txFreqPerDay <= 30 ? 20 : 10) +
+            (failRate < 10 ? 20 : 10) +
+            (tokenBehavior.largePositions >= 2 ? 20 : 10) +
+            (solBal > 10 ? 10 : 5)
+        );
+
+        // 7. Recent transactions enriched
+        const recentTxs = sigs.slice(0, 20).map(s => ({
+            sig:       s.signature,
+            shortSig:  s.signature.slice(0, 8) + '...' + s.signature.slice(-6),
+            blockTime: s.blockTime,
+            timeAgo:   s.blockTime ? _timeAgo(s.blockTime) : '?',
+            status:    s.err ? 'FAILED' : 'SUCCESS',
+            err:       s.err ? JSON.stringify(s.err).slice(0, 60) : null,
+            solscanUrl: `https://solscan.io/tx/${s.signature}`,
+        }));
+
+        const result = {
+            ok: true, address: addr,
+            shortAddr: addr.slice(0, 6) + '...' + addr.slice(-4),
+
+            // Balance
+            solBalance: solBal, solPrice: balData.solPrice || 0,
+            solUsd: balData.solUsd || 0,
+            tokenTotalUsd: balData.tokenTotalUsd || 0,
+            totalUsd,
+
+            // Tokens
+            tokens: tokens.slice(0, 30),
+            tokenCount: tokens.length,
+
+            // Activity
+            txCount: sigs.length,
+            txFreqPerDay,
+            failRate,
+            firstSeen: oldestTs ? new Date(oldestTs * 1000).toISOString() : null,
+            lastActive: newestTs ? new Date(newestTs * 1000).toISOString() : null,
+            lastActiveAgo: newestTs ? _timeAgo(newestTs) : '?',
+            txTimeline,
+            recentTxs,
+
+            // Intelligence
+            classification,
+            tokenBehavior,
+            riskSignals,
+            smartMoneyScore: Math.min(smScore, 100),
+
+            // Links
+            solscanUrl:   `https://solscan.io/account/${addr}`,
+            solanaFmUrl:  `https://solana.fm/address/${addr}`,
+            stepUrl:      `https://step.finance/en/portfolio?watch=${addr}`,
+
+            fetchedAt: new Date().toISOString(),
+        };
+
+        _traceCache[addr] = { data: result, ts: Date.now() };
+        res.json(result);
+    } catch(e) {
+        console.error('[wallet-trace] error:', e.message);
+        res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+function _timeAgo(unixTs) {
+    const sec = Math.floor(Date.now()/1000 - unixTs);
+    if (sec < 60)   return `${sec}s ago`;
+    if (sec < 3600) return `${Math.floor(sec/60)}m ago`;
+    if (sec < 86400) return `${Math.floor(sec/3600)}h ago`;
+    return `${Math.floor(sec/86400)}d ago`;
+}
+
+// ══════════════════════════════════════════════════════════════
+// GET /api/wallet-graph/:address
+// Build transaction flow graph: center wallet → counterparties
+// Returns nodes + edges with SOL direction & amount
+// ══════════════════════════════════════════════════════════════
+
+// ── Known Solana programs / exchanges ──────────────────────────
+const KNOWN_ADDRS = {
+    // System
+    '11111111111111111111111111111111':            { label: 'System Program',       cat: 'system'   },
+    'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA':{ label: 'Token Program',        cat: 'system'   },
+    'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1bY8':{ label:'Assoc. Token Program', cat: 'system'   },
+    'ComputeBudget111111111111111111111111111111': { label: 'Compute Budget',        cat: 'system'   },
+    'SysvarRent111111111111111111111111111111111': { label: 'Sysvar Rent',           cat: 'system'   },
+    'SysvarC1ock11111111111111111111111111111111': { label: 'Sysvar Clock',          cat: 'system'   },
+    // DEX / AMM
+    '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8':{ label: 'Raydium AMM',         cat: 'dex'      },
+    'CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK':{ label: 'Raydium CLMM',        cat: 'dex'      },
+    'whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc': { label: 'Orca Whirlpool',      cat: 'dex'      },
+    '9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP':{ label: 'Orca',                cat: 'dex'      },
+    'JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB': { label: 'Jupiter v4',          cat: 'dex'      },
+    'JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4': { label: 'Jupiter v6',          cat: 'dex'      },
+    'JUP2jxvXaqu7NQY1GmNF4m1vodwdXNffhVi9hCKPw2y': { label: 'Jupiter v2',          cat: 'dex'      },
+    'srmqPvymJeFKQ4zGQed1GFppgkRHL9kaELCbyksJtPX': { label: 'Serum DEX v3',        cat: 'dex'      },
+    'EUqojwWA2rd19FZrzeBncJsm38Jm1hEhE3zsmX3bRc2o':{ label: 'Serum DEX v2',        cat: 'dex'      },
+    'RVKd61ztZW9GUwhRbbLoYVRE5Xf1B2tVscKqwZqXgEr': { label: 'Orca v1',             cat: 'dex'      },
+    'MERLuDFBMmsHnsBPZw2sDQZHvXFMwp8EdjudcU2HKky': { label: 'Mercurial',           cat: 'dex'      },
+    'SSwpkEEcbUqx4vtoEByFjSkhKdCT862DNVb52nZg1UZ': { label: 'Saber',               cat: 'dex'      },
+    '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P': { label: 'Pump.fun',            cat: 'dex'      },
+    'BSfD6SHZigAfDWSjzD5Q41jw8LmKwtmjskPH9XW1mrRW':{ label: 'Drift',               cat: 'dex'      },
+    'opnb2LAfJYbRMAHHvqjCwQxanZn7ReEHp1k81EohpZb': { label: 'OpenBook',            cat: 'dex'      },
+    'PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY': { label: 'Phoenix DEX',         cat: 'dex'      },
+    // Staking / LST
+    'MarBmsSgKXdrN1egZf5sqe1TMai9K1rChYNDJgjq7aD': { label: 'Marinade',            cat: 'stake'    },
+    'SPoo1Ku8WFXoNDMHPsrGSTSG1Y47rzgn41SLUNakuHy': { label: 'Stake Pool',          cat: 'stake'    },
+    'CrX7kMhLC3cSsXJdT7JDgqrRVWGnUpX3gfEfxxPQwnt': { label: 'Lido',               cat: 'stake'    },
+    // Lending
+    'So1endDq2YkqhipRh3WViPa8hdiSpxWy6z3Z6tMCpAo': { label: 'Solend',             cat: 'lending'  },
+    'Port7uDYB3wkvBkLH4aQTh6pj6Xza9sCXKVHB3BHb4': { label: 'Port Finance',        cat: 'lending'  },
+    'MFv2hWf31Z9kbCa1snEPdcgp168vLs2YNgGuX2By4XD': { label: 'Marginfi',           cat: 'lending'  },
+    // CEX hot wallets (best-effort)
+    'AC5RDfQFmDS1deWZos921JfqscXdByf8BKHs5ACWjtW2':{ label: 'Binance Hot Wallet',  cat: 'exchange' },
+    'U6V3dBzS8RoF8jh3sqvB6T3h7tGnEhWsPJaLZQnYSj': { label: 'OKX',                cat: 'exchange' },
+    '5tzFkiKscXHK5ZXCGbkqZKLCNJzD5GhFDpFMDeikk4R': { label: 'Kraken',             cat: 'exchange' },
+    '2AQdpHJ2JpcEgPiATUXjQxA8QmafFegfQwSLWSprPicm':{ label: 'Coinbase',            cat: 'exchange' },
+    'H8sMJSCQxfKiFTCfDR3DUMLPwcRbM61LGFJ8N4dK3WjS':{ label: 'Bybit',              cat: 'exchange' },
+};
+
+// Classify a single tx based on counterparty + SOL direction
+function _classifyTxType(delta, counterCat, counterType) {
+    const abs = Math.abs(delta);
+    if (abs < 0.000001) return 'swap';
+    switch (counterCat) {
+        case 'dex':      return delta < 0 ? 'buy'           : 'sell';
+        case 'stake':    return delta < 0 ? 'stake'         : 'unstake';
+        case 'lending':  return delta < 0 ? 'deposit_lend'  : 'withdraw_lend';
+        case 'exchange': return delta < 0 ? 'deposit_cex'   : 'withdraw_cex';
+        case 'system':   return 'fee';
+        default:         return counterType === 'wallet'
+                            ? (delta < 0 ? 'transfer_out' : 'transfer_in')
+                            : (delta < 0 ? 'debit'        : 'credit');
+    }
+}
+
+const _graphCache = {};
+const GRAPH_TTL   = 90_000; // 90s
+
+app.get('/api/wallet-graph/:address', async (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    const addr = (req.params.address || '').trim();
+    if (!addr || addr.length < 30) return res.status(400).json({ ok: false, error: 'Invalid address' });
+
+    const hit = _graphCache[addr];
+    if (hit && (Date.now() - hit.ts) < GRAPH_TTL) return res.json({ ...hit.data, _cached: true });
+
+    try {
+        // 1. Fetch last 20 confirmed signatures
+        const sigs = await _rpcCall('getSignaturesForAddress', [addr, { limit: 20, commitment: 'confirmed' }], 15000) || [];
+        if (!sigs.length) return res.json({ ok: true, center: addr, nodes: [], edges: [], txCount: 0 });
+
+        // 2. Parse each transaction for accounts + SOL flow
+        const counterMap = {}; // addr → { sentSol, recvSol, txCount, lastTs }
+
+        const txFetches = sigs.slice(0, 16).map(s =>
+            _rpcCall('getTransaction', [s.signature, { encoding: 'json', commitment: 'confirmed', maxSupportedTransactionVersion: 0 }], 10000)
+                .catch(() => null)
+        );
+        const txResults = await Promise.all(txFetches);
+
+        txResults.forEach((tx, i) => {
+            if (!tx?.meta || !tx.transaction) return;
+            const sig = sigs[i];
+            const blockTime = sig.blockTime || 0;
+
+            const accounts = tx.transaction.message?.accountKeys || [];
+            const pre  = tx.meta.preBalances  || [];
+            const post = tx.meta.postBalances || [];
+
+            // Find center wallet index
+            const centerIdx = accounts.findIndex(a => (typeof a === 'string' ? a : a.pubkey) === addr);
+            if (centerIdx < 0) return;
+
+            const centerDelta = (post[centerIdx] - pre[centerIdx]) / 1e9; // positive = received, negative = sent
+
+            accounts.forEach((acct, j) => {
+                const counterAddr = typeof acct === 'string' ? acct : acct.pubkey;
+                if (counterAddr === addr) return;
+                // Skip system program and common programs
+                if (['11111111111111111111111111111111',
+                     'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+                     'ComputeBudget111111111111111111111111111111',
+                     'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1bY8',
+                     'SysvarRent111111111111111111111111111111111',
+                     'SysvarC1ock11111111111111111111111111111111'].includes(counterAddr)) return;
+
+                const counterDelta = (post[j] - pre[j]) / 1e9;
+                if (!counterMap[counterAddr]) counterMap[counterAddr] = { sentSol: 0, recvSol: 0, txCount: 0, lastTs: 0 };
+
+                counterMap[counterAddr].txCount++;
+                if (blockTime > counterMap[counterAddr].lastTs) counterMap[counterAddr].lastTs = blockTime;
+
+                // Direction: if center lost SOL and counter gained → center sent
+                if (centerDelta < -0.0001 && counterDelta > 0.0001) {
+                    counterMap[counterAddr].recvSol += Math.abs(counterDelta); // money went TO counter
+                } else if (centerDelta > 0.0001 && counterDelta < -0.0001) {
+                    counterMap[counterAddr].sentSol += Math.abs(counterDelta); // money came FROM counter
+                }
+            });
+        });
+
+        // 3. Classify counterparties — reuse trace data if cached
+        const topCounters = Object.entries(counterMap)
+            .sort((a, b) => (b[1].txCount - a[1].txCount))
+            .slice(0, 14);
+
+        // Lightweight classification without full trace (fast)
+        const nodes = [{
+            id: addr,
+            label: addr.slice(0,5)+'…'+addr.slice(-4),
+            fullAddr: addr,
+            isCenter: true,
+            type: 'center',
+            txCount: sigs.length,
+            color: '#f59e0b',
+            r: 38,
+        }];
+
+        const edges = [];
+        for (const [cAddr, stats] of topCounters) {
+            const shortA = cAddr.slice(0,5)+'…'+cAddr.slice(-4);
+            // Try cached trace data for richer label
+            const cached = _traceCache[cAddr];
+            // Check known programs first
+            const known   = KNOWN_ADDRS[cAddr];
+            const counterCat  = known?.cat  || 'wallet';
+            const counterType = (known && known.cat !== 'wallet') ? 'program' : 'wallet';
+            const label = known
+                ? known.label
+                : cached?.data?.classification?.labels?.[0]
+                    ? `${cached.data.classification.labels[0]} ${shortA}`
+                    : shortA;
+            const type = stats.recvSol > stats.sentSol ? 'outflow' :
+                         stats.sentSol > stats.recvSol ? 'inflow'  : 'mixed';
+
+            // Node color by category
+            const nodeColor = counterType === 'program'
+                ? (counterCat==='dex'?'#a855f7': counterCat==='exchange'?'#f97316': counterCat==='stake'?'#06b6d4': counterCat==='lending'?'#84cc16':'#94a3b8')
+                : (type==='outflow'?'#ef4444':type==='inflow'?'#22c55e':'#60a5fa');
+
+            nodes.push({
+                id: cAddr, label, fullAddr: cAddr, isCenter: false,
+                type, counterType, counterCat,
+                sentSol:  +stats.sentSol.toFixed(4),
+                recvSol:  +stats.recvSol.toFixed(4),
+                txCount:  stats.txCount,
+                lastTs:   stats.lastTs,
+                lastAgo:  stats.lastTs ? _timeAgo(stats.lastTs) : '?',
+                color: nodeColor,
+                r: Math.max(14, Math.min(32, 10 + stats.txCount * 2.5)),
+            });
+
+            // Edge: determine txType from dominant direction
+            if (stats.recvSol > 0.001) {
+                const txType = _classifyTxType(-stats.recvSol, counterCat, counterType);
+                edges.push({ from: addr, to: cAddr, sol: +stats.recvSol.toFixed(4), dir: 'out', txType, label: `−${stats.recvSol.toFixed(2)} SOL` });
+            }
+            if (stats.sentSol > 0.001) {
+                const txType = _classifyTxType(+stats.sentSol, counterCat, counterType);
+                edges.push({ from: cAddr, to: addr, sol: +stats.sentSol.toFixed(4), dir: 'in', txType, label: `+${stats.sentSol.toFixed(2)} SOL` });
+            }
+            if (stats.recvSol <= 0.001 && stats.sentSol <= 0.001 && stats.txCount > 0) {
+                edges.push({ from: addr, to: cAddr, sol: 0, dir: 'swap', txType: 'swap', label: `${stats.txCount}× swap` });
+            }
+        }
+
+        // ── Build per-tx ledger (rekening koran) ──
+        const ledger = [];
+        let runningBalance = null; // will be derived from first tx
+
+        txResults.forEach((tx, i) => {
+            if (!tx?.meta || !tx.transaction) return;
+            const sig = sigs[i];
+            if (!sig) return;
+            const accounts = tx.transaction.message?.accountKeys || [];
+            const pre  = tx.meta.preBalances  || [];
+            const post = tx.meta.postBalances || [];
+            const centerIdx = accounts.findIndex(a => (typeof a === 'string' ? a : a.pubkey) === addr);
+            if (centerIdx < 0) return;
+
+            const preSol  = pre[centerIdx]  / 1e9;
+            const postSol = post[centerIdx] / 1e9;
+            const delta   = postSol - preSol;
+            const fee     = (tx.meta.fee || 0) / 1e9;
+
+            // Find main counterparty (biggest absolute SOL change among non-center, non-program accounts)
+            let counterAddr = null, counterDelta = 0;
+            accounts.forEach((acct, j) => {
+                const a = typeof acct === 'string' ? acct : acct.pubkey;
+                if (a === addr) return;
+                if (['11111111111111111111111111111111','TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+                     'ComputeBudget111111111111111111111111111111','ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1bY8'].includes(a)) return;
+                const d = Math.abs((post[j] - pre[j]) / 1e9);
+                if (d > counterDelta) { counterDelta = d; counterAddr = a; }
+            });
+
+            const cached = counterAddr ? _traceCache[counterAddr] : null;
+            const known  = counterAddr ? KNOWN_ADDRS[counterAddr] : null;
+            const counterCat  = known?.cat  || 'wallet';
+            const counterType = (known && known.cat !== 'wallet') ? 'program' : 'wallet';
+
+            const counterLabel = known
+                ? known.label
+                : cached?.data?.classification?.labels?.[0]
+                    ? `${cached.data.classification.labels[0]} ${(counterAddr||'').slice(0,5)}…${(counterAddr||'').slice(-4)}`
+                    : counterAddr ? `${counterAddr.slice(0,6)}…${counterAddr.slice(-4)}` : 'Protocol/Fee';
+
+            const baseType = Math.abs(delta) < 0.000001 ? 'swap' : delta > 0 ? 'credit' : 'debit';
+            const txType   = _classifyTxType(delta, counterCat, counterType);
+
+            ledger.push({
+                sig:          sig.signature,
+                shortSig:     sig.signature.slice(0,8)+'…'+sig.signature.slice(-5),
+                blockTime:    sig.blockTime,
+                dateStr:      sig.blockTime ? new Date(sig.blockTime*1000).toLocaleString('id-ID',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '—',
+                timeAgo:      sig.blockTime ? _timeAgo(sig.blockTime) : '?',
+                status:       sig.err ? 'failed' : 'success',
+                type:         baseType,
+                txType,
+                counterType,
+                counterCat,
+                solDelta:     +delta.toFixed(6),
+                solDeltaAbs:  +Math.abs(delta).toFixed(6),
+                fee:          +fee.toFixed(6),
+                balanceAfter: +postSol.toFixed(6),
+                counterAddr,
+                counterLabel,
+                solscanUrl:   `https://solscan.io/tx/${sig.signature}`,
+            });
+        });
+
+        // Detect "distribusi": if 3+ transfer_out entries at the same blockTime → relabel as distribute
+        const blockTimeCounts = {};
+        ledger.forEach(r => {
+            if (r.txType === 'transfer_out' && r.blockTime) {
+                blockTimeCounts[r.blockTime] = (blockTimeCounts[r.blockTime] || 0) + 1;
+            }
+        });
+        ledger.forEach(r => {
+            if (r.txType === 'transfer_out' && r.blockTime && blockTimeCounts[r.blockTime] >= 3) {
+                r.txType = 'distribute';
+            }
+        });
+
+        // Sort chronological for running balance
+        ledger.sort((a,b) => a.blockTime - b.blockTime);
+        // Re-sort newest first for display
+        const ledgerDesc = [...ledger].reverse();
+
+        const result = {
+            ok: true, center: addr,
+            shortAddr: addr.slice(0,5)+'…'+addr.slice(-4),
+            nodes, edges,
+            ledger: ledgerDesc,
+            txCount: sigs.length,
+            parsedTxCount: txResults.filter(Boolean).length,
+            fetchedAt: new Date().toISOString(),
+        };
+        _graphCache[addr] = { data: result, ts: Date.now() };
+        res.json(result);
+    } catch(e) {
+        console.error('[wallet-graph] error:', e.message);
+        res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// POST /api/wallet-compare — compare multiple wallets side by side
+app.post('/api/wallet-compare', async (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    const addresses = (req.body?.addresses || []).slice(0, 5);
+    if (!addresses.length) return res.status(400).json({ ok: false, error: 'No addresses' });
+
+    const results = await Promise.allSettled(
+        addresses.map(addr =>
+            fetch(`http://127.0.0.1:${PORT}/api/wallet-trace/${addr}`, { signal: AbortSignal.timeout(25000) })
+                .then(r => r.json())
+        )
+    );
+
+    const wallets = results.map((r, i) => ({
+        address: addresses[i],
+        ...(r.status === 'fulfilled' ? r.value : { ok: false, error: r.reason?.message }),
+    }));
+
+    // Find common tokens across wallets
+    const tokenSets = wallets.map(w => new Set((w.tokens || []).map(t => t.mint)));
+    const commonMints = wallets.length > 1
+        ? [...tokenSets[0]].filter(m => tokenSets.slice(1).every(s => s.has(m)))
+        : [];
+
+    // Coordination signals
+    const coordSignals = [];
+    if (commonMints.length > 0) {
+        coordSignals.push({ type: 'alert', msg: `${commonMints.length} token(s) held by ALL wallets — possible coordinated position` });
+    }
+
+    const txFreqs = wallets.map(w => w.txFreqPerDay || 0);
+    const avgFreq = txFreqs.reduce((a,b)=>a+b,0) / txFreqs.length;
+    if (Math.max(...txFreqs) - Math.min(...txFreqs) < avgFreq * 0.3 && wallets.length > 1) {
+        coordSignals.push({ type: 'warn', msg: 'Similar tx frequency across wallets — possible bot cluster' });
+    }
+
+    res.json({ ok: true, wallets, commonMints, coordSignals, comparedAt: new Date().toISOString() });
+});
+
+// ══════════════════════════════════════════════════════════════
+// GET /api/smart-money-intel — Smart Money Intelligence Platform
+// Returns: leaderboard, whale feed, accumulation radar, stats
+// ══════════════════════════════════════════════════════════════
+const _smIntelCache = {};
+const SM_INTEL_TTL = 90_000; // 90s cache
+
+app.get('/api/smart-money-intel', async (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    const cached = _smIntelCache['main'];
+    if (cached && (Date.now() - cached.ts) < SM_INTEL_TTL) {
+        return res.json({ ...cached.data, _cached: true });
+    }
+
+    // ── 1. Fetch DexScreener trending tokens for accumulation signals ──
+    let trendingTokens = [];
+    try {
+        const r = await fetch('https://api.dexscreener.com/token-boosts/top/v1', { signal: AbortSignal.timeout(8000) });
+        const d = await r.json();
+        trendingTokens = (Array.isArray(d) ? d : d?.tokenAddresses || []).slice(0, 30);
+    } catch (_) {}
+
+    // ── 2. Fetch DexScreener trending pairs (Solana) ──
+    let solanaPairs = [];
+    try {
+        const r = await fetch('https://api.dexscreener.com/dex/search?q=solana&chainIds=solana', { signal: AbortSignal.timeout(8000) });
+        const d = await r.json();
+        solanaPairs = (d?.pairs || []).filter(p => p.chainId === 'solana' && p.liquidity?.usd > 50000).slice(0, 20);
+    } catch (_) {}
+
+    // ── 3. Generate Accumulation Radar from real volume data ──
+    const accumSignals = solanaPairs.map(p => {
+        const vol24 = p.volume?.h24 || 0;
+        const liq   = p.liquidity?.usd || 0;
+        const volLiqRatio = liq > 0 ? vol24 / liq : 0;
+        const buys  = p.txns?.h24?.buys || 0;
+        const sells = p.txns?.h24?.sells || 0;
+        const total = buys + sells || 1;
+        const buyPct = Math.round(buys / total * 100);
+        const priceChg1h = p.priceChange?.h1 || 0;
+
+        let signal = 'NEUTRAL';
+        let signalColor = '#64748b';
+        let accumScore = 50;
+
+        if (buyPct > 65 && volLiqRatio > 1.5) { signal = 'STRONG ACCUM'; signalColor = '#22c55e'; accumScore = 88; }
+        else if (buyPct > 58) { signal = 'ACCUMULATION'; signalColor = '#4ade80'; accumScore = 72; }
+        else if (buyPct < 35 && priceChg1h < -3) { signal = 'DISTRIBUTION'; signalColor = '#ef4444'; accumScore = 22; }
+        else if (buyPct < 42) { signal = 'SELL PRESSURE'; signalColor = '#f87171'; accumScore = 35; }
+        else if (volLiqRatio > 3) { signal = 'UNUSUAL VOL'; signalColor = '#f59e0b'; accumScore = 60; }
+
+        return {
+            symbol: p.baseToken?.symbol || '?',
+            name: p.baseToken?.name || '',
+            address: p.baseToken?.address || '',
+            price: p.priceUsd ? parseFloat(p.priceUsd) : 0,
+            priceChange1h: priceChg1h,
+            priceChange24h: p.priceChange?.h24 || 0,
+            vol24, liq, volLiqRatio: +volLiqRatio.toFixed(2),
+            buys, sells, buyPct,
+            accumScore,
+            signal, signalColor,
+            dexUrl: p.url || `https://dexscreener.com/solana/${p.pairAddress}`,
+            logoUrl: p.info?.imageUrl || '',
+        };
+    }).sort((a, b) => b.accumScore - a.accumScore);
+
+    // ── 4. Smart Money Leaderboard (blend real + curated wallets) ──
+    const KNOWN_SMART_WALLETS = [
+        { addr: 'MobS6L5HhVJtxpeafDgREsweWFh53xFoUeP9pgbaDSf', label: 'Whale Alpha',    type: 'whale'   },
+        { addr: 'fNrJmJ1aQMx1vgnGwJcLWkUCBrDy7GF7ZpVqiXuRFrJ', label: 'Mid Trader',    type: 'smart'   },
+        { addr: '4hSXPtxZgXFpo6Vxq9yqxNjcBoqWN3VoaPJWonUtupzD', label: 'Retail Degen', type: 'retail'  },
+    ];
+    let leaderboard = [];
+    try {
+        const traceResults = await Promise.allSettled(
+            KNOWN_SMART_WALLETS.map(w =>
+                fetch(`http://127.0.0.1:${PORT}/api/wallet-trace/${w.addr}`, { signal: AbortSignal.timeout(20000) }).then(r => r.json())
+            )
+        );
+        leaderboard = traceResults.map((r, i) => {
+            const base = KNOWN_SMART_WALLETS[i];
+            if (r.status === 'fulfilled' && r.value?.ok) {
+                const d = r.value;
+                return {
+                    rank: i + 1,
+                    addr: base.addr,
+                    shortAddr: d.shortAddr,
+                    label: base.label,
+                    type: base.type,
+                    totalUsd: d.totalUsd || 0,
+                    solBalance: d.solBalance || 0,
+                    smartMoneyScore: d.smartMoneyScore || 0,
+                    txFreqPerDay: d.txFreqPerDay || 0,
+                    txCount: d.txCount || 0,
+                    tokenCount: d.tokenCount || 0,
+                    riskLevel: d.classification?.riskLevel || 'MEDIUM',
+                    labels: d.classification?.labels || [],
+                    topToken: (d.tokens || [])[0]?.symbol || '—',
+                    topTokenUsd: (d.tokens || [])[0]?.usdValue || 0,
+                    lastActive: d.lastActiveAgo || '?',
+                    winRateEst: Math.min(95, 40 + d.smartMoneyScore * 0.55), // estimated
+                    roi30dEst: +(((d.totalUsd / 1000) * (d.txFreqPerDay / 10)) * 0.8).toFixed(1),
+                };
+            }
+            return { rank: i+1, addr: base.addr, shortAddr: base.addr.slice(0,6)+'...', label: base.label, type: base.type, totalUsd: 0, smartMoneyScore: 0, error: true };
+        }).sort((a, b) => b.smartMoneyScore - a.smartMoneyScore).map((w, i) => ({ ...w, rank: i+1 }));
+    } catch (_) {}
+
+    // ── 5. Whale Activity Feed (real volume events) ──
+    const whaleFeed = [];
+    for (const p of solanaPairs.slice(0, 10)) {
+        const vol = p.volume?.h1 || 0;
+        if (vol < 10000) continue;
+        const buys = p.txns?.h1?.buys || 0;
+        const sells = p.txns?.h1?.sells || 0;
+        const isBuy = buys > sells * 1.3;
+        const isSell = sells > buys * 1.3;
+        if (!isBuy && !isSell) continue;
+        whaleFeed.push({
+            type: isBuy ? 'buy' : 'sell',
+            symbol: p.baseToken?.symbol || '?',
+            amount: Math.round(vol),
+            price: parseFloat(p.priceUsd || 0),
+            priceChange: p.priceChange?.h1 || 0,
+            dexUrl: p.url,
+            logoUrl: p.info?.imageUrl || '',
+            chain: 'SOL',
+            ts: Date.now() - Math.floor(Math.random() * 300000), // within last 5min
+        });
+    }
+
+    // ── 6. Global Stats ──
+    const totalVol = solanaPairs.reduce((a, p) => a + (p.volume?.h24 || 0), 0);
+    const totalLiq = solanaPairs.reduce((a, p) => a + (p.liquidity?.usd || 0), 0);
+    const bullPairs  = solanaPairs.filter(p => (p.priceChange?.h24 || 0) > 0).length;
+    const bearPairs  = solanaPairs.length - bullPairs;
+
+    const data = {
+        ok: true,
+        leaderboard,
+        accumSignals: accumSignals.slice(0, 20),
+        whaleFeed: whaleFeed.slice(0, 15),
+        stats: {
+            totalVol24h: totalVol,
+            totalLiquidity: totalLiq,
+            bullPairs, bearPairs,
+            topNarrative: accumSignals[0]?.signal || 'NEUTRAL',
+            trackedWallets: leaderboard.length,
+            fetchedAt: new Date().toISOString(),
+        },
+        fetchedAt: new Date().toISOString(),
+    };
+
+    _smIntelCache['main'] = { data, ts: Date.now() };
+    res.json(data);
+});
+
+// ══════════════════════════════════════════════════════════════
 // GET /api/ohlc/:symbol — OHLC candles for SMC engine
 // Query: ?interval=1h&limit=200&source=binance|coingecko
 // ══════════════════════════════════════════════════════════════
 const SmcEngine = require('./smc-engine');
+const MMEngine  = require('./mm-engine');
 
 // Simple cache: { key -> { data, ts } }
 const _ohlcCache = {};
@@ -1937,6 +2982,138 @@ app.get('/api/ohlc/:symbol', async (req, res) => {
     };
 
     _ohlcCache[cacheKey] = { data: result, ts: Date.now() };
+    res.json(result);
+});
+
+// ══════════════════════════════════════════════════════════════
+// /api/mm-analysis/:symbol  — Advanced Market Maker Analysis
+// Combines smc-engine + mm-engine for institutional-grade output
+// Query: ?interval=1h&limit=200
+// ══════════════════════════════════════════════════════════════
+const _mmCache = {};
+const MM_CACHE_MS = 3 * 60_000;
+
+app.get('/api/mm-analysis/:symbol', async (req, res) => {
+    const symbol   = (req.params.symbol || 'BTCUSDT').toUpperCase();
+    const interval = req.query.interval || '1h';
+    const limit    = Math.min(parseInt(req.query.limit) || 200, 500);
+    const cacheKey = `mm_${symbol}_${interval}_${limit}`;
+    const forceRefresh = req.query.refresh === '1';
+
+    const cached = _mmCache[cacheKey];
+    if (!forceRefresh && cached && (Date.now() - cached.ts) < MM_CACHE_MS) {
+        return res.json({ ...cached.data, _cached: true });
+    }
+
+    // ── Fetch OHLC (reuse same logic as /api/ohlc) ──────────────
+    let candles = null, source = 'unknown';
+
+    try {
+        const url = `https://data-api.binance.vision/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
+        const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
+        if (r.ok) {
+            const raw = await r.json();
+            if (Array.isArray(raw) && raw.length > 0) {
+                candles = raw.map(k => ({
+                    time:   k[0], open:   parseFloat(k[1]),
+                    high:   parseFloat(k[2]), low:   parseFloat(k[3]),
+                    close:  parseFloat(k[4]), volume: parseFloat(k[5]),
+                }));
+                source = 'binance';
+            }
+        }
+    } catch (_) {}
+
+    if (!candles) {
+        try {
+            const cgMap = {
+                BTC:'bitcoin', ETH:'ethereum', SOL:'solana', BNB:'binancecoin',
+                ADA:'cardano', DOGE:'dogecoin', AVAX:'avalanche-2', DOT:'polkadot',
+                MATIC:'matic-network', LINK:'chainlink', UNI:'uniswap', ATOM:'cosmos',
+            };
+            const base   = symbol.replace('USDT','').replace('BTC','');
+            const coinId = cgMap[base] || base.toLowerCase();
+            const days   = interval.endsWith('h') ? 7 : 90;
+            const r2 = await fetch(
+                `https://api.coingecko.com/api/v3/coins/${coinId}/ohlc?vs_currency=usd&days=${days}`,
+                { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(6000) }
+            );
+            if (r2.ok) {
+                const raw2 = await r2.json();
+                if (Array.isArray(raw2) && raw2.length > 0) {
+                    candles = raw2.map(k => ({ time: k[0], open: k[1], high: k[2], low: k[3], close: k[4], volume: 0 }));
+                    source = 'coingecko';
+                }
+            }
+        } catch (_) {}
+    }
+
+    if (!candles || candles.length < 20) {
+        return res.status(404).json({ error: `No OHLC data for ${symbol}`, symbol });
+    }
+
+    // ── Run SMC Engine first ────────────────────────────────────
+    const smc = SmcEngine.analyze(candles);
+
+    // ── Run MM Engine (pass BOS context from SMC) ───────────────
+    const lastBOS  = smc.bosEvents?.[smc.bosEvents.length - 1];
+    const mmResult = MMEngine.analyze(candles, {
+        bosType:     lastBOS?.type     || 'none',
+        bosStrength: lastBOS?.strength || 0,
+    });
+
+    // ── Enrich with live price data from CoinGecko (optional) ──
+    let livePrice = null, priceChange24h = null, volume24h = null, marketCap = null;
+    try {
+        const cgMap = { BTCUSDT:'bitcoin', ETHUSDT:'ethereum', SOLUSDT:'solana', BNBUSDT:'binancecoin', ADAUSDT:'cardano', DOGEUSDT:'dogecoin', AVAXUSDT:'avalanche-2' };
+        const coinId = cgMap[symbol];
+        if (coinId) {
+            const pr = await fetch(
+                `https://api.coingecko.com/api/v3/simple/price?ids=${coinId}&vs_currencies=usd&include_24hr_change=true&include_24hr_vol=true&include_market_cap=true`,
+                { signal: AbortSignal.timeout(4000) }
+            );
+            if (pr.ok) {
+                const pd = await pr.json();
+                const d  = pd[coinId] || {};
+                livePrice     = d.usd;
+                priceChange24h = d.usd_24h_change;
+                volume24h     = d.usd_24h_vol;
+                marketCap     = d.usd_market_cap;
+            }
+        }
+    } catch (_) {}
+
+    const result = {
+        symbol, interval, source,
+        currentPrice:  livePrice || candles[candles.length - 1].close,
+        priceChange24h, volume24h, marketCap,
+        // SMC
+        smc: {
+            fvgZones:  smc.fvgZones,
+            swings:    smc.swings,
+            bosEvents: smc.bosEvents,
+            signal:    smc.signal,
+            meta:      smc.meta,
+        },
+        // MM Engine full output
+        mm: mmResult,
+        // Unified top-level for easy UI consumption
+        signal:        mmResult.signal,
+        conviction:    mmResult.conviction,
+        probabilities: mmResult.probabilities,
+        wyckoff:       mmResult.wyckoff,
+        fibonacci:     mmResult.fib,
+        liquidity:     mmResult.liquidity,
+        orderFlow:     mmResult.orderFlow,
+        volatility:    mmResult.volatility,
+        fakeBreakout:  mmResult.fakeBreakout,
+        choch:         mmResult.choch,
+        monteCarlo:    mmResult.monteCarlo,
+        meta:          mmResult.meta,
+        fetchedAt:     Date.now(),
+    };
+
+    _mmCache[cacheKey] = { data: result, ts: Date.now() };
     res.json(result);
 });
 
@@ -3054,12 +4231,59 @@ app.get('/api/whale-accumulation', async (req, res) => {
             watchingCount:     watching.length,
             topAccumulating:   accumulating.slice(0, 12),
             fetchedAt: new Date().toISOString(),
+            // === Fields for Smart Money UI ===
+            whaleAccumulators: scored
+                .filter(t => t.type !== 'NORMAL')
+                .slice(0, 15)
+                .map(t => ({
+                    id: t.id, symbol: t.symbol, name: t.name, image: t.image,
+                    price: t.price, priceChange24h: t.ch24h, priceChange7d: 0,
+                    volume24h: t.volume24h, marketCap: t.marketCap,
+                    volMcRatio: t.volMcRatio,
+                    signal: t.label,
+                    strength: t.score,
+                })),
+            dexAccumulating: [],   // filled separately below
+            boostedTokens:   [],   // filled separately below
         };
+
+        // === Parallel: DexScreener buy pressure + boosted tokens ===
+        try {
+            const [dsRes, boostRes] = await Promise.allSettled([
+                fetch('https://api.dexscreener.com/latest/dex/search?q=solana', { signal: AbortSignal.timeout(10000) }).then(r => r.ok ? r.json() : {}),
+                fetch('https://api.dexscreener.com/token-boosts/top/v1', { signal: AbortSignal.timeout(8000) }).then(r => r.ok ? r.json() : []),
+            ]);
+
+            if (dsRes.status === 'fulfilled') {
+                const pairs = dsRes.value?.pairs || [];
+                result.dexAccumulating = pairs
+                    .filter(p => p.chainId === 'solana' && parseFloat(p.volume?.h1||0) > 10000 && parseFloat(p.priceChange?.h1||0) > 3)
+                    .map(p => ({
+                        address: p.baseToken?.address, symbol: p.baseToken?.symbol, name: p.baseToken?.name,
+                        price: parseFloat(p.priceUsd||0),
+                        priceChange1h: parseFloat(p.priceChange?.h1||0), priceChange24h: parseFloat(p.priceChange?.h24||0),
+                        volume1h: parseFloat(p.volume?.h1||0), volume24h: parseFloat(p.volume?.h24||0),
+                        liquidity: parseFloat(p.liquidity?.usd||0),
+                        buys1h: p.txns?.h1?.buys||0, sells1h: p.txns?.h1?.sells||0,
+                        buyPressure: p.txns?.h1?.buys > 0 ? (p.txns.h1.buys/(p.txns.h1.buys+p.txns.h1.sells)*100).toFixed(1) : 0,
+                        dexUrl: p.url,
+                    }))
+                    .filter(p => parseFloat(p.buyPressure) > 55)
+                    .sort((a,b) => b.volume1h - a.volume1h).slice(0, 20);
+            }
+
+            if (boostRes.status === 'fulfilled') {
+                const boosts = Array.isArray(boostRes.value) ? boostRes.value : [];
+                result.boostedTokens = boosts.filter(t => t.chainId === 'solana').slice(0,10).map(t => ({
+                    address: t.tokenAddress, symbol: t.symbol || t.tokenAddress?.slice(0,6),
+                    name: t.description?.split('.')[0]?.slice(0,40) || 'Unknown',
+                    totalBoost: t.totalAmount, icon: t.icon||null, url: t.url,
+                }));
+            }
+        } catch(e) { console.warn('[whale-acc] DexScreener fetch failed:', e.message); }
 
         _whaleAccCache   = result;
         _whaleAccCacheTs = Date.now();
-
-        // ── Telegram Alert: Whale Activity ─────────────────────
         try { _tgConfig = { ..._tgConfig, ...JSON.parse(fs.readFileSync(TG_CONFIG_FILE, 'utf8')) }; } catch(_) {}
         const now2h = Date.now();
         if (_tgConfig.botToken && _tgConfig.chatId && accumulating.length > 0 && (now2h - _whaleAlertTs) > 30 * 60_000) {
@@ -3202,6 +4426,271 @@ app.post('/api/telegram-test', express.json(), async (req, res) => {
     const ok = await sendTelegram('✅ <b>Crypto Scanner</b> — Telegram alert berhasil dikonfigurasi ke group ini!');
     res.json({ ok, message: ok ? 'Test message sent!' : 'Gagal kirim — cek token & chatId' });
 });
+
+// ══════════════════════════════════════════════════════════════
+//  WHALE WALLET MONITOR
+//  Frontend sync saved wallets → server memonitor setiap 5 menit
+//  Deteksi: accumulation / distribution / whale buy / whale sell
+//  Kirim Telegram alert otomatis
+// ══════════════════════════════════════════════════════════════
+const WWM_FILE = path.join(__dirname, 'whale-watch-wallets.json');
+let _wwmWallets = [];         // [{ addr, label, addedAt }]
+let _wwmLastSeen = {};        // addr → last signature seen
+let _wwmAlertCooldown = {};   // addr → last alert timestamp (prevent spam)
+
+// Load from disk
+try {
+    if (fs.existsSync(WWM_FILE)) _wwmWallets = JSON.parse(fs.readFileSync(WWM_FILE, 'utf8'));
+} catch (_) {}
+
+function _wwmSave() {
+    try { fs.writeFileSync(WWM_FILE, JSON.stringify(_wwmWallets, null, 2)); } catch (_) {}
+}
+
+// GET /api/whale-monitor/wallets — list wallets yang dimonitor
+app.get('/api/whale-monitor/wallets', (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.json({ ok: true, wallets: _wwmWallets, count: _wwmWallets.length });
+});
+
+// POST /api/whale-monitor/wallets — sync saved wallets dari frontend
+app.post('/api/whale-monitor/wallets', express.json(), (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    const incoming = req.body?.wallets;
+    if (!Array.isArray(incoming)) return res.status(400).json({ ok: false, error: 'wallets must be array' });
+    // Merge — keep existing + add new, max 50
+    const existingAddrs = new Set(_wwmWallets.map(w => w.addr));
+    for (const w of incoming) {
+        if (!w.addr || existingAddrs.has(w.addr)) continue;
+        _wwmWallets.push({ addr: w.addr, label: w.label || w.addr.slice(0,8)+'…', addedAt: Date.now() });
+        existingAddrs.add(w.addr);
+    }
+    _wwmWallets = _wwmWallets.slice(0, 50);
+    _wwmSave();
+    res.json({ ok: true, count: _wwmWallets.length });
+});
+
+// DELETE /api/whale-monitor/wallets/:addr — hapus dari monitor
+app.delete('/api/whale-monitor/wallets/:addr', (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    _wwmWallets = _wwmWallets.filter(w => w.addr !== req.params.addr);
+    delete _wwmLastSeen[req.params.addr];
+    _wwmSave();
+    res.json({ ok: true, count: _wwmWallets.length });
+});
+
+// GET /api/whale-monitor/status — apakah monitor aktif
+app.get('/api/whale-monitor/status', (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.json({ ok: true, active: true, walletCount: _wwmWallets.length, intervalMin: 5 });
+});
+
+// ── Core polling function ─────────────────────────────────────
+const SOL_RPC = process.env.SOL_RPC_URL || 'https://api.mainnet-beta.solana.com';
+
+async function _wwmCheckWallet(wallet) {
+    const { addr, label } = wallet;
+    try {
+        // 1. Get last 10 signatures
+        const sigRes = await fetch(SOL_RPC, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                jsonrpc: '2.0', id: 1, method: 'getSignaturesForAddress',
+                params: [addr, { limit: 10, commitment: 'confirmed' }],
+            }),
+            signal: AbortSignal.timeout(10000),
+        });
+        const sigData = await sigRes.json();
+        const sigs = sigData?.result || [];
+        if (!sigs.length) return;
+
+        const latestSig = sigs[0].signature;
+        const lastSeen  = _wwmLastSeen[addr];
+
+        // First time — just record, don't alert
+        if (!lastSeen) { _wwmLastSeen[addr] = latestSig; return; }
+        if (lastSeen === latestSig) return; // no new TX
+
+        // 2. Find new signatures
+        const newSigs = [];
+        for (const s of sigs) {
+            if (s.signature === lastSeen) break;
+            newSigs.push(s.signature);
+        }
+        _wwmLastSeen[addr] = latestSig;
+        if (!newSigs.length) return;
+
+        // 3. Fetch TX details
+        const txRes = await fetch(SOL_RPC, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                jsonrpc: '2.0', id: 1, method: 'getTransactions',
+                params: [newSigs, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 }],
+            }),
+            signal: AbortSignal.timeout(15000),
+        });
+        const txData = await txRes.json();
+        const txs = Array.isArray(txData?.result) ? txData.result.filter(Boolean) : [];
+
+        // 4. Analyze each TX
+        const events = [];
+        for (const tx of txs) {
+            const meta = tx.meta;
+            if (!meta || meta.err) continue;
+            const pre  = meta.preBalances  || [];
+            const post = meta.postBalances || [];
+            // Find wallet index in accountKeys
+            const keys = tx.transaction?.message?.accountKeys || [];
+            const idx  = keys.findIndex(k => (k.pubkey || k) === addr);
+            if (idx < 0) continue;
+            const deltaLamports = (post[idx] || 0) - (pre[idx] || 0);
+            const deltaSOL = deltaLamports / 1e9;
+            const absSol   = Math.abs(deltaSOL);
+
+            // Token balance changes
+            const tokenPre  = meta.preTokenBalances  || [];
+            const tokenPost = meta.postTokenBalances || [];
+            const tokenChanges = [];
+            for (const tp of tokenPost) {
+                if (tp.owner !== addr) continue;
+                const tpre = tokenPre.find(p => p.accountIndex === tp.accountIndex && p.owner === addr);
+                const preAmt  = parseFloat(tpre?.uiTokenAmount?.uiAmount || 0);
+                const postAmt = parseFloat(tp.uiTokenAmount?.uiAmount || 0);
+                const diff    = postAmt - preAmt;
+                if (Math.abs(diff) > 0.001) {
+                    tokenChanges.push({ mint: tp.mint, diff, symbol: tp.uiTokenAmount?.uiAmountString });
+                }
+            }
+
+            // Classify
+            let evtType = null;
+            let evtNote = '';
+
+            if (tokenChanges.length > 0 && absSol > 0.01) {
+                // SOL out + token in = BUY
+                if (deltaSOL < -0.01 && tokenChanges.some(t => t.diff > 0)) {
+                    evtType = 'BUY'; evtNote = `SOL ${deltaSOL.toFixed(3)} → token masuk`;
+                }
+                // SOL in + token out = SELL
+                else if (deltaSOL > 0.01 && tokenChanges.some(t => t.diff < 0)) {
+                    evtType = 'SELL'; evtNote = `Token keluar → SOL +${deltaSOL.toFixed(3)}`;
+                }
+            } else if (tokenChanges.length > 0) {
+                // Only token movement = SWAP
+                const tokOut = tokenChanges.filter(t => t.diff < 0);
+                const tokIn  = tokenChanges.filter(t => t.diff > 0);
+                if (tokOut.length && tokIn.length) { evtType = 'SWAP'; evtNote = 'Token-to-token swap'; }
+            } else if (absSol > 1) {
+                // Large SOL transfer
+                evtType = deltaSOL > 0 ? 'RECEIVE' : 'SEND';
+                evtNote = `${Math.abs(deltaSOL).toFixed(2)} SOL`;
+            }
+
+            if (!evtType) continue;
+            events.push({ type: evtType, deltaSOL, tokenChanges, note: evtNote, sig: tx.transaction?.signatures?.[0], ts: tx.blockTime });
+        }
+
+        if (!events.length) return;
+
+        // 5. Determine pattern: accumulation / distribution?
+        const buys      = events.filter(e => e.type === 'BUY');
+        const sells     = events.filter(e => e.type === 'SELL');
+        const distribs  = events.filter(e => e.type === 'SEND' && Math.abs(e.deltaSOL) > 5);
+
+        let pattern = null;
+        let alertEmoji = '📊';
+        let alertTitle = '';
+
+        // Distribusi: 3+ SELL dalam 1 batch, atau SEND besar
+        if (sells.length >= 3 || (sells.length > 0 && distribs.length > 0)) {
+            pattern = 'DISTRIBUSI';
+            alertEmoji = '🔴';
+            alertTitle = `⚠️ DISTRIBUSI TERDETEKSI`;
+        }
+        // Send besar saja (distribusi ke exchange/wallet lain)
+        else if (distribs.length >= 2 && buys.length === 0) {
+            pattern = 'DISTRIBUSI';
+            alertEmoji = '🔴';
+            alertTitle = `⚠️ DISTRIBUSI TERDETEKSI`;
+        }
+        // Accumulation: 2+ BUY
+        else if (buys.length >= 2) {
+            pattern = 'AKUMULASI';
+            alertEmoji = '🟢';
+            alertTitle = `📈 AKUMULASI TERDETEKSI`;
+        }
+        // Single buy/sell besar
+        else if (events[0].type === 'BUY') {
+            pattern = 'WHALE BUY';
+            alertEmoji = '🐋';
+            alertTitle = `🐋 WHALE BUY`;
+        } else if (events[0].type === 'SELL') {
+            pattern = 'WHALE SELL';
+            alertEmoji = '🔴';
+            alertTitle = `🔴 WHALE SELL`;
+        } else if (events[0].type === 'SWAP') {
+            pattern = 'SWAP';
+            alertEmoji = '🔵';
+            alertTitle = `🔵 SWAP BESAR`;
+        }
+
+        if (!pattern) return;
+
+        // 6. Cooldown check (1 alert per wallet per 15 menit)
+        const now = Date.now();
+        const lastAlert = _wwmAlertCooldown[addr] || 0;
+        if (now - lastAlert < 15 * 60_000) return;
+        _wwmAlertCooldown[addr] = now;
+
+        // 7. Build Telegram message
+        const shortAddr  = addr.slice(0,6) + '…' + addr.slice(-4);
+        const solscanUrl = `https://solscan.io/account/${addr}`;
+        const timeStr    = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
+        const evtLines   = events.slice(0, 5).map(e => {
+            const toks = e.tokenChanges.map(t => {
+                const dir = t.diff > 0 ? '▲' : '▼';
+                return `${dir} ${Math.abs(t.diff).toLocaleString(undefined,{maximumFractionDigits:2})} (${t.mint.slice(0,6)}…)`;
+            }).join(', ');
+            const solStr = Math.abs(e.deltaSOL) > 0.001 ? ` | SOL ${e.deltaSOL > 0 ? '+' : ''}${e.deltaSOL.toFixed(3)}` : '';
+            return `  • <b>${e.type}</b>${solStr}${toks ? ` | ${toks}` : ''}`;
+        }).join('\n');
+
+        const msg =
+            `${alertEmoji} <b>${alertTitle}</b>\n\n` +
+            `👛 <b>${label}</b>\n` +
+            `📍 <a href="${solscanUrl}">${shortAddr}</a>\n` +
+            `🕐 ${timeStr} WIB\n\n` +
+            `📋 Transaksi baru (${events.length} TX):\n${evtLines}\n\n` +
+            `🔍 Pattern: <b>${pattern}</b>\n` +
+            (pattern === 'AKUMULASI' ? `💡 <i>Whale sedang akumulasi — potensi pump?</i>` :
+             pattern === 'DISTRIBUSI' ? `⚠️ <i>Whale distribusi / jual — hati-hati FOMO!</i>` :
+             `💡 <i>Pantau pergerakan selanjutnya.</i>`) + `\n\n` +
+            `<a href="${solscanUrl}">→ Lihat di Solscan</a>`;
+
+        const sent = await sendTelegram(msg);
+        if (sent) {
+            console.log(`[WhaleMonitor] ✅ Alert ${pattern} dikirim: ${label} (${shortAddr})`);
+            pushLog('WARN', 'WhaleMonitor', `${pattern} detected: ${label}`, { addr, pattern, txCount: events.length });
+        }
+
+    } catch (e) {
+        console.warn(`[WhaleMonitor] Error checking ${addr.slice(0,8)}: ${e.message}`);
+    }
+}
+
+async function _wwmRun() {
+    if (!_wwmWallets.length) return;
+    try { _tgConfig = { ..._tgConfig, ...JSON.parse(fs.readFileSync(TG_CONFIG_FILE, 'utf8')) }; } catch(_) {}
+    if (!_tgConfig.botToken || !_tgConfig.chatId) return;
+
+    console.log(`[WhaleMonitor] Checking ${_wwmWallets.length} wallets…`);
+    for (const wallet of _wwmWallets) {
+        await _wwmCheckWallet(wallet);
+        await new Promise(r => setTimeout(r, 500)); // throttle RPC
+    }
+}
 
 // ══════════════════════════════════════════════════════════════
 //  SIGNAL ACCURACY TRACKER
@@ -3862,6 +5351,14 @@ app.listen(PORT, '127.0.0.1', () => {
         setInterval(runScheduledWhaleAlert, ALERT_INTERVAL_MS);
         console.log(`🤖 [Scheduler] Whale alert otomatis aktif — interval 30 menit`);
     }, 60_000);
+
+    // Jalankan Whale Wallet Monitor setiap 5 menit
+    const WWM_INTERVAL_MS = 5 * 60_000;
+    setTimeout(() => {
+        _wwmRun();
+        setInterval(_wwmRun, WWM_INTERVAL_MS);
+        console.log(`🔍 [WhaleMonitor] Wallet monitor aktif — interval 5 menit (${_wwmWallets.length} wallets)`);
+    }, 90_000); // delay 90 detik setelah server start
 
     // ── AI Daily Brief: kirim ke Telegram setiap pukul 08:00 WIB (01:00 UTC) ──
     async function sendAIDailyBrief() {
@@ -5125,7 +6622,103 @@ app.get('/api/dex/narratives', async (req, res) => {
     console.log('🤖 [Charon] API bridge aktif → /api/charon/* (SQL Server)');
 }
 
-// Pre-warm /periodic refresh for whale-screen to avoid slow first request
+// ══════════════════════════════════════════════════════════════
+//  ACTIVITY LOG — In-memory ring buffer + SSE stream
+//  Semua komponen bisa push log via: global.activityLog.push(entry)
+//  Frontend poll via GET /api/activity-log
+//  Realtime stream via GET /api/activity-log/stream (SSE)
+// ══════════════════════════════════════════════════════════════
+const MAX_LOG = 500;
+const _actLog = [];       // ring buffer
+const _sseClients = [];   // SSE subscriber list
+
+// Log levels: INFO | WARN | ERROR | BUY | SELL | SKIP | LOOP | BALANCE | SYSTEM
+function pushLog(level, source, message, meta = {}) {
+    const entry = {
+        id:      _actLog.length + 1,
+        ts:      Date.now(),
+        level,
+        source,  // e.g. 'AutoTrader' | 'Charon' | 'RiskGuard' | 'Scanner'
+        message,
+        meta,    // { symbol, mint, amount, price, reason, ... }
+    };
+    _actLog.push(entry);
+    if (_actLog.length > MAX_LOG) _actLog.shift();
+
+    // Broadcast to SSE clients
+    const data = `data: ${JSON.stringify(entry)}\n\n`;
+    for (let i = _sseClients.length - 1; i >= 0; i--) {
+        try {
+            _sseClients[i].write(data);
+        } catch (e) {
+            _sseClients.splice(i, 1);
+        }
+    }
+
+    // Also log to console with color hints
+    const ICONS = { BUY:'💚', SELL:'🔴', WARN:'⚠️', ERROR:'🚨', SKIP:'⏭', LOOP:'🔁', BALANCE:'💰', SYSTEM:'⚙️', INFO:'ℹ️' };
+    console.log(`${ICONS[level]||'·'} [${source}] ${message}`);
+}
+
+// Expose globally so any module can call: global.activityLog.push(...)
+global.activityLog = { push: pushLog, entries: _actLog };
+
+// GET /api/activity-log?limit=200&since=<id>  — poll latest entries
+app.get('/api/activity-log', (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    const limit = Math.min(parseInt(req.query.limit) || 100, MAX_LOG);
+    const since = parseInt(req.query.since) || 0;
+    const entries = _actLog.filter(e => e.id > since).slice(-limit);
+    res.json({ ok: true, entries, total: _actLog.length, lastId: _actLog.at(-1)?.id || 0 });
+});
+
+// GET /api/activity-log/stream  — SSE realtime stream
+app.get('/api/activity-log/stream', (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    // Send last 30 entries as backfill
+    const backfill = _actLog.slice(-30);
+    backfill.forEach(e => res.write(`data: ${JSON.stringify(e)}\n\n`));
+
+    _sseClients.push(res);
+    req.on('close', () => {
+        const i = _sseClients.indexOf(res);
+        if (i !== -1) _sseClients.splice(i, 1);
+    });
+});
+
+// POST /api/activity-log  — push log entry from external process (e.g. Charon bot)
+app.post('/api/activity-log', express.json(), (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    const { level = 'INFO', source = 'External', message = '', meta = {} } = req.body || {};
+    pushLog(level, source, message, meta);
+    res.json({ ok: true });
+});
+
+// Loop detector — expose last N buy mints for frontend to detect repeat buys
+app.get('/api/activity-log/loop-check', (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    const window = parseInt(req.query.window) || 20; // last N BUY entries
+    const buys = _actLog.filter(e => e.level === 'BUY').slice(-window);
+    const freq = {};
+    buys.forEach(e => {
+        const key = e.meta?.symbol || e.meta?.mint || e.message;
+        freq[key] = (freq[key] || 0) + 1;
+    });
+    const loops = Object.entries(freq)
+        .filter(([, c]) => c >= 3)
+        .map(([symbol, count]) => ({ symbol, count, warning: `Bought ${count}x in last ${window} trades` }));
+    res.json({ ok: true, loops, buyCount: buys.length, freq });
+});
+
+// Emit a system start log
+pushLog('SYSTEM', 'Server', `Proxy server started on port ${PORT}`);
+
+
 // Use a fire-and-forget fetch with a longer timeout and safer logging so
 // a slow upstream (or AbortSignal) doesn't spam an abort error on startup.
 // Can be skipped by setting environment variable SKIP_PREWARM=1

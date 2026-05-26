@@ -289,6 +289,9 @@ function switchTab(tabName) {
         case 'solana-swap':
             if (typeof solanaSwap !== 'undefined') solanaSwap.init();
             break;
+        case 'smart-money':
+            if (typeof SmartMoneyIntel !== 'undefined') SmartMoneyIntel.render();
+            break;
     }
 
     // Fire custom event for lazy-init modules

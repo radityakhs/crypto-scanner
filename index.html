@@ -183,6 +183,10 @@
                     <span class="nav-icon">🤖</span>
                     <span class="nav-label">Charon Bot</span>
                 </button>
+                <button class="tab-btn" data-tab="ai-terminal" style="border-left:2px solid #7c3aed">
+                    <span class="nav-icon">🧠</span>
+                    <span class="nav-label">AI Terminal</span>
+                </button>
             </div>
 
         </nav>
@@ -3698,69 +3702,12 @@
 
         <!-- Smart Money Tracker Tab -->
         <div id="smart-money" class="tab-content">
-            <section class="smart-money-section">
-                <div class="smart-money-header">
-                    <h2><img src="images/ic_universe.svg" alt="" style="width: 28px; height: 28px; vertical-align: middle;"> Smart Money Tracker</h2>
-                    <div class="sm-controls">
-                        <button id="refreshSmartMoneyBtn" class="btn-primary"><img src="images/ic_automation.svg" alt="" style="width: 16px; height: 16px; vertical-align: middle;"> Refresh</button>
-                        <button id="addSmartWalletBtn" class="btn-secondary">+ Add Wallet</button>
-                    </div>
+            <div id="smIntelRoot" style="min-height:600px;background:#020617">
+                <div style="padding:24px;text-align:center;color:#475569">
+                    <div class="ait-spinner" style="margin:0 auto 12px"></div>
+                    Loading Smart Money Intelligence…
                 </div>
-
-                <!-- Smart Money Stats -->
-                <div class="sm-stats-grid">
-                    <div class="sm-stat-card">
-                        <div class="stat-icon">🐋</div>
-                        <div class="stat-info">
-                            <div class="stat-label">Tracked Wallets</div>
-                            <div class="stat-value" id="trackedWalletsCount">0</div>
-                        </div>
-                    </div>
-                    <div class="sm-stat-card">
-                        <div class="stat-icon">💰</div>
-                        <div class="stat-info">
-                            <div class="stat-label">Total Portfolio</div>
-                            <div class="stat-value" id="smTotalPortfolio">$0</div>
-                        </div>
-                    </div>
-                    <div class="sm-stat-card">
-                        <div class="stat-icon"><img src="images/ic_performance.svg" alt="P&L" style="width:18px;height:18px;"></div>
-                        <div class="stat-info">
-                            <div class="stat-label">24h P&L</div>
-                            <div class="stat-value" id="sm24hPnL">$0</div>
-                        </div>
-                    </div>
-                    <div class="sm-stat-card">
-                        <div class="stat-icon">🎯</div>
-                        <div class="stat-info">
-                            <div class="stat-label">Win Rate</div>
-                            <div class="stat-value" id="smWinRate">0%</div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Top Smart Money Wallets -->
-                <div class="top-smart-wallets">
-                    <h3>🌟 Top Performing Wallets</h3>
-                    <div id="topSmartWalletsList" class="smart-wallets-list">
-                        <div class="empty-state">
-                            <img src="images/ic_universe.svg" alt="" style="width: 64px; height: 64px; opacity: 0.3;">
-                            <p>Add smart money wallets to track their trading activity</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Recent Smart Money Trades -->
-                <div class="sm-recent-trades">
-                    <h3>⚡ Recent Smart Money Trades</h3>
-                    <div id="followedTradesList" class="followed-trades-list">
-                        <div class="empty-state">
-                            <img src="images/ic_dashboard_1.svg" alt="" style="width: 64px; height: 64px; opacity: 0.3;">
-                            <p>Follow smart money wallets to see their trades here</p>
-                        </div>
-                    </div>
-                </div>
-            </section>
+            </div>
         </div>
 
         <!-- Trading History Tab -->
@@ -5117,7 +5064,7 @@
                 </div>
             </div>
         </div>
-    </div><!-- /#dex-hunter -->
+        <style>
             .dh-title  { font-size:22px; font-weight:800; color:#e2e8f0; }
             .dh-badge  { padding:4px 12px; border-radius:20px; font-size:12px; font-weight:700; }
             .dh-badge-dry  { background:#1a3a1a; color:#4ade80; border:1px solid #16a34a; }
@@ -5375,6 +5322,13 @@
         </div>
     </div>
 
+    <!-- ╔══════════════════════════════════════════════════════════════╗
+         ║          AI TERMINAL PANEL                                   ║
+         ╚══════════════════════════════════════════════════════════════╝ -->
+    <div id="ai-terminal" class="tab-content">
+        <div id="aitPanel" style="min-height:400px"></div>
+    </div>
+
     </div><!-- /.container -->
     </main><!-- /.app-main -->
     </div><!-- /.app-shell -->
@@ -5452,6 +5406,7 @@
     <!-- External Scripts -->
     <script src="analysis-utils.js"></script>
     <script src="app.js"></script>
+    <script src="smart-money-intel.js"></script>
     <script src="advanced-analysis.js"></script>
     <script src="liquidity-heatmap.js"></script>
     <script src="ai-market-expert.js"></script>
@@ -5482,6 +5437,8 @@
     <script src="narrative-intelligence.js"></script>
     <script src="smart-intelligence.js"></script>
     <script src="charon-panel.js"></script>
+    <script src="phantom-wallet.js"></script>
+    <script src="ai-terminal.js"></script>
     <script src="signal-accuracy.js"></script>
     <script src="market-regime.js"></script>
     <script src="telegram-settings.js"></script>
@@ -6923,6 +6880,7 @@ ${rnd(CAT_OUTROS)}`,
             if (typeof CorrelationMatrix !== 'undefined') CorrelationMatrix.init();
             if (typeof SniperScanner !== 'undefined') SniperScanner.init();
             if (typeof DexSniper !== 'undefined') DexSniper.init();
+            if (typeof PhantomWallet !== 'undefined') PhantomWallet.init();
         });
 
         // ── Keyboard Shortcuts ──
@@ -7100,6 +7058,18 @@ ${rnd(CAT_OUTROS)}`,
             document.addEventListener('tabchange', function (e) {
                 if (e.detail !== 'backtest') return;
                 if (!_loaded) { _loaded = true; backtestViz.load(); }
+            });
+        })();
+
+        // ── AI Terminal tab init ──────────────────────────────────────────
+        (function () {
+            let _inited = false;
+            document.addEventListener('tabchange', function (e) {
+                if (e.detail !== 'ai-terminal') return;
+                if (typeof AiTerminal !== 'undefined') {
+                    if (!_inited) { _inited = true; AiTerminal.init(); }
+                    else { AiTerminal.refresh(); }
+                }
             });
         })();
 
