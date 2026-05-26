@@ -1501,162 +1501,166 @@ const SmartMoneyIntel = (() => {
             </div>
 
             <!-- Alert Feed -->
-            <div class="smi-sec-title">🚨 Alert Feed — Realtime</div>
-            <div class="smi-card">
-                ${alerts.length ? alerts.map(a => {
-                    const col = sevColor[a.sev]||'#3b82f6';
-                    return `
-                    <div class="smi-feed-item" onclick="window.open('${a.url}','_blank')">
-                        <div class="smi-dot" style="background:${col}"></div>
-                        <div style="font-size:18px">${a.icon}</div>
-                        <div style="flex:1;min-width:0">
-                            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-                                <span style="font-size:12px;font-weight:700;color:#e2e8f0">${a.title}</span>
-                                <span class="smi-pill" style="background:${col}18;color:${col};border:1px solid ${col}33">${a.sev}</span>
-                                <span class="smi-pill" style="background:#0f172a;color:#475569;border:1px solid #1e293b">${a.type}</span>
-                            </div>
-                            <div style="font-size:10px;color:#475569;margin-top:2px">${a.detail}</div>
-                        </div>
-                        <div style="font-size:10px;color:#334155;white-space:nowrap">${fmtAgo(a.ts)}</div>
-                    </div>`;
-                }).join('') : `<div class="smi-empty">Monitoring aktif. Belum ada alert baru.</div>`}
+            <div class="smi-sec-title" style="display:flex;align-items:center;justify-content:space-between">
+                <span>🚨 Smart Money Alert Feed</span>
+                <button onclick="SmartMoneyIntel.refreshAlerts()" style="background:none;border:1px solid #1e293b;color:#475569;padding:3px 10px;border-radius:6px;font-size:10px;cursor:pointer">↻ Refresh</button>
             </div>
-
-            <!-- Format preview -->
-            <div style="background:#050a0f;border:1px solid #1e293b;border-radius:10px;padding:14px;margin-top:6px">
-                <div style="font-size:11px;font-weight:700;color:#334155;margin-bottom:8px;text-transform:uppercase">📱 Alert Format Preview</div>
-                <pre style="font-family:monospace;font-size:11px;color:#22c55e;line-height:1.9;white-space:pre-wrap;margin:0">🚨 <b>SMART MONEY BUY DETECTED</b>
-
-Wallet: <b>7xK...abc</b>
-Token: <b>FARTCOIN</b>
-Market Cap: $3.2M
-Buy Amount: <b>$12,400</b>
-Wallet Winrate: <b>84%</b>
-Prev 30D Profit: +$210K
-Action: <b>ACCUMULATION DETECTED</b>
-Dex: Raydium · Chain: Solana
-
-<i>via CryptoScanner SM Intel</i></pre>
+            <div id="smiAlertFeed">
+                <div class="smi-empty">⏳ Memuat alert log…</div>
             </div>
         </div>`;
+
+        // Load alert log async setelah render
+        _loadAlertFeed();
     }
 
-    async function saveTg() {
-        const token = document.getElementById('smiTgToken')?.value?.trim();
-        const chat  = document.getElementById('smiTgChat')?.value?.trim();
-        const st    = document.getElementById('smiTgSt');
-        if (!chat) { if(st) st.textContent='⚠️ Isi Chat ID'; return; }
-        if(st) st.textContent='⏳ Menyimpan…';
-        try {
-            const body = { chatId: chat };
-            if (token) body.botToken = token;   // only send token if user filled it
-            const r = await fetch(`${BASE}/api/telegram-config`, {
-                method: 'POST', headers: {'Content-Type':'application/json'},
-                body: JSON.stringify(body),
-            });
-            const d = await r.json();
-            if(st) st.textContent = d.ok ? '✅ Tersimpan di server!' : '❌ Gagal simpan';
-        } catch(e) { if(st) st.textContent='❌ Server tidak terjangkau'; }
-        setTimeout(() => { const s=document.getElementById('smiTgSt'); if(s) s.textContent=''; }, 3500);
-    }
+    async function _loadAlertFeed() {
+        const el = document.getElementById('smiAlertFeed');
+        if (!el) return;
 
-    async function testTg() {
-        const st = document.getElementById('smiTgSt');
-        if(st) st.textContent='⏳ Mengirim test…';
+        let wwmAlerts = [];
         try {
-            const r = await fetch(`${BASE}/api/telegram-test`, { method:'POST' });
+            const r = await fetch(`${BASE}/api/whale-monitor/alerts?limit=20`);
             const d = await r.json();
-            if(st) st.textContent = d.ok ? '✅ Test berhasil!' : '❌ '+(d.error||d.description||'Gagal');
-        } catch(e) { if(st) st.textContent='❌ Server tidak terjangkau'; }
-        setTimeout(() => { const s=document.getElementById('smiTgSt'); if(s) s.textContent=''; }, 4000);
-    }
-
-    async function syncWalletMonitor() {
-        const st = document.getElementById('smiMonSt');
-        // Cek apakah Telegram sudah dikonfigurasi
-        try {
-            const r = await fetch(`${BASE}/api/telegram-config`);
-            const d = await r.json();
-            if (!d.configured) {
-                if(st) st.textContent='⚠️ Setup Telegram dulu di panel di bawah!';
-                setTimeout(() => { const s=document.getElementById('smiMonSt'); if(s) s.textContent=''; }, 4000);
-                // Scroll ke Telegram config
-                document.getElementById('smiTgToken')?.scrollIntoView({ behavior:'smooth', block:'center' });
-                return;
-            }
+            wwmAlerts = d.alerts || [];
         } catch(_) {}
-        const wallets = _swLoad();
-        if (!wallets.length) { if(st) st.textContent='⚠️ Belum ada saved wallet'; return; }
-        if(st) st.textContent='⏳ Syncing…';
+
+        // Also include whaleFeed from smart-money-intel API
+        let wfAlerts = [];
         try {
-            const r = await fetch(`${BASE}/api/whale-monitor/wallets`, {
-                method: 'POST', headers: {'Content-Type':'application/json'},
-                body: JSON.stringify({ wallets: wallets.map(w => ({ addr: w.addr, label: w.label })) }),
-            });
-            const d = await r.json();
-            if (d.ok) {
-                if(st) st.textContent = `✅ ${d.count} wallet aktif dimonitor!`;
-                // Load monitored wallet list
-                const mr = await fetch(`${BASE}/api/whale-monitor/wallets`);
-                const md = await mr.json();
-                const el = document.getElementById('smiMonWallets');
-                if (el && md.wallets) {
-                    el.innerHTML = md.wallets.map(w =>
-                        `<span style="background:#0f172a;border:1px solid #1e293b;border-radius:20px;padding:2px 8px;font-size:10px;color:#94a3b8;cursor:pointer"
-                            title="${w.addr}" onclick="SmartMoneyIntel.removeFromMonitor('${w.addr}', this)">
-                            👁 ${w.label}
-                        </span>`
-                    ).join('');
-                }
-            } else {
-                if(st) st.textContent='❌ Sync gagal';
-            }
-        } catch(e) { if(st) st.textContent='❌ Server tidak terjangkau'; }
-        setTimeout(() => { const s=document.getElementById('smiMonSt'); if(s) s.textContent=''; }, 4000);
+            const r2 = await fetch(`${BASE}/api/smart-money-intel`);
+            const d2 = await r2.json();
+            const wf = d2?.whaleFeed || [];
+            wfAlerts = wf.map(w => ({
+                _src: 'market',
+                ts: w.ts,
+                pattern: w.type === 'buy' ? 'WHALE BUY' : 'WHALE SELL',
+                alertEmoji: w.type === 'buy' ? '🐋' : '🔴',
+                topToken: w.symbol,
+                amount: w.amount,
+                price: w.price,
+                priceChange: w.priceChange,
+                dexUrl: w.dexUrl,
+                chain: 'SOL',
+            }));
+        } catch(_) {}
+
+        if (!wwmAlerts.length && !wfAlerts.length) {
+            el.innerHTML = `
+            <div style="background:#050a0f;border:1px solid #1e293b;border-radius:10px;padding:20px;text-align:center">
+                <div style="font-size:32px;margin-bottom:8px">🔍</div>
+                <div style="color:#475569;font-size:12px">Belum ada alert.</div>
+                <div style="color:#334155;font-size:11px;margin-top:4px">Monitor sedang berjalan — alert muncul saat wallet tersimpan melakukan transaksi besar.</div>
+            </div>`;
+            return;
+        }
+
+        const patternColor = { 'AKUMULASI':'#22c55e', 'DISTRIBUSI':'#ef4444', 'WHALE BUY':'#34d399', 'WHALE SELL':'#f87171', 'SWAP':'#60a5fa', default:'#94a3b8' };
+        const fmtNum = n => n >= 1e6 ? (n/1e6).toFixed(2)+'M' : n >= 1e3 ? (n/1e3).toFixed(1)+'K' : n?.toFixed?.(2) ?? '–';
+
+        // Wallet-level alerts (from monitor)
+        const walletCards = wwmAlerts.map(a => {
+            const col = patternColor[a.pattern] || patternColor.default;
+            const tokLines = (a.events || []).flatMap(e => e.tokens || []).slice(0, 3).map(t => {
+                const dir = t.diff > 0 ? '▲' : '▼';
+                return `<span style="background:#0f172a;border:1px solid #1e293b;border-radius:4px;padding:1px 6px;font-size:10px;color:${t.diff>0?'#22c55e':'#ef4444'}">${dir} ${Math.abs(t.diff) > 1e6 ? fmtNum(Math.abs(t.diff)) : Math.abs(t.diff).toLocaleString(undefined,{maximumFractionDigits:2})} ${t.symbol}</span>`;
+            }).join(' ');
+            const solChange = (a.events || []).reduce((sum, e) => sum + (e.deltaSOL || 0), 0);
+            const solStr = Math.abs(solChange) > 0.01 ? `${solChange > 0 ? '+' : ''}${solChange.toFixed(3)} SOL` : '';
+
+            return `
+            <div style="background:#0a0e1a;border:1px solid ${col}33;border-left:3px solid ${col};border-radius:10px;padding:14px;margin-bottom:8px">
+                <!-- Header row -->
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:10px">
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                        <span style="font-size:16px">${a.alertEmoji}</span>
+                        <span style="font-size:12px;font-weight:700;color:${col}">${a.pattern}</span>
+                        <span style="font-size:10px;color:#475569">${fmtAgo(a.ts)}</span>
+                        ${a.sent ? '<span style="background:rgba(96,165,250,.1);border:1px solid rgba(96,165,250,.2);border-radius:10px;padding:1px 7px;font-size:9px;color:#60a5fa">📱 Terkirim Telegram</span>' : ''}
+                    </div>
+                    <span style="font-size:10px;color:#334155;white-space:nowrap">${a.txCount} TX</span>
+                </div>
+
+                <!-- Wallet info box -->
+                <div style="background:#050a0f;border:1px solid #1e293b;border-radius:7px;padding:10px;margin-bottom:10px">
+                    <div style="font-size:10px;color:#475569;margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px">👛 Wallet</div>
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                        <span style="font-size:13px;font-weight:700;color:#e2e8f0">${a.label}</span>
+                        <!-- Full address dengan copy -->
+                        <div style="display:flex;align-items:center;gap:4px;background:#0f172a;border:1px solid #1e293b;border-radius:5px;padding:3px 8px">
+                            <code id="waddr_${a.id}" style="font-size:10px;color:#7dd3fc;letter-spacing:.3px;user-select:all">${a.addr}</code>
+                            <button onclick="SmartMoneyIntel._copyAddr('waddr_${a.id}', this)"
+                                style="background:none;border:none;cursor:pointer;padding:0 2px;font-size:12px;color:#475569;transition:color .2s"
+                                title="Copy address">📋</button>
+                        </div>
+                        <a href="${a.solscanUrl}" target="_blank"
+                            style="font-size:10px;color:#60a5fa;text-decoration:none;background:rgba(96,165,250,.1);border:1px solid rgba(96,165,250,.2);border-radius:5px;padding:2px 7px">
+                            🔗 Solscan
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Token & SOL summary -->
+                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                    ${tokLines || '<span style="color:#334155;font-size:10px">Tidak ada perubahan token</span>'}
+                    ${solStr ? `<span style="background:#0f172a;border:1px solid #1e293b;border-radius:4px;padding:1px 6px;font-size:10px;color:${solChange>0?'#22c55e':'#ef4444'}">${solStr}</span>` : ''}
+                </div>
+            </div>`;
+        }).join('');
+
+        // Market-level alerts (from whaleFeed)
+        const marketCards = wfAlerts.slice(0, 5).map(a => {
+            const col = a.pattern.includes('BUY') ? '#34d399' : '#f87171';
+            const ch = a.priceChange ?? 0;
+            return `
+            <div style="background:#0a0e1a;border:1px solid ${col}22;border-left:3px solid ${col};border-radius:10px;padding:12px;margin-bottom:6px;display:flex;align-items:center;gap:10px">
+                <span style="font-size:18px">${a.alertEmoji}</span>
+                <div style="flex:1;min-width:0">
+                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                        <span style="font-size:12px;font-weight:700;color:#e2e8f0">${a.topToken} — $${fmtNum(a.amount)} ${a.pattern}</span>
+                        <span style="font-size:10px;color:${ch>=0?'#22c55e':'#ef4444'}">${ch>=0?'+':''}${ch.toFixed(2)}% 1h</span>
+                    </div>
+                    <div style="font-size:10px;color:#475569;margin-top:2px">
+                        Harga: $${a.price < 0.001 ? a.price.toExponential(2) : a.price.toFixed(4)} · Chain: ${a.chain}
+                        ${a.dexUrl ? `· <a href="${a.dexUrl}" target="_blank" style="color:#60a5fa">DEX Chart</a>` : ''}
+                    </div>
+                </div>
+                <div style="font-size:10px;color:#334155;white-space:nowrap">${fmtAgo(a.ts)}</div>
+            </div>`;
+        }).join('');
+
+        el.innerHTML = `
+        ${wwmAlerts.length ? `<div style="font-size:10px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">� Wallet Monitor Alerts</div>` : ''}
+        ${walletCards}
+        ${wfAlerts.length ? `<div style="font-size:10px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.5px;margin:10px 0 6px">🌊 Market Volume Alerts</div>` : ''}
+        ${marketCards}`;
     }
 
-    async function removeFromMonitor(addr, el) {
-        try {
-            await fetch(`${BASE}/api/whale-monitor/wallets/${addr}`, { method: 'DELETE' });
-            el?.parentElement?.removeChild(el);
-        } catch(e) { console.warn('[Monitor] Remove failed', e.message); }
+    function _copyAddr(elId, btn) {
+        const el = document.getElementById(elId);
+        if (!el) return;
+        navigator.clipboard.writeText(el.textContent.trim()).then(() => {
+            const orig = btn.textContent;
+            btn.textContent = '✅';
+            btn.style.color = '#22c55e';
+            setTimeout(() => { btn.textContent = orig; btn.style.color = ''; }, 1500);
+        }).catch(() => {
+            // fallback
+            const sel = window.getSelection();
+            const range = document.createRange();
+            range.selectNodeContents(el);
+            sel.removeAllRanges();
+            sel.addRange(range);
+            document.execCommand('copy');
+            btn.textContent = '✅';
+            setTimeout(() => { btn.textContent = '📋'; }, 1500);
+        });
     }
 
-    // ── Wallet detail modal (opens when clicking leaderboard row) ─
-    async function openWalletDetail(addr, label) {
-        // Remove old modal
-        document.getElementById('smiWalletModal')?.remove();
-        const modal = document.createElement('div');
-        modal.id = 'smiWalletModal';
-        modal.style.cssText = 'position:fixed;inset:0;background:rgba(2,6,23,.85);backdrop-filter:blur(4px);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
-        modal.innerHTML = `
-        <div style="background:#0a0e1a;border:1px solid #1e293b;border-radius:14px;max-width:680px;width:100%;max-height:88vh;overflow:auto">
-            <div style="display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid #1e293b;position:sticky;top:0;background:#0a0e1a;z-index:1">
-                <div style="width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#1e3a5f,#7c3aed);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">
-                    ${(label||'?').slice(0,1)}
-                </div>
-                <div>
-                    <div style="font-size:14px;font-weight:700;color:#e2e8f0">${label||'Wallet'}</div>
-                    <div style="font-size:11px;font-family:monospace;color:#334155">${addr}</div>
-                </div>
-                <button onclick="document.getElementById('smiWalletModal').remove()"
-                    style="margin-left:auto;background:#0f172a;border:1px solid #334155;color:#64748b;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:12px">
-                    ✕ Close
-                </button>
-            </div>
-            <div id="smiModalBody" style="padding:16px">
-                <div style="text-align:center;padding:20px"><div class="smi-spinner" style="margin:0 auto 8px"></div><div style="color:#334155;font-size:13px">Fetching on-chain data…</div></div>
-            </div>
-        </div>`;
-        modal.addEventListener('click', e => { if(e.target===modal) modal.remove(); });
-        document.body.appendChild(modal);
-
-        let data = null;
-        try { const r = await fetch(`${BASE}/api/wallet-trace/${addr}`); data = await r.json(); } catch(e) {}
-        const body = document.getElementById('smiModalBody');
-        if (!body) return;
-        if (!data?.ok) { body.innerHTML = `<div style="color:#ef4444;padding:20px;text-align:center">❌ ${data?.error||'Fetch failed'}</div>`; return; }
-        body.innerHTML = _walletCard(data);
+    async function refreshAlerts() {
+        const el = document.getElementById('smiAlertFeed');
+        if (el) el.innerHTML = '<div class="smi-empty">⏳ Memuat…</div>';
+        await _loadAlertFeed();
     }
 
     // ── Public API ────────────────────────────────────────────────
@@ -1664,5 +1668,6 @@ Dex: Raydium · Chain: Solana
              saveWallet, removeWallet, loadSavedToTracer, loadSavedToGraph,
              _wtExportSaved, _exportLedger,
              saveTg, testTg, openWalletDetail,
-             syncWalletMonitor, removeFromMonitor };
+             syncWalletMonitor, removeFromMonitor,
+             refreshAlerts, _copyAddr };
 })();

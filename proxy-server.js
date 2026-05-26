@@ -4457,6 +4457,7 @@ const WWM_FILE = path.join(__dirname, 'whale-watch-wallets.json');
 let _wwmWallets = [];         // [{ addr, label, addedAt }]
 let _wwmLastSeen = {};        // addr → last signature seen
 let _wwmAlertCooldown = {};   // addr → last alert timestamp (prevent spam)
+let _wwmAlertLog = [];        // in-memory log of detected events (max 100)
 
 // Load from disk
 try {
@@ -4497,6 +4498,13 @@ app.delete('/api/whale-monitor/wallets/:addr', (req, res) => {
     delete _wwmLastSeen[req.params.addr];
     _wwmSave();
     res.json({ ok: true, count: _wwmWallets.length });
+});
+
+// GET /api/whale-monitor/alerts — log deteksi (untuk UI feed)
+app.get('/api/whale-monitor/alerts', (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    const limit = Math.min(parseInt(req.query.limit) || 20, 50);
+    res.json({ ok: true, alerts: _wwmAlertLog.slice(0, limit), total: _wwmAlertLog.length });
 });
 
 // GET /api/whale-monitor/status — apakah monitor aktif
@@ -4694,6 +4702,33 @@ async function _wwmCheckWallet(wallet) {
             console.log(`[WhaleMonitor] ✅ Alert ${pattern} dikirim: ${label} (${shortAddr})`);
             pushLog('WARN', 'WhaleMonitor', `${pattern} detected: ${label}`, { addr, pattern, txCount: events.length });
         }
+
+        // Simpan ke alert log (ui feed)
+        const firstTok = events.flatMap(e => e.tokenChanges).find(t => t.diff !== 0);
+        _wwmAlertLog.unshift({
+            id:        Date.now(),
+            ts:        now,
+            addr,
+            label,
+            shortAddr,
+            solscanUrl,
+            pattern,
+            alertEmoji,
+            txCount:   events.length,
+            events:    events.slice(0, 5).map(e => ({
+                type:  e.type,
+                deltaSOL: e.deltaSOL,
+                tokens: e.tokenChanges.slice(0, 3).map(t => ({
+                    mint:   t.mint,
+                    symbol: t.symbol || t.mint.slice(0, 6) + '…',
+                    diff:   t.diff,
+                })),
+            })),
+            topToken:  firstTok ? (firstTok.symbol || firstTok.mint.slice(0,6)+'…') : null,
+            topDelta:  firstTok ? firstTok.diff : null,
+            sent,
+        });
+        if (_wwmAlertLog.length > 100) _wwmAlertLog = _wwmAlertLog.slice(0, 100);
 
     } catch (e) {
         console.warn(`[WhaleMonitor] Error checking ${addr.slice(0,8)}: ${e.message}`);
