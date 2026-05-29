@@ -1758,10 +1758,7 @@ app.get('/api/dex-sniper', async (req, res) => {
             ).join('\n\n');
             const emoji = mode === 'early' ? '🎯' : '🚀';
             const msg = `${emoji} <b>DEX Sniper Alert — ${mode === 'early' ? 'Early Entry' : 'Momentum Rider'}</b>\n\n${lines}`;
-            fetch(`https://api.telegram.org/bot${_tgConfig.botToken}/sendMessage`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ chat_id: _tgConfig.chatId, text: msg, parse_mode: 'HTML', disable_web_page_preview: true })
-            }).catch(() => {});
+            sendTelegram(msg, { botToken: _tgConfig.botToken, chatId: _tgConfig.chatId }).catch(() => {});
         }
 
         res.json({ ok: true, tokens: top, mode, chain, total: allPairs.length, scannedAt: Date.now() });
@@ -2391,6 +2388,486 @@ function _timeAgo(unixTs) {
 }
 
 // ══════════════════════════════════════════════════════════════
+// GET /api/dex-forensics/:address
+// Full token forensics: APE Meter, holder risk, mint/freeze,
+// bundle detection, burner wallet, liquidity pool, buy/sell pressure
+// ══════════════════════════════════════════════════════════════
+const _forensicsCache = {};
+const FORENSICS_TTL   = 60_000; // 60s cache
+
+app.get('/api/dex-forensics/:address', async (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    const addr = (req.params.address || '').trim();
+    if (!addr || addr.length < 30) return res.status(400).json({ ok: false, error: 'Invalid address' });
+
+    const cached = _forensicsCache[addr];
+    if (cached && (Date.now() - cached.ts) < FORENSICS_TTL) return res.json({ ...cached.data, _cached: true });
+
+    try {
+        // ── 1. DexScreener: pair data ─────────────────────────
+        let pair = null, allPairs = [];
+        try {
+            const r = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${addr}`, { signal: AbortSignal.timeout(8000) });
+            const d = await r.json();
+            allPairs = (d?.pairs || []).sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0));
+            pair = allPairs[0] || null;
+        } catch (_) {}
+
+        const symbol   = pair?.baseToken?.symbol || addr.slice(0, 6);
+        const name     = pair?.baseToken?.name   || 'Unknown';
+        const price    = parseFloat(pair?.priceUsd || 0);
+        const mcap     = pair?.fdv || pair?.marketCap || 0;
+        const liq      = pair?.liquidity?.usd || 0;
+        const vol5m    = pair?.volume?.m5   || 0;
+        const vol1h    = pair?.volume?.h1   || 0;
+        const vol24h   = pair?.volume?.h24  || 0;
+        const txns5m   = (pair?.txns?.m5?.buys  || 0) + (pair?.txns?.m5?.sells  || 0);
+        const txns1h   = (pair?.txns?.h1?.buys  || 0) + (pair?.txns?.h1?.sells  || 0);
+        const buys5m   = pair?.txns?.m5?.buys  || 0;
+        const sells5m  = pair?.txns?.m5?.sells || 0;
+        const buys1h   = pair?.txns?.h1?.buys  || 0;
+        const sells1h  = pair?.txns?.h1?.sells || 0;
+        const ch5m     = pair?.priceChange?.m5  || 0;
+        const ch1h     = pair?.priceChange?.h1  || 0;
+        const ch24h    = pair?.priceChange?.h24 || 0;
+        const pairAddr = pair?.pairAddress || '';
+        const dexId    = pair?.dexId || 'unknown';
+        const dexUrl   = pair?.url   || `https://dexscreener.com/solana/${addr}`;
+        const logoUrl  = pair?.info?.imageUrl || '';
+        const pairCount = allPairs.length;
+
+        // Age
+        const createdAt = pair?.pairCreatedAt || 0;
+        const ageMs     = createdAt ? Date.now() - createdAt : 0;
+        const ageHours  = +(ageMs / 3_600_000).toFixed(1);
+        const ageFmt    = ageHours < 1 ? Math.round(ageHours * 60) + 'j ' + Math.round(ageHours * 3600 % 60) + 'dtk'
+                        : ageHours < 24 ? ageHours.toFixed(1) + 'j'
+                        : Math.floor(ageHours / 24) + 'h ' + (ageHours % 24).toFixed(0) + 'j';
+
+        // LP status
+        const lpStatus = liq < 5000 ? 'Bonding curve' : liq < 50000 ? 'Low LP' : 'Active LP';
+        const volLiqRatio = liq > 0 ? +(vol1h / liq).toFixed(3) : 0;
+
+        // ── 2. Solana RPC: token largest accounts (top holders) ─
+        let topHolders = [], supply = 0, supplyTop10Pct = 0, ownerUnique = 0;
+        let mintRevokedRaw = null, freezeRevokedRaw = null;
+        try {
+            const [largestRes, mintInfoRes] = await Promise.allSettled([
+                _rpcCall('getTokenLargestAccounts', [addr, { commitment: 'confirmed' }], 10000),
+                _rpcCall('getAccountInfo', [addr, { encoding: 'jsonParsed', commitment: 'confirmed' }], 8000),
+            ]);
+
+            // Mint info → supply, mint/freeze authority
+            if (mintInfoRes.status === 'fulfilled' && mintInfoRes.value?.value?.data?.parsed) {
+                const parsed = mintInfoRes.value.value.data.parsed.info;
+                supply             = parseInt(parsed?.supply || 0);
+                mintRevokedRaw     = parsed?.mintAuthority   === null ? 'revoked' : 'active';
+                freezeRevokedRaw   = parsed?.freezeAuthority === null ? 'revoked' : 'active';
+            }
+
+            // Largest accounts → top holders
+            if (largestRes.status === 'fulfilled' && largestRes.value?.value) {
+                const accounts = largestRes.value.value.slice(0, 10);
+                const totalAmt = accounts.reduce((a, c) => a + parseFloat(c.uiAmount || c.amount || 0), 0);
+
+                // Fetch owner for each account (batch)
+                const ownerResults = await Promise.allSettled(
+                    accounts.map(a => _rpcCall('getAccountInfo', [a.address, { encoding: 'jsonParsed' }], 5000))
+                );
+
+                const knownLPPrograms = new Set([
+                    'srmqPvymJeFKQ4zGQed1GFppgkRHL9kaELCbyksJtPX', // Serum
+                    '9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin', // Serum DEX v3
+                    '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8', // Raydium LP v4
+                    'CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK', // Raydium CLMM
+                    'whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc',  // Orca Whirlpool
+                    '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P',  // PumpFun
+                    'FTGTMpUrm1mqr6t9JEpYNVsauT8KnkdreP3JVSBenSQS', // PumpSwap
+                    'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',  // Token program
+                ]);
+
+                topHolders = accounts.map((a, i) => {
+                    const ownerInfo = ownerResults[i].status === 'fulfilled' ? ownerResults[i].value : null;
+                    const owner = ownerInfo?.value?.data?.parsed?.info?.owner || a.address;
+                    const amt = parseFloat(a.uiAmount || a.amount || 0);
+                    const pct = supply > 0 ? +(amt / (supply / Math.pow(10, ownerInfo?.value?.data?.parsed?.info?.tokenAmount?.decimals || 6)) * 100).toFixed(2) : 0;
+                    const isLP = knownLPPrograms.has(owner) || pairAddr.startsWith(owner.slice(0, 8));
+                    const isBurner = !isLP && (
+                        owner.endsWith('1111111111111111111111111111111111') ||
+                        owner === '11111111111111111111111111111111' ||
+                        (ownerInfo?.value?.lamports || 0) < 50000  // < 0.00005 SOL = dust wallet
+                    );
+                    return {
+                        rank: i + 1,
+                        address: a.address,
+                        owner: owner,
+                        shortOwner: owner.slice(0, 6) + '…' + owner.slice(-4),
+                        uiAmount: amt,
+                        pct,
+                        isLP,
+                        isBurner,
+                        isSmartMoney: false, // TODO: check against known smart money list
+                        solBalance: ownerInfo?.value?.lamports ? ownerInfo.value.lamports / 1e9 : 0,
+                        label: isLP ? 'LP / pair account' : isBurner ? 'Burner, Supply besar' : amt > totalAmt * 0.05 ? 'Large Wallet' : '',
+                        score: isLP ? 0 : isBurner ? 15 : amt > totalAmt * 0.1 ? 30 : 51,
+                    };
+                }).filter(h => !h.isLP);  // exclude LP accounts from analysis
+
+                const nonLpHolders = topHolders.filter(h => !h.isLP);
+                supplyTop10Pct = +nonLpHolders.reduce((a, h) => a + h.pct, 0).toFixed(1);
+                ownerUnique    = new Set(nonLpHolders.map(h => h.owner)).size;
+            }
+        } catch (e) { console.warn('[forensics] RPC error:', e.message); }
+
+        const burnerCount = topHolders.filter(h => h.isBurner).length;
+        const whaleCount  = topHolders.filter(h => !h.isBurner && h.pct > 5).length;
+
+        // ── 3. Bundle detection ────────────────────────────────
+        // Heuristic: >= 4 top holders dengan SOL balance < 0.5 dan pct > 1% = bundle
+        const bundleWallets = topHolders.filter(h => !h.isLP && h.solBalance < 0.5 && h.pct > 1);
+        const bundleRisk    = bundleWallets.length >= 4 ? 'HIGH' : bundleWallets.length >= 2 ? 'MEDIUM' : 'LOW';
+        const bundleCount   = bundleWallets.length;
+
+        // ── 4. Vol integrity ──────────────────────────────────
+        // vol/liq ratio heuristic: > 10x = suspicious wash trading
+        const volIntegrity = volLiqRatio > 10 ? 'SUSPECT' : volLiqRatio > 3 ? 'WARN' : 'OK';
+        const volIntegrityPct = Math.max(0, Math.min(100, Math.round(100 - volLiqRatio * 5)));
+
+        // ── 5. Liquidity pools ────────────────────────────────
+        const lpPools = allPairs.map(p => ({
+            dex: p.dexId,
+            pairAddress: p.pairAddress,
+            shortPair: p.pairAddress ? p.pairAddress.slice(0, 6) + '…' + p.pairAddress.slice(-4) : '—',
+            liquidityUsd: p.liquidity?.usd || 0,
+            baseAmt:   p.liquidity?.base  || 0,
+            quoteAmt:  p.liquidity?.quote || 0,
+            quoteSymbol: p.quoteToken?.symbol || 'SOL',
+            isActive: (p.txns?.h1?.buys || 0) + (p.txns?.h1?.sells || 0) > 0,
+            lpPct: p.pairAddress === pairAddr ? (liq > 0 ? 100 : 0) : 0,
+        }));
+
+        // ── 6. Phase classification ────────────────────────────
+        // NEW: age < 2h, EARLY: 2-24h, SOON: 24-72h (pumped), MIGRATED: graduated bonding, DEAD: no vol
+        let phase = 'EARLY';
+        if (ageHours < 0.1)           phase = 'NEW';
+        else if (ageHours < 2)        phase = 'NEW';
+        else if (ageHours < 24)       phase = 'EARLY';
+        else if (vol1h < 1000)        phase = 'DEAD';
+        else if (lpStatus !== 'Bonding curve' && ageHours > 24) phase = 'MIGRATED';
+        else if (ageHours < 72)       phase = 'SOON';
+        else                          phase = 'RUNNER';
+
+        // ── 7. APE score (1-10) ────────────────────────────────
+        let apeScore = 5;
+        // Boost factors
+        if (buys5m > sells5m * 1.5) apeScore += 1;
+        if (ch1h > 10) apeScore += 1;
+        if (vol1h > 50000) apeScore += 1;
+        if (liq > 30000) apeScore += 1;
+        if (ownerUnique >= 8) apeScore += 0.5;
+        // Risk factors
+        if (supplyTop10Pct > 80) apeScore -= 2;
+        if (bundleRisk === 'HIGH') apeScore -= 2;
+        if (burnerCount >= 3) apeScore -= 1;
+        if (mintRevokedRaw === 'active') apeScore -= 0.5;
+        if (freezeRevokedRaw === 'active') apeScore -= 0.5;
+        if (volIntegrity === 'SUSPECT') apeScore -= 1;
+        if (liq < 5000) apeScore -= 2;
+        apeScore = Math.max(1, Math.min(10, Math.round(apeScore)));
+
+        // ── 8. Verdict zone ───────────────────────────────────
+        let zone = 'AMAN', zoneColor = '#22c55e';
+        if (apeScore <= 3)      { zone = 'BAHAYA';      zoneColor = '#ef4444'; }
+        else if (apeScore <= 5) { zone = 'PVP';         zoneColor = '#f97316'; }
+        else if (apeScore <= 7) { zone = 'MULAI MATANG'; zoneColor = '#3b82f6'; }
+
+        // ── 9. Risk checks ────────────────────────────────────
+        const riskChecks = [
+            {
+                key: 'mintRevoked',
+                label: 'Mint Revoked',
+                status: mintRevokedRaw === 'revoked' ? 'AMAN' : mintRevokedRaw === 'active' ? 'WASPADA' : 'WASPADA',
+                desc: mintRevokedRaw === 'revoked' ? 'Mint authority sudah di-revoke. Tidak ada token baru bisa dicetak.'
+                    : mintRevokedRaw === null ? 'Belum terbaca dari RPC. Cek manual.'
+                    : 'Mint authority masih aktif — dev bisa cetak token baru.',
+            },
+            {
+                key: 'freezeRevoked',
+                label: 'Freeze Authority',
+                status: freezeRevokedRaw === 'revoked' ? 'AMAN' : freezeRevokedRaw === 'active' ? 'WASPADA' : 'WASPADA',
+                desc: freezeRevokedRaw === 'revoked' ? 'Freeze authority sudah di-revoke. Wallet holder tidak bisa dibekukan.'
+                    : freezeRevokedRaw === null ? 'Belum terbaca dari RPC.'
+                    : 'Freeze authority masih aktif — dev bisa membekukan wallet holder.',
+            },
+            {
+                key: 'liquidityLP',
+                label: 'Likuiditas / LP',
+                status: liq < 5000 ? 'GAGAL' : liq < 20000 ? 'WASPADA' : 'AMAN',
+                desc: lpStatus === 'Bonding curve'
+                    ? `Bonding curve; likuiditas live sekitar $${(liq/1000).toFixed(1)}K.`
+                    : `LP aktif $${(liq/1000).toFixed(1)}K di ${dexId}.`,
+            },
+            {
+                key: 'bundleRisk',
+                label: 'Risiko Bundle',
+                status: bundleRisk === 'HIGH' ? 'GAGAL' : bundleRisk === 'MEDIUM' ? 'WASPADA' : 'AMAN',
+                desc: bundleCount > 0
+                    ? `${bundleCount} top wallet terindikasi bagian dari bundle dev (balance rendah + % supply besar).`
+                    : 'Tidak ada indikasi bundle wallet terdeteksi.',
+            },
+            {
+                key: 'holderDistribution',
+                label: 'Distribusi Holder',
+                status: supplyTop10Pct > 80 ? 'GAGAL' : supplyTop10Pct > 60 ? 'WASPADA' : 'AMAN',
+                desc: `Top 10 memegang ${supplyTop10Pct}% supply.${supplyTop10Pct > 70 ? ' Konsentrasi terlalu tinggi.' : ''}`,
+            },
+            {
+                key: 'ownerDiversity',
+                label: 'Keragaman Owner',
+                status: ownerUnique >= 8 ? 'AMAN' : ownerUnique >= 5 ? 'WASPADA' : 'GAGAL',
+                desc: `${ownerUnique} owner unik kedeteksi dari top 10 token account.${ownerUnique < 5 ? ' Makin sedikit owner, makin tinggi risiko cluster.' : ''}`,
+            },
+            {
+                key: 'smartMoney',
+                label: 'Smart Money / KOL',
+                status: whaleCount > 0 ? 'AMAN' : 'WASPADA',
+                desc: whaleCount > 0
+                    ? `${whaleCount} dompet besar terdeteksi di top holders.`
+                    : 'Belum ada dompet Smart Money atau whale di top 10.',
+            },
+            {
+                key: 'burnerWallet',
+                label: 'Burner Wallet',
+                status: burnerCount >= 3 ? 'GAGAL' : burnerCount >= 1 ? 'WASPADA' : 'AMAN',
+                desc: burnerCount > 0
+                    ? `${burnerCount} burner wallet (balance < 0.05 SOL) ada di Top 10. Waspada indikasi bundle dev.`
+                    : 'Tidak ada burner wallet terdeteksi di top 10.',
+            },
+            {
+                key: 'volIntegrity',
+                label: 'Integritas Volume',
+                status: volIntegrity === 'OK' ? 'AMAN' : volIntegrity === 'WARN' ? 'WASPADA' : 'WASPADA',
+                desc: `Proxy dari Dex volume/liquidity/txn: ${volIntegrityPct}%. ${volIntegrity === 'SUSPECT' ? 'Rasio vol/liq sangat tinggi — indikasi wash trading.' : 'Dalam batas wajar.'}`,
+            },
+            {
+                key: 'timingDexPaid',
+                label: 'Timing Dex Paid',
+                status: (pair?.boosts?.active || 0) > 0 ? 'AMAN' : 'WASPADA',
+                desc: (pair?.boosts?.active || 0) > 0
+                    ? `${pair.boosts.active} boost aktif dari DexScreener.`
+                    : 'Belum ada sinyal paid/boost dari data publik.',
+            },
+            {
+                key: 'candleConfirmation',
+                label: 'Konfirmasi 3 Candle',
+                status: (buys1h > sells1h * 1.2 && ch1h > 0) ? 'AMAN' : 'WASPADA',
+                desc: `Keyakinan support ${buys1h > sells1h ? Math.round(buys1h/(buys1h+sells1h)*100) : 40}% dari tekanan buy/sell sama perubahan harga live.`,
+            },
+        ];
+
+        // ── 10. AI narrative ──────────────────────────────────
+        const failCount = riskChecks.filter(r => r.status === 'GAGAL').length;
+        const warnCount = riskChecks.filter(r => r.status === 'WASPADA').length;
+        let aiSummary = '';
+        if (zone === 'BAHAYA' || failCount >= 3) {
+            aiSummary = `${symbol} kedeteksi ada di zona Bahaya. Risiko utama: ${supplyTop10Pct > 80 ? 'supply holder terkonsentrasi' : bundleRisk === 'HIGH' ? 'bundle dev terdeteksi' : 'likuiditas sangat rendah'}. [Keyakinan data live: ${Math.min(95, 50 + warnCount * 5)}% | Integritas volume: ${volIntegrityPct}%]. Kesimpulan: ini kemungkinan gede rug pull atau trap. Jaga modal dan hindari jadi exit liquidity buat dev/cabal. Skip aja.${burnerCount >= 3 ? ` BURNER: ${burnerCount} dompet proxy/sekali pakai (balance < 0.05 SOL) ada di Top 10. Waspada indikasi bundle dev.` : ''}`;
+        } else if (zone === 'PVP') {
+            aiSummary = `${symbol} berada di zona PVP — bisa profit tapi butuh timing tepat. Supply top 10: ${supplyTop10Pct}%. Vol/Liq ratio: ${volLiqRatio}x. Entry hanya kalau ada konfirmasi 3 candle buy dan volume konsisten. Risiko dump dari holder besar selalu ada. Size kecil, SL ketat.`;
+        } else if (zone === 'MULAI MATANG') {
+            aiSummary = `${symbol} masuk zona Mulai Matang. Distribusi holder ${ownerUnique >= 7 ? 'cukup sehat' : 'perlu diwaspadai'}, likuiditas $${(liq/1000).toFixed(1)}K. Buy pressure 1H: ${buys1h}/${buys1h+sells1h} txns. Potensi continuation run kalau buyer masih dominan. Pantau volume dan jangan FOMO top.`;
+        } else {
+            aiSummary = `${symbol} menunjukkan struktur relatif aman. Holder terdistribusi, tidak ada bundle signifikan. Likuiditas $${(liq/1000).toFixed(1)}K cukup solid. Momentum 1H: ${ch1h >= 0 ? '+' : ''}${ch1h}%. Entry dengan size wajar dan pantau perubahan holder.`;
+        }
+
+        // ── 11. Should I Ape? Verdict ─────────────────────────
+        const failCount2 = riskChecks.filter(r => r.status === 'GAGAL').length;
+        const warnCount2 = riskChecks.filter(r => r.status === 'WASPADA').length;
+        let verdict, verdictColor, verdictBg, verdictIcon, verdictReasons = [];
+
+        if (apeScore >= 8 && failCount2 === 0) {
+            verdict      = 'APE SEKARANG';
+            verdictColor = '#4ade80';
+            verdictBg    = '#14532d';
+            verdictIcon  = '🚀';
+            verdictReasons = [
+                'Score tinggi (' + apeScore + '/10) — semua indikator positif',
+                'Tidak ada flag GAGAL dari 11 pemeriksaan risiko',
+                liq > 30000 ? `Likuiditas solid $${(liq/1000).toFixed(0)}K` : null,
+                buys5m > sells5m * 1.5 ? 'Buy pressure dominan 5M terakhir' : null,
+                ch1h > 10 ? `Harga naik +${ch1h}% dalam 1H` : null,
+            ].filter(Boolean);
+        } else if (apeScore >= 7 && failCount2 <= 1) {
+            verdict      = 'BOLEH APE';
+            verdictColor = '#86efac';
+            verdictBg    = '#166534';
+            verdictIcon  = '✅';
+            verdictReasons = [
+                `Score ${apeScore}/10 — momentum positif`,
+                failCount2 === 1 ? `1 flag GAGAL — perhatikan risiko` : 'Semua pemeriksaan aman',
+                `${warnCount2} peringatan perlu dipantau`,
+                liq > 20000 ? `Likuiditas $${(liq/1000).toFixed(0)}K cukup baik` : `Likuiditas $${(liq/1000).toFixed(0)}K, pantau terus`,
+                'Size wajar, pasang stop loss',
+            ].filter(Boolean);
+        } else if (apeScore >= 5 && failCount2 <= 2) {
+            verdict      = 'TUNGGU DULU';
+            verdictColor = '#fbbf24';
+            verdictBg    = '#422006';
+            verdictIcon  = '⏳';
+            verdictReasons = [
+                `Score ${apeScore}/10 — belum konfirmasi kuat`,
+                failCount2 > 0 ? `${failCount2} flag GAGAL ditemukan` : null,
+                `${warnCount2} risiko perlu dievaluasi lagi`,
+                'Tunggu konfirmasi 3 candle buy dan volume konsisten',
+                supplyTop10Pct > 60 ? `Supply top 10 ${supplyTop10Pct}% — potensi dump besar` : null,
+            ].filter(Boolean);
+        } else {
+            verdict      = 'JANGAN APE';
+            verdictColor = '#f87171';
+            verdictBg    = '#450a0a';
+            verdictIcon  = '❌';
+            verdictReasons = [
+                `Score rendah ${apeScore}/10`,
+                failCount2 >= 3 ? `${failCount2} flag GAGAL terdeteksi — terlalu berisiko` : null,
+                bundleRisk === 'HIGH' ? 'Bundle/cluster dev terdeteksi' : null,
+                supplyTop10Pct > 80 ? `Supply terpusat di ${supplyTop10Pct}% top 10 — exit liquidity` : null,
+                liq < 5000 ? `Likuiditas sangat rendah $${(liq/1000).toFixed(1)}K` : null,
+                burnerCount >= 3 ? `${burnerCount} burner wallet di top 10` : null,
+            ].filter(Boolean);
+        }
+
+        const result = {
+            ok: true,
+            address: addr,
+            symbol, name, price, mcap, liq, lpStatus, dexUrl, logoUrl, dexId,
+            pairAddress: pairAddr, pairCount,
+            vol5m, vol1h, vol24h,
+            txns5m, txns1h,
+            buys5m, sells5m, buys1h, sells1h,
+            ch5m, ch1h, ch24h,
+            ageHours, ageFmt,
+            volLiqRatio,
+            supplyTop10Pct,
+            ownerUnique,
+            burnerCount, whaleCount, bundleCount,
+            bundleRisk,
+            mintRevoked:   mintRevokedRaw,
+            freezeRevoked: freezeRevokedRaw,
+            volIntegrity,  volIntegrityPct,
+            phase,
+            apeScore, zone, zoneColor,
+            verdict, verdictColor, verdictBg, verdictIcon, verdictReasons,
+            topHolders: topHolders.slice(0, 10),
+            lpPools,
+            riskChecks,
+            aiSummary,
+            fetchedAt: new Date().toISOString(),
+        };
+
+        _forensicsCache[addr] = { data: result, ts: Date.now() };
+        res.json(result);
+    } catch (e) {
+        console.error('[dex-forensics] error:', e.message);
+        res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// ══════════════════════════════════════════════════════════════
+// GET /api/dex-feed/live
+// Feed token live Solana terbaru dengan phase classification
+// ══════════════════════════════════════════════════════════════
+const _feedCache = { ts: 0, data: [] };
+const FEED_TTL   = 30_000; // 30s
+
+app.get('/api/dex-feed/live', async (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+
+    if (_feedCache.ts && (Date.now() - _feedCache.ts) < FEED_TTL) {
+        return res.json({ ok: true, tokens: _feedCache.data, cached: true, fetchedAt: new Date(_feedCache.ts).toISOString() });
+    }
+
+    try {
+        // Fetch beberapa sumber sekaligus
+        const [newPairsRes, trendingRes] = await Promise.allSettled([
+            fetch('https://api.dexscreener.com/latest/dex/search?q=solana&chainIds=solana&order=pairCreatedAt', { signal: AbortSignal.timeout(10000) }).then(r => r.ok ? r.json() : {}),
+            fetch('https://api.dexscreener.com/token-boosts/top/v1',                                            { signal: AbortSignal.timeout(8000)  }).then(r => r.ok ? r.json() : []),
+        ]);
+
+        let pairs = [];
+        if (newPairsRes.status === 'fulfilled') {
+            pairs = (newPairsRes.value?.pairs || []).filter(p => p.chainId === 'solana');
+        }
+
+        const boostedAddrs = new Set();
+        if (trendingRes.status === 'fulfilled' && Array.isArray(trendingRes.value)) {
+            trendingRes.value.filter(t => t.chainId === 'solana').forEach(t => boostedAddrs.add(t.tokenAddress));
+        }
+
+        const now = Date.now();
+        const tokens = pairs.slice(0, 100).map(p => {
+            const ageMs    = p.pairCreatedAt ? now - p.pairCreatedAt : 0;
+            const ageHours = ageMs / 3_600_000;
+            const liq      = p.liquidity?.usd  || 0;
+            const vol5m    = p.volume?.m5  || 0;
+            const vol1h    = p.volume?.h1  || 0;
+            const txns5m   = (p.txns?.m5?.buys || 0) + (p.txns?.m5?.sells || 0);
+            const buys5m   = p.txns?.m5?.buys  || 0;
+            const sells5m  = p.txns?.m5?.sells || 0;
+            const mcap     = p.fdv || p.marketCap || 0;
+
+            // Phase
+            let phase = 'EARLY';
+            if (ageHours < 2)                          phase = 'NEW';
+            else if (vol1h < 500)                       phase = 'DEAD';
+            else if (liq > 50000 && ageHours > 24)      phase = 'MIGRATED';
+            else if (buys5m > sells5m * 2 && vol5m > 5000) phase = 'RUNNER';
+            else if (ageHours < 72)                     phase = 'SOON';
+
+            // Ape score quick
+            let ape = 5;
+            if (buys5m > sells5m) ape++;
+            if (liq > 20000) ape++;
+            if (vol5m > 10000) ape++;
+            if (boostedAddrs.has(p.baseToken?.address)) ape++;
+            if (liq < 3000) ape -= 2;
+            if (vol5m / Math.max(liq, 1) > 5) ape--;
+            ape = Math.max(1, Math.min(10, Math.round(ape)));
+
+            const ageFmt = ageHours < 1 ? Math.round(ageHours * 60) + 'dtk'
+                         : ageHours < 24 ? ageHours.toFixed(0) + 'j ' + Math.round((ageHours % 1) * 60) + 'm'
+                         : Math.floor(ageHours / 24) + 'h ' + (ageHours % 24).toFixed(0) + 'j';
+
+            return {
+                address:    p.baseToken?.address || '',
+                symbol:     p.baseToken?.symbol  || '?',
+                name:       p.baseToken?.name    || '',
+                logoUrl:    p.info?.imageUrl     || '',
+                price:      parseFloat(p.priceUsd || 0),
+                mcap, liq, vol5m, vol1h,
+                txns5m, buys5m, sells5m,
+                ch5m:   p.priceChange?.m5  || 0,
+                ch1h:   p.priceChange?.h1  || 0,
+                ch24h:  p.priceChange?.h24 || 0,
+                ageHours: +ageHours.toFixed(2),
+                ageFmt,
+                phase,
+                apeScore: ape,
+                isBoosted: boostedAddrs.has(p.baseToken?.address),
+                dexUrl:  p.url || `https://dexscreener.com/solana/${p.pairAddress}`,
+                pairAddress: p.pairAddress,
+                dexId: p.dexId,
+            };
+        }).filter(t => t.address);
+
+        _feedCache.ts   = now;
+        _feedCache.data = tokens;
+
+        res.json({ ok: true, tokens, cached: false, fetchedAt: new Date().toISOString() });
+    } catch (e) {
+        res.json({ ok: false, error: e.message });
+    }
+});
+
+// ══════════════════════════════════════════════════════════════
 // GET /api/wallet-graph/:address
 // Build transaction flow graph: center wallet → counterparties
 // Returns nodes + edges with SOL direction & amount
@@ -2749,7 +3226,7 @@ app.get('/api/smart-money-intel', async (req, res) => {
     // ── 2. Fetch DexScreener trending pairs (Solana) ──
     let solanaPairs = [];
     try {
-        const r = await fetch('https://api.dexscreener.com/dex/search?q=solana&chainIds=solana', { signal: AbortSignal.timeout(8000) });
+        const r = await fetch('https://api.dexscreener.com/latest/dex/search?q=solana', { signal: AbortSignal.timeout(8000) });
         const d = await r.json();
         solanaPairs = (d?.pairs || []).filter(p => p.chainId === 'solana' && p.liquidity?.usd > 50000).slice(0, 20);
     } catch (_) {}
@@ -2801,7 +3278,7 @@ app.get('/api/smart-money-intel', async (req, res) => {
     try {
         const traceResults = await Promise.allSettled(
             KNOWN_SMART_WALLETS.map(w =>
-                fetch(`http://127.0.0.1:${PORT}/api/wallet-trace/${w.addr}`, { signal: AbortSignal.timeout(20000) }).then(r => r.json())
+                fetch(`http://127.0.0.1:${PORT}/api/wallet-trace/${w.addr}`, { signal: AbortSignal.timeout(8000) }).then(r => r.json())
             )
         );
         leaderboard = traceResults.map((r, i) => {
@@ -3413,11 +3890,7 @@ setInterval(async () => {
                 const dir    = alert.condition === 'above' ? 'menembus ke atas' : 'turun ke bawah';
                 const msg    = `${emoji} <b>PRICE ALERT!</b>\n\n<b>${alert.symbol}</b> ${dir} <code>$${alert.price.toLocaleString()}</code>\n\nHarga sekarang: <b>$${cur.toLocaleString()}</b>\n\n⏰ ${new Date().toLocaleString('id-ID')}`;
                 try {
-                    await fetch(`https://api.telegram.org/bot${_tgBotToken}/sendMessage`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ chat_id: _tgChatId, text: msg, parse_mode: 'HTML' })
-                    });
+                    await sendTelegram(msg, { botToken: _tgBotToken, chatId: _tgChatId });
                 } catch (e) {}
             }
         }
@@ -3637,10 +4110,7 @@ app.get('/api/sniper-scan', async (req, res) => {
                 `   Harga: $${c.price.toFixed(4)} (${c.ch24h > 0 ? '+' : ''}${c.ch24h}%) · RSI: ${c.rsi}`
             ).join('\n\n');
             const msg = `🎯 <b>SNIPER ENTRY ALERT!</b>\n\n${lines}\n\n<i>Timeframe: ${validTf} · ${new Date().toLocaleString('id-ID', {timeZone:'Asia/Jakarta'})}</i>`;
-            fetch(`https://api.telegram.org/bot${_tgBotToken}/sendMessage`, {
-                method: 'POST', headers: {'Content-Type':'application/json'},
-                body: JSON.stringify({ chat_id: _tgChatId, text: msg, parse_mode: 'HTML' })
-            }).catch(() => {});
+            sendTelegram(msg, { botToken: _tgBotToken, chatId: _tgChatId }).catch(() => {});
         }
 
         res.json({ ok: true, coins, tf: validTf, scannedAt: Date.now(), totalScanned: pairs.length });
@@ -4286,8 +4756,7 @@ app.get('/api/whale-accumulation', async (req, res) => {
         _whaleAccCacheTs = Date.now();
         try { _tgConfig = { ..._tgConfig, ...JSON.parse(fs.readFileSync(TG_CONFIG_FILE, 'utf8')) }; } catch(_) {}
         const now2h = Date.now();
-        if (_tgConfig.botToken && _tgConfig.chatId && accumulating.length > 0 && (now2h - _whaleAlertTs) > 30 * 60_000) {
-            _whaleAlertTs = now2h;
+        if (_tgConfig.botToken && _tgConfig.chatId && accumulating.length > 0) {
             // Ambil TOP 3 saja — yang score tertinggi dan sinyal paling kuat
             const top3 = accumulating
                 .sort((a, b) => b.score - a.score)
@@ -4374,9 +4843,33 @@ try {
     if (process.env.TELEGRAM_CHAT_ID)   _tgConfig.chatId   = process.env.TELEGRAM_CHAT_ID;
 } catch (_) {}
 
-async function sendTelegram(text) {
-    const { botToken, chatId } = _tgConfig;
+// ── Dedup cache: cegah alert sama dikirim ulang dalam 3 jam ──
+const _tgDedupCache = new Map(); // key → timestamp last sent
+const TG_DEDUP_TTL  = 3 * 60 * 60 * 1000; // 3 jam dalam ms
+
+/**
+ * Buat dedup key dari teks alert.
+ * Ambil baris pertama (judul signal) + token/symbol utama → string pendek.
+ */
+function _tgDedupKey(text) {
+    // Hilangkan tag HTML, ambil 120 karakter pertama, normalize spasi
+    const clean = text.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim().slice(0, 120);
+    return clean;
+}
+
+async function sendTelegram(text, { botToken: overrideToken, chatId: overrideChatId } = {}) {
+    const botToken = overrideToken || _tgConfig.botToken;
+    const chatId   = overrideChatId || _tgConfig.chatId;
     if (!botToken || !chatId) return false;
+
+    // ── Dedup check ───────────────────────────────────────────
+    const key  = _tgDedupKey(text);
+    const last = _tgDedupCache.get(key);
+    if (last && (Date.now() - last) < TG_DEDUP_TTL) {
+        console.log(`[Telegram] ⏭ Skipped (dedup 3h): ${key.slice(0, 60)}…`);
+        return false;
+    }
+
     try {
         const r = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
             method: 'POST',
@@ -4386,6 +4879,7 @@ async function sendTelegram(text) {
         });
         const d = await r.json();
         if (!d.ok) console.warn('[Telegram]', d.description);
+        if (d.ok) _tgDedupCache.set(key, Date.now()); // simpan timestamp hanya jika sukses
         return d.ok;
     } catch (e) {
         console.warn('[Telegram] send error:', e.message);

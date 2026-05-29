@@ -3325,6 +3325,48 @@
 
         <div id="dex-analyzer" class="tab-content">
 
+            <!-- ══ FEED TOKEN LIVE ══ -->
+            <div id="dxaFeedSection" style="background:#060f1e;border:1px solid #1e3a5f;border-radius:14px;margin:16px 16px 0;overflow:hidden">
+              <div style="padding:16px 20px 10px;background:#0a1628;border-bottom:1px solid #0f2040">
+                <div style="font-size:11px;font-weight:700;color:#22c55e;letter-spacing:.12em;text-transform:uppercase;margin-bottom:4px">FEED TOKEN LIVE</div>
+                <div style="font-size:22px;font-weight:900;color:#e2e8f0;line-height:1.2">Daftar real-time kandidat<br>entry yang valid.</div>
+                <div id="dxaFeedMeta" style="font-size:12px;color:#475569;margin-top:8px">Memuat data…</div>
+              </div>
+              <!-- Phase filter tabs -->
+              <div style="display:flex;gap:6px;padding:10px 16px;background:#070d1a;border-bottom:1px solid #0f2040;flex-wrap:wrap">
+                <button class="dxa-phase-btn active" data-phase="all"      onclick="DexFeed.setPhase('all',this)">SEMUA <span id="dxaPhaseCount_all">—</span></button>
+                <button class="dxa-phase-btn" data-phase="RUNNER"          onclick="DexFeed.setPhase('RUNNER',this)">RUNNER <span id="dxaPhaseCount_RUNNER">0</span></button>
+                <button class="dxa-phase-btn new"    data-phase="NEW"      onclick="DexFeed.setPhase('NEW',this)">NEW <span id="dxaPhaseCount_NEW">0</span></button>
+                <button class="dxa-phase-btn early"  data-phase="EARLY"   onclick="DexFeed.setPhase('EARLY',this)">EARLY <span id="dxaPhaseCount_EARLY">0</span></button>
+                <button class="dxa-phase-btn soon"   data-phase="SOON"    onclick="DexFeed.setPhase('SOON',this)">SOON <span id="dxaPhaseCount_SOON">0</span></button>
+                <button class="dxa-phase-btn migrated" data-phase="MIGRATED" onclick="DexFeed.setPhase('MIGRATED',this)">MIGRATED <span id="dxaPhaseCount_MIGRATED">0</span></button>
+                <button class="dxa-phase-btn dead"   data-phase="DEAD"    onclick="DexFeed.setPhase('DEAD',this)">DEAD <span id="dxaPhaseCount_DEAD">0</span></button>
+                <button onclick="DexFeed.load(true)" style="margin-left:auto;background:#1e293b;color:#94a3b8;border:none;border-radius:8px;padding:4px 12px;font-size:11px;cursor:pointer">↻ Muat ulang</button>
+              </div>
+              <!-- Feed table -->
+              <div style="overflow-x:auto">
+                <table style="width:100%;border-collapse:collapse;font-size:12px">
+                  <thead>
+                    <tr style="background:#06101e;color:#475569;font-size:10px;text-transform:uppercase;letter-spacing:.06em">
+                      <th style="padding:8px 12px;text-align:left">TOKEN</th>
+                      <th style="padding:8px 10px;text-align:left">FASE</th>
+                      <th style="padding:8px 10px;text-align:right">UMUR</th>
+                      <th style="padding:8px 10px;text-align:right">MCAP</th>
+                      <th style="padding:8px 10px;text-align:right">LIKUIDITAS</th>
+                      <th style="padding:8px 10px;text-align:right">VOL 5M</th>
+                      <th style="padding:8px 10px;text-align:right">TXNS 5M</th>
+                      <th style="padding:8px 10px;text-align:right">B/S</th>
+                      <th style="padding:8px 10px;text-align:center">STATUS</th>
+                      <th style="padding:8px 10px;text-align:center">AKSI</th>
+                    </tr>
+                  </thead>
+                  <tbody id="dxaFeedBody">
+                    <tr><td colspan="10" style="text-align:center;padding:40px;color:#334155">Memuat feed…</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
             <!-- ══ DEX SNIPER PANEL ══ -->
             <div style="background:#060f1e;border:1px solid #1e3a5f;border-radius:14px;margin:16px;overflow:hidden">
               <!-- Header -->
@@ -3558,6 +3600,9 @@
                     <button class="dxa-inner-tab" data-dxtab="info" onclick="dexAnalyzer.switchInnerTab('info')">
                         📋 Info & Analysis
                     </button>
+                    <button class="dxa-inner-tab" data-dxtab="forensics" onclick="dexAnalyzer.switchInnerTab('forensics')">
+                        🔍 Forensik
+                    </button>
                     <button class="dxa-inner-tab" data-dxtab="ai" onclick="dexAnalyzer.switchInnerTab('ai')">
                         🤖 AI Analyst
                     </button>
@@ -3642,6 +3687,17 @@
 
                     </div>
                 </div><!-- /dxaTabInfo -->
+
+                <!-- ══════════════════════════
+                     TAB: FORENSIK
+                ══════════════════════════ -->
+                <div class="dxa-inner-panel" id="dxaTabForensics">
+                    <div id="dxaForensicsBody" style="padding:14px">
+                        <div style="text-align:center;padding:50px;color:#334155">
+                            Klik token dari Feed atau tabel DEX Analyzer untuk melihat forensik lengkap.
+                        </div>
+                    </div>
+                </div><!-- /dxaTabForensics -->
 
                 <!-- ══════════════════════════
                      TAB: AI ANALYST
@@ -5436,6 +5492,7 @@
     <script src="ai-daily-brief.js"></script>
     <script src="auto-trader-ui.js"></script>
     <script src="dex-hunter-ui.js"></script>
+    <script src="dex-forensics.js"></script>
     <script src="wallet-graph.js"></script>
     <script src="ecosystem-pump.js"></script>
     <script src="whale-accumulation.js"></script>
