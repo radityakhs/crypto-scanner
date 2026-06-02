@@ -4857,16 +4857,17 @@ function _tgDedupKey(text) {
     return clean;
 }
 
-async function sendTelegram(text, { botToken: overrideToken, chatId: overrideChatId } = {}) {
+async function sendTelegram(text, { botToken: overrideToken, chatId: overrideChatId, dedupKey, dedupTTL } = {}) {
     const botToken = overrideToken || _tgConfig.botToken;
     const chatId   = overrideChatId || _tgConfig.chatId;
     if (!botToken || !chatId) return false;
 
     // ── Dedup check ───────────────────────────────────────────
-    const key  = _tgDedupKey(text);
+    const key  = dedupKey || _tgDedupKey(text);
+    const ttl  = (dedupTTL !== undefined) ? dedupTTL : TG_DEDUP_TTL;
     const last = _tgDedupCache.get(key);
-    if (last && (Date.now() - last) < TG_DEDUP_TTL) {
-        console.log(`[Telegram] ⏭ Skipped (dedup 3h): ${key.slice(0, 60)}…`);
+    if (last && (Date.now() - last) < ttl) {
+        console.log(`[Telegram] ⏭ Skipped (dedup): ${key.slice(0, 60)}…`);
         return false;
     }
 
@@ -5927,8 +5928,417 @@ async function runScheduledWhaleAlert() {
     }
 }
 
+// ══════════════════════════════════════════════════════════════
+//  WALLET TRACKER ENGINE
+//  Lacak wallet Solana, deteksi transaksi baru, kirim Telegram
+// ══════════════════════════════════════════════════════════════
+
+const WALLET_TRACKER_FILE = path.join(__dirname, 'wallet-tracker.json');
+const WALLET_TRACKER_POLL_MS = 20_000; // polling 20 detik per wallet
+let _trackedWallets = []; // [ { address, label, addedAt, lastSig, active } ]
+let _walletTxHistory = {}; // { address: [tx, ...] } max 50 per wallet
+
+// Known DEX program IDs untuk klasifikasi aksi
+const DEX_PROGRAMS = {
+    '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8': 'Raydium AMM',
+    '5quBtoiQqxF9Jv6KYKctB59NT3gtJD2Y65kdnB1Uev3h': 'Raydium Route',
+    'CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK': 'Raydium CLMM',
+    '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P':  'Pump.fun',
+    'BSfD6SHZigAfDWSjzD5Q41jw8LmKwtmjskPH9XW1mrRW': 'Pump.fun Route',
+    'pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA':  'PumpSwap',
+    'JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4':  'Jupiter v6',
+    'JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB':  'Jupiter v4',
+    'whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc':  'Orca Whirlpool',
+    'DjVE6JNiYqPL2QXyCUUh8rNjHrbz9hXHNYt99MQ59qw1': 'Orca',
+    '9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP': 'Orca v2',
+    'MoonCVVNZFSYkqNXP6bxHLPL6QQJiMagDL3qxBLbyq5':  'Moonshot',
+    'LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo':  'Meteora DLMM',
+    'Eo7WjKq67rjJQDd81erLE2hHeS3vmKb4sL9HcCVhjYuD': 'Meteora Stable',
+    'srmqPvymJeFKQ4zGQed1GFppgkRHL9kaELCbyksJtPX':  'Serum/OpenBook',
+};
+
+const SYSTEM_PROGRAMS = new Set([
+    '11111111111111111111111111111111',
+    'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+    'ComputeBudget111111111111111111111111111111',
+    'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1bY8',
+    'SysvarRent111111111111111111111111111111111',
+    'SysvarC1ock11111111111111111111111111111111',
+    'Vote111111111111111111111111111111111111111p',
+    'BPFLoaderUpgradeab1e11111111111111111111111',
+    'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr',
+]);
+
+function loadTrackedWallets() {
+    try {
+        if (fs.existsSync(WALLET_TRACKER_FILE)) {
+            const d = JSON.parse(fs.readFileSync(WALLET_TRACKER_FILE, 'utf8'));
+            _trackedWallets = d.wallets || [];
+        }
+    } catch (_) {}
+}
+function saveTrackedWallets() {
+    try {
+        fs.writeFileSync(WALLET_TRACKER_FILE, JSON.stringify({ wallets: _trackedWallets, updatedAt: new Date().toISOString() }, null, 2));
+    } catch (_) {}
+}
+loadTrackedWallets();
+
+// ── Klasifikasi transaksi ──────────────────────────────────────
+function classifyTx(tx, walletAddr) {
+    if (!tx || !tx.meta) return { action: 'UNKNOWN', detail: '', emoji: '❓' };
+
+    const err = tx.meta.err;
+    if (err) return { action: 'FAILED', detail: 'Transaksi gagal', emoji: '❌' };
+
+    const accounts  = (tx.transaction?.message?.accountKeys || []).map(a => typeof a === 'string' ? a : a.pubkey);
+    const pre       = tx.meta.preBalances  || [];
+    const post      = tx.meta.postBalances || [];
+    const walletIdx = accounts.indexOf(walletAddr);
+    const solDelta  = walletIdx >= 0 ? (post[walletIdx] - pre[walletIdx]) / 1e9 : 0;
+
+    // Detect which DEX programs are in this tx
+    const involvedDex = accounts.find(a => DEX_PROGRAMS[a]);
+    const dexName     = involvedDex ? DEX_PROGRAMS[involvedDex] : null;
+
+    // Token balance changes
+    const preTokens  = tx.meta.preTokenBalances  || [];
+    const postTokens = tx.meta.postTokenBalances || [];
+
+    // Build token delta map: { mint: uiAmountDelta }
+    const tokenDeltas = {};
+    const allMints = [...new Set([...preTokens, ...postTokens].map(t => t.mint))];
+    allMints.forEach(mint => {
+        const preAmt  = preTokens.find(t  => t.mint === mint && accounts[t.accountIndex] === walletAddr);
+        const postAmt = postTokens.find(t => t.mint === mint && accounts[t.accountIndex] === walletAddr);
+        const preVal  = preAmt?.uiTokenAmount?.uiAmount  || 0;
+        const postVal = postAmt?.uiTokenAmount?.uiAmount || 0;
+        const delta   = postVal - preVal;
+        if (Math.abs(delta) > 0.000001) {
+            tokenDeltas[mint] = { delta, symbol: postAmt?.uiTokenAmount?.symbol || preAmt?.uiTokenAmount?.symbol || mint.slice(0,8) };
+        }
+    });
+
+    const tokenMints   = Object.keys(tokenDeltas);
+    const tokenGains   = tokenMints.filter(m => tokenDeltas[m].delta > 0);
+    const tokenLosses  = tokenMints.filter(m => tokenDeltas[m].delta < 0);
+
+    // SWAP / BUY / SELL — ada DEX + token berubah
+    if (dexName && tokenMints.length > 0) {
+        const gainedMints  = tokenGains.map(m => tokenDeltas[m].symbol || m.slice(0,8));
+        const lostMints    = tokenLosses.map(m => tokenDeltas[m].symbol || m.slice(0,8));
+
+        // BUY: token gained + SOL / stablecoin lost
+        if (tokenGains.length > 0 && (solDelta < -0.001 || tokenLosses.length > 0)) {
+            const gainedAmt = Object.values(tokenDeltas).filter(d => d.delta > 0).map(d => `+${_fmtAmt(d.delta)} ${d.symbol}`).join(', ');
+            const spentSol  = solDelta < -0.001 ? `${Math.abs(solDelta).toFixed(4)} SOL` : `${lostMints[0] || ''}`;
+            return { action: 'BUY', emoji: '🟢', detail: `Beli ${gainedAmt} (bayar ${spentSol}) via ${dexName}`, dex: dexName, tokenDeltas };
+        }
+        // SELL: token lost + SOL / stablecoin gained
+        if (tokenLosses.length > 0 && (solDelta > 0.001 || tokenGains.length > 0)) {
+            const soldAmt   = tokenLosses.map(m => `${_fmtAmt(Math.abs(tokenDeltas[m].delta))} ${tokenDeltas[m].symbol}`).join(', ');
+            const receiveSol = solDelta > 0.001 ? `+${solDelta.toFixed(4)} SOL` : `+${gainedMints[0] || ''}`;
+            return { action: 'SELL', emoji: '🔴', detail: `Jual ${soldAmt} dapat ${receiveSol} via ${dexName}`, dex: dexName, tokenDeltas };
+        }
+        // SWAP
+        if (tokenGains.length > 0 && tokenLosses.length > 0) {
+            const from = lostMints.map(m => tokenDeltas[m].symbol).join('/');
+            const to   = gainedMints.join('/');
+            return { action: 'SWAP', emoji: '🔄', detail: `Swap ${from} → ${to} via ${dexName}`, dex: dexName, tokenDeltas };
+        }
+    }
+
+    // ADD LIQUIDITY: token losses tanpa gain (semua keluar)
+    if (dexName && tokenLosses.length >= 1 && tokenGains.length === 0 && solDelta < -0.001) {
+        return { action: 'ADD_LP', emoji: '💧', detail: `Add liquidity ke ${dexName}`, dex: dexName, tokenDeltas };
+    }
+    // REMOVE LIQUIDITY
+    if (dexName && tokenGains.length >= 1 && tokenLosses.length === 0 && solDelta > 0) {
+        return { action: 'REMOVE_LP', emoji: '🔓', detail: `Remove liquidity dari ${dexName}`, dex: dexName, tokenDeltas };
+    }
+
+    // SOL TRANSFER keluar
+    if (solDelta < -0.01 && tokenMints.length === 0) {
+        const toIdx  = accounts.findIndex((a, i) => a !== walletAddr && !SYSTEM_PROGRAMS.has(a) && (post[i] - pre[i]) > 0.001 * 1e9);
+        const toAddr = toIdx >= 0 ? accounts[toIdx] : null;
+        const toAmt  = toAddr ? ((post[toIdx] - pre[toIdx]) / 1e9).toFixed(4) : Math.abs(solDelta).toFixed(4);
+        return { action: 'TRANSFER_OUT', emoji: '📤',
+            detail: `Kirim ${Math.abs(solDelta).toFixed(4)} SOL ke ${toAddr ? toAddr.slice(0,8)+'…' : 'unknown'}`,
+            toAddr, toAmt: `${toAmt} SOL`, tokenDeltas };
+    }
+    // SOL TRANSFER masuk
+    if (solDelta > 0.01 && tokenMints.length === 0) {
+        const fromIdx  = accounts.findIndex((a, i) => a !== walletAddr && !SYSTEM_PROGRAMS.has(a) && (pre[i] - post[i]) > 0.001 * 1e9);
+        const fromAddr = fromIdx >= 0 ? accounts[fromIdx] : null;
+        return { action: 'TRANSFER_IN', emoji: '📥',
+            detail: `Terima ${solDelta.toFixed(4)} SOL dari ${fromAddr ? fromAddr.slice(0,8)+'…' : 'unknown'}`,
+            fromAddr, toAmt: `${solDelta.toFixed(4)} SOL`, tokenDeltas };
+    }
+    // Token transfer
+    if (!dexName && tokenMints.length > 0) {
+        if (tokenGains.length > 0) {
+            const fromIdx  = accounts.findIndex((a, i) => a !== walletAddr && !SYSTEM_PROGRAMS.has(a) && postTokens.some(t => t.mint === tokenGains[0] && accounts[t.accountIndex] === a));
+            const fromAddr = fromIdx >= 0 ? accounts[fromIdx] : null;
+            const mints    = tokenGains.map(m => ({ mint: m, ...tokenDeltas[m] }));
+            return { action: 'TOKEN_IN', emoji: '📥',
+                detail: `Terima token: ${mints.map(t => `+${_fmtAmt(t.delta)} ${t.symbol}`).join(', ')}`,
+                fromAddr, mints, tokenDeltas };
+        }
+        if (tokenLosses.length > 0) {
+            const toIdx  = accounts.findIndex((a, i) => a !== walletAddr && !SYSTEM_PROGRAMS.has(a) && postTokens.some(t => t.mint === tokenLosses[0] && accounts[t.accountIndex] === a));
+            const toAddr = toIdx >= 0 ? accounts[toIdx] : null;
+            const mints  = tokenLosses.map(m => ({ mint: m, ...tokenDeltas[m] }));
+            return { action: 'TOKEN_OUT', emoji: '📤',
+                detail: `Kirim token: ${mints.map(t => `${_fmtAmt(Math.abs(t.delta))} ${t.symbol}`).join(', ')}`,
+                toAddr, mints, tokenDeltas };
+        }
+    }
+
+    return { action: 'CONTRACT', emoji: '📝', detail: dexName ? `Interaksi ${dexName}` : 'Interaksi kontrak', tokenDeltas };
+}
+
+function _fmtAmt(n) {
+    if (!n) return '0';
+    if (n >= 1e9)  return (n/1e9).toFixed(2)+'B';
+    if (n >= 1e6)  return (n/1e6).toFixed(2)+'M';
+    if (n >= 1e3)  return (n/1e3).toFixed(1)+'K';
+    if (n >= 1)    return n.toFixed(2);
+    if (n >= 0.01) return n.toFixed(4);
+    return n.toExponential(2);
+}
+
+// ── Format Telegram message untuk 1 tx ───────────────────────
+function buildWalletTxMsg(wallet, sig, cls, blockTime) {
+    const label    = wallet.label || wallet.address.slice(0,8)+'…'+wallet.address.slice(-4);
+    const shortSig = sig.slice(0,12)+'…';
+    const timeStr  = blockTime ? new Date(blockTime*1000).toLocaleString('id-ID', { timeZone:'Asia/Jakarta' }) : '—';
+    const solscan  = `https://solscan.io/tx/${sig}`;
+
+    const actionLabel = {
+        BUY: 'BELI TOKEN 🟢', SELL: 'JUAL TOKEN 🔴',
+        SWAP: 'SWAP 🔄', ADD_LP: 'ADD LIKUIDITAS 💧', REMOVE_LP: 'REMOVE LIKUIDITAS 🔓',
+        TRANSFER_OUT: 'KIRIM SOL 📤', TRANSFER_IN: 'TERIMA SOL 📥',
+        TOKEN_IN: 'TERIMA TOKEN 📥', TOKEN_OUT: 'KIRIM TOKEN 📤',
+        CONTRACT: 'KONTRAK 📝', FAILED: 'GAGAL ❌', UNKNOWN: 'TIDAK DIKETAHUI ❓',
+    }[cls.action] || cls.action;
+
+    // ── Blok extra: alamat tujuan/asal + token detail ─────────
+    const extras = [];
+
+    // Alamat tujuan / asal — full address supaya bisa dicopy
+    if (cls.toAddr) {
+        const addrLabel = (cls.action === 'TRANSFER_OUT' || cls.action === 'TOKEN_OUT') ? '📮 Tujuan' : '📩 Dari';
+        extras.push(`${addrLabel}:\n<code>${cls.toAddr}</code>`);
+        extras.push(`🔎 <a href="https://solscan.io/account/${cls.toAddr}">Lihat wallet tujuan di Solscan</a>`);
+    }
+    if (cls.fromAddr && !cls.toAddr) {
+        extras.push(`📩 Pengirim:\n<code>${cls.fromAddr}</code>`);
+        extras.push(`🔎 <a href="https://solscan.io/account/${cls.fromAddr}">Lihat wallet pengirim di Solscan</a>`);
+    }
+
+    // Token detail (BUY/SELL/SWAP/TOKEN_IN/TOKEN_OUT) — mint address + link pasar
+    const td = cls.tokenDeltas || {};
+    const allMints = Object.keys(td);
+    if (allMints.length > 0 && allMints.length <= 4) {
+        allMints.forEach(mint => {
+            const { delta, symbol } = td[mint];
+            const sign  = delta > 0 ? '▲' : '▼';
+            const color = delta > 0 ? '+' : '';
+            const sym   = symbol || mint.slice(0,8)+'…';
+            extras.push(`${sign} <b>${color}${_fmtAmt(delta)} ${sym}</b>\n   🪙 <code>${mint}</code>\n   📊 <a href="https://birdeye.so/token/${mint}?chain=solana">Birdeye</a>  |  <a href="https://dexscreener.com/solana/${mint}">DexScreener</a>`);
+        });
+    }
+
+    const extraBlock = extras.length ? '\n' + extras.join('\n') + '\n' : '\n';
+
+    return `👁 <b>WALLET TRACKER ALERT</b>\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `🏷 <b>${label}</b>\n` +
+        `📋 <code>${wallet.address}</code>\n\n` +
+        `${cls.emoji} <b>${actionLabel}</b>\n` +
+        `📝 ${cls.detail}\n` +
+        `🕐 ${timeStr} WIB\n` +
+        `🔑 TX: <code>${sig.slice(0,20)}…</code>` +
+        extraBlock +
+        `🔗 <a href="${solscan}">Lihat TX di Solscan (${shortSig})</a>\n` +
+        `━━━━━━━━━━━━━━━━━━━━`;
+}
+
+// ── Polling loop per wallet ───────────────────────────────────
+let _walletTrackerRunning = false;
+
+async function _walletTrackerPoll() {
+    if (_walletTrackerRunning) return;
+    _walletTrackerRunning = true;
+
+    const activeWallets = _trackedWallets.filter(w => w.active !== false);
+    if (!activeWallets.length) { _walletTrackerRunning = false; return; }
+
+    // Reload TG config
+    try { _tgConfig = { ..._tgConfig, ...JSON.parse(fs.readFileSync(TG_CONFIG_FILE, 'utf8')) }; } catch(_) {}
+
+    for (const wallet of activeWallets) {
+        try {
+            const sigs = await _rpcCall('getSignaturesForAddress', [
+                wallet.address, { limit: 5, commitment: 'confirmed' }
+            ], 10000) || [];
+
+            if (!sigs.length) continue;
+
+            const latestSig = sigs[0].signature;
+
+            // Pertama kali — simpan lastSig tanpa alert
+            if (!wallet.lastSig) {
+                wallet.lastSig = latestSig;
+                saveTrackedWallets();
+                continue;
+            }
+
+            // Cari transaksi baru sejak lastSig
+            const newSigs = [];
+            for (const s of sigs) {
+                if (s.signature === wallet.lastSig) break;
+                newSigs.push(s);
+            }
+
+            if (!newSigs.length) continue;
+
+            // Update lastSig
+            wallet.lastSig = latestSig;
+            wallet.lastSeenAt = new Date().toISOString();
+            saveTrackedWallets();
+
+            // Ambil detail tiap transaksi baru (max 3 per poll)
+            const txFetches = newSigs.slice(0, 3).map(s =>
+                _rpcCall('getTransaction', [s.signature, {
+                    encoding: 'jsonParsed', commitment: 'confirmed', maxSupportedTransactionVersion: 0
+                }], 10000).catch(() => null)
+            );
+            const txDetails = await Promise.all(txFetches);
+
+            for (let i = 0; i < newSigs.length && i < 3; i++) {
+                const sigInfo = newSigs[i];
+                const tx     = txDetails[i];
+                const cls    = classifyTx(tx, wallet.address);
+
+                // Simpan ke history
+                if (!_walletTxHistory[wallet.address]) _walletTxHistory[wallet.address] = [];
+                const record = {
+                    sig: sigInfo.signature,
+                    blockTime: sigInfo.blockTime,
+                    action: cls.action,
+                    emoji: cls.emoji,
+                    detail: cls.detail,
+                    dex: cls.dex || null,
+                    ts: Date.now(),
+                };
+                _walletTxHistory[wallet.address].unshift(record);
+                if (_walletTxHistory[wallet.address].length > 50) _walletTxHistory[wallet.address].pop();
+
+                // Skip FAILED jika user tidak mau notifikasi
+                if (cls.action === 'FAILED' && wallet.skipFailed) continue;
+
+                // Kirim Telegram jika dikonfigurasi
+                if (_tgConfig.botToken && _tgConfig.chatId) {
+                    const msg = buildWalletTxMsg(wallet, sigInfo.signature, cls, sigInfo.blockTime);
+                    // Gunakan signature sebagai dedup key — setiap TX unik, TTL 30 detik
+                    await sendTelegram(msg, {
+                        botToken: _tgConfig.botToken,
+                        chatId: _tgConfig.chatId,
+                        dedupKey: `wt:${sigInfo.signature}`,
+                        dedupTTL: 30 * 1000,
+                    }).catch(() => {});
+                    await new Promise(r => setTimeout(r, 500)); // delay antar pesan
+                }
+
+                console.log(`[WalletTracker] ${wallet.label||wallet.address.slice(0,8)} → ${cls.action}: ${cls.detail.slice(0,60)}`);
+            }
+        } catch (e) {
+            console.warn(`[WalletTracker] Error polling ${wallet.address.slice(0,8)}: ${e.message}`);
+        }
+
+        // Delay antar wallet agar tidak spam RPC
+        await new Promise(r => setTimeout(r, 800));
+    }
+
+    _walletTrackerRunning = false;
+}
+
+// ── REST endpoints wallet tracker ────────────────────────────
+
+// GET /api/wallet-tracker — list semua tracked wallets
+app.get('/api/wallet-tracker', (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    const wallets = _trackedWallets.map(w => ({
+        address: w.address,
+        label: w.label || '',
+        active: w.active !== false,
+        addedAt: w.addedAt,
+        lastSeenAt: w.lastSeenAt || null,
+        txCount: (_walletTxHistory[w.address] || []).length,
+        lastTx: (_walletTxHistory[w.address] || [])[0] || null,
+    }));
+    res.json({ ok: true, wallets, total: wallets.length });
+});
+
+// POST /api/wallet-tracker — tambah wallet
+app.post('/api/wallet-tracker', express.json(), (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    const { address, label, action } = req.body || {};
+
+    if (action === 'remove') {
+        if (!address) return res.status(400).json({ ok: false, error: 'address required' });
+        _trackedWallets = _trackedWallets.filter(w => w.address !== address);
+        delete _walletTxHistory[address];
+        saveTrackedWallets();
+        return res.json({ ok: true, message: `Wallet ${address.slice(0,8)}… dihapus` });
+    }
+
+    if (action === 'toggle') {
+        const w = _trackedWallets.find(w => w.address === address);
+        if (w) { w.active = !w.active; saveTrackedWallets(); }
+        return res.json({ ok: true, active: w?.active });
+    }
+
+    if (action === 'rename') {
+        const w = _trackedWallets.find(w => w.address === address);
+        if (w && label) { w.label = label; saveTrackedWallets(); }
+        return res.json({ ok: true });
+    }
+
+    // ADD
+    if (!address || address.length < 32) return res.status(400).json({ ok: false, error: 'Alamat Solana tidak valid (min 32 karakter)' });
+    if (_trackedWallets.find(w => w.address === address)) return res.status(400).json({ ok: false, error: 'Wallet sudah ditambahkan' });
+    if (_trackedWallets.length >= 20) return res.status(400).json({ ok: false, error: 'Maks 20 wallet tracker (hindari spam RPC)' });
+
+    _trackedWallets.push({
+        address,
+        label: label || '',
+        active: true,
+        addedAt: new Date().toISOString(),
+        lastSig: null,
+        lastSeenAt: null,
+        skipFailed: false,
+    });
+    saveTrackedWallets();
+    res.json({ ok: true, message: `Wallet ${label||address.slice(0,8)+'…'} ditambahkan`, total: _trackedWallets.length });
+});
+
+// GET /api/wallet-tracker/history/:address — ambil tx history
+app.get('/api/wallet-tracker/history/:address', (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    const { address } = req.params;
+    const history = _walletTxHistory[address] || [];
+    res.json({ ok: true, address, history, total: history.length });
+});
+
+// CORS preflight
+app.options('/api/wallet-tracker',          (req, res) => { res.setHeader('Access-Control-Allow-Origin','*'); res.setHeader('Access-Control-Allow-Methods','GET,POST'); res.setHeader('Access-Control-Allow-Headers','Content-Type'); res.sendStatus(200); });
+app.options('/api/wallet-tracker/history/:address', (req, res) => { res.setHeader('Access-Control-Allow-Origin','*'); res.sendStatus(200); });
+
 // ── START ─────────────────────────────────────────────────────
 checkEnv();
+
 app.listen(PORT, '127.0.0.1', () => {
     console.log(`✅ OKX Proxy berjalan di http://127.0.0.1:${PORT}`);
     console.log(`   Frontend di http://localhost:8000 sudah bisa akses OKX API`);
@@ -5949,6 +6359,13 @@ app.listen(PORT, '127.0.0.1', () => {
         setInterval(_wwmRun, WWM_INTERVAL_MS);
         console.log(`🔍 [WhaleMonitor] Wallet monitor aktif — interval 5 menit (${_wwmWallets.length} wallets)`);
     }, 90_000); // delay 90 detik setelah server start
+
+    // ── Jalankan Wallet Tracker polling setiap 20 detik ─────
+    setTimeout(() => {
+        _walletTrackerPoll();
+        setInterval(_walletTrackerPoll, WALLET_TRACKER_POLL_MS);
+        console.log(`👁 [WalletTracker] Polling aktif — interval ${WALLET_TRACKER_POLL_MS/1000}s (${_trackedWallets.length} wallets)`);
+    }, 10_000); // delay 10 detik setelah startup
 
     // ── AI Daily Brief: kirim ke Telegram setiap pukul 08:00 WIB (01:00 UTC) ──
     async function sendAIDailyBrief() {
