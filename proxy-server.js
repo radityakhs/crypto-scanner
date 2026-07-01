@@ -2793,21 +2793,38 @@ app.get('/api/dex-feed/live', async (req, res) => {
     }
 
     try {
-        // Fetch beberapa sumber sekaligus
-        const [newPairsRes, trendingRes] = await Promise.allSettled([
-            fetch('https://api.dexscreener.com/latest/dex/search?q=solana&chainIds=solana&order=pairCreatedAt', { signal: AbortSignal.timeout(10000) }).then(r => r.ok ? r.json() : {}),
-            fetch('https://api.dexscreener.com/token-boosts/top/v1',                                            { signal: AbortSignal.timeout(8000)  }).then(r => r.ok ? r.json() : []),
+        // Step 1: ambil token profiles terbaru Solana + boosted list (paralel)
+        const [profilesRes, boostedRes] = await Promise.allSettled([
+            fetch('https://api.dexscreener.com/token-profiles/latest/v1', { signal: AbortSignal.timeout(10000) }).then(r => r.ok ? r.json() : []),
+            fetch('https://api.dexscreener.com/token-boosts/top/v1',      { signal: AbortSignal.timeout(8000)  }).then(r => r.ok ? r.json() : []),
         ]);
 
-        let pairs = [];
-        if (newPairsRes.status === 'fulfilled') {
-            pairs = (newPairsRes.value?.pairs || []).filter(p => p.chainId === 'solana');
-        }
+        // Step 2: kumpulkan address token Solana dari profiles
+        const profilesRaw = profilesRes.status === 'fulfilled' ? (Array.isArray(profilesRes.value) ? profilesRes.value : []) : [];
+        const solProfiles  = profilesRaw.filter(t => t.chainId === 'solana');
 
         const boostedAddrs = new Set();
-        if (trendingRes.status === 'fulfilled' && Array.isArray(trendingRes.value)) {
-            trendingRes.value.filter(t => t.chainId === 'solana').forEach(t => boostedAddrs.add(t.tokenAddress));
+        if (boostedRes.status === 'fulfilled' && Array.isArray(boostedRes.value)) {
+            boostedRes.value.filter(t => t.chainId === 'solana').forEach(t => boostedAddrs.add(t.tokenAddress));
         }
+
+        // Gabungkan addresses (profiles + boosted) – deduplicate
+        const allAddrs = [...new Set([
+            ...solProfiles.map(t => t.tokenAddress),
+            ...([...boostedAddrs].slice(0, 15)),
+        ])].slice(0, 30);
+
+        if (!allAddrs.length) throw new Error('No Solana token addresses found');
+
+        // Step 3: batch query pair data
+        const pairsUrl  = `https://api.dexscreener.com/latest/dex/tokens/${allAddrs.join(',')}`;
+        const pairsData = await fetch(pairsUrl, { signal: AbortSignal.timeout(12000) }).then(r => r.ok ? r.json() : { pairs: [] });
+
+        let pairs = (pairsData.pairs || []).filter(p => p.chainId === 'solana');
+
+        // Buat lookup map: tokenAddress → icon dari profiles
+        const profileIconMap = {};
+        solProfiles.forEach(t => { if (t.icon) profileIconMap[t.tokenAddress] = t.icon; });
 
         const now = Date.now();
         const tokens = pairs.slice(0, 100).map(p => {
@@ -2847,7 +2864,7 @@ app.get('/api/dex-feed/live', async (req, res) => {
                 address:    p.baseToken?.address || '',
                 symbol:     p.baseToken?.symbol  || '?',
                 name:       p.baseToken?.name    || '',
-                logoUrl:    p.info?.imageUrl     || '',
+                logoUrl:    p.info?.imageUrl || profileIconMap[p.baseToken?.address] || '',
                 price:      parseFloat(p.priceUsd || 0),
                 mcap, liq, vol5m, vol1h,
                 txns5m, buys5m, sells5m,
