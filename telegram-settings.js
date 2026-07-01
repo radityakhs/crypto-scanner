@@ -78,6 +78,12 @@ const TelegramSettings = (() => {
                             placeholder="-100123456789 atau @username"
                             value="${cfg?.chatId || ''}"/>
                     </div>
+                    <div class="tg-input-wrap">
+                        <div class="tg-label">Topic ID</div>
+                        <input id="tg-topicid-input" class="tg-input" type="text"
+                            placeholder="Opsional, contoh: 294"
+                            value="${cfg?.topicId || ''}"/>
+                    </div>
                     <div style="display:flex;gap:6px;padding-top:20px;flex-wrap:wrap">
                         <button class="tg-btn tg-btn-save" onclick="TelegramSettings.save()">💾 Simpan</button>
                         <button class="tg-btn tg-btn-test" onclick="TelegramSettings.test()" ${active ? '' : 'disabled style="opacity:.5;cursor:not-allowed"'}>🔔 Test</button>
@@ -90,7 +96,8 @@ const TelegramSettings = (() => {
                         1. Chat <a href="https://t.me/BotFather" target="_blank">@BotFather</a> → ketik <code>/newbot</code> → copy <b>Bot Token</b><br>
                         2. Tambah bot ke grup / chat pribadi, lalu ketik pesan apapun ke bot<br>
                         3. Buka <code>https://api.telegram.org/bot&lt;TOKEN&gt;/getUpdates</code> → ambil <b>chat.id</b><br>
-                        4. Isi form di atas → Simpan → Test
+                        4. Jika memakai group topic/forum, isi <b>Topic ID</b>, misalnya <code>2</code><br>
+                        5. Isi form di atas → Simpan → Test
                     </p>
                 </details>
                 <div class="tg-note" style="margin-top:8px">
@@ -133,9 +140,11 @@ const TelegramSettings = (() => {
     async function save() {
         const tokenInput  = document.getElementById('tg-token-input');
         const chatIdInput = document.getElementById('tg-chatid-input');
+        const topicIdInput = document.getElementById('tg-topicid-input');
         const token  = tokenInput?.value?.trim();
         const chatId = chatIdInput?.value?.trim();
-        const body = { chatId };
+        const topicId = topicIdInput?.value?.trim();
+        const body = { chatId, topicId };
         if (token && !token.startsWith('•')) body.botToken = token;
         try {
             const r = await fetch(API, {

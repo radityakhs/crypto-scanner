@@ -19,6 +19,7 @@
     "ethers": "^6.16.0",
     "express": "^5.2.1",
     "mssql": "^12.5.4",
+    "node-cron": "^4.5.0",
     "node-fetch": "^2.7.0",
     "puppeteer": "^24.40.0"
   },

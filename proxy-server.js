@@ -1748,17 +1748,24 @@ app.get('/api/dex-sniper', async (req, res) => {
         // Ambil top 50
         const top = allPairs.slice(0, 50);
 
-        // Telegram alert untuk score >= 75
+        // Telegram alert untuk score >= 75, hanya token yang belum pernah dikirim
         const hot = top.filter(t => t.score >= 75);
-        if (hot.length && _tgConfig.botToken && _tgConfig.chatId) {
-            const lines = hot.slice(0, 3).map(t =>
+        const newHot = hot.filter(t => !_tgIsDeduped(`dex:${chain}:${mode}:${t.pairAddress}`, 30 * 24 * 60 * 60 * 1000));
+        if (newHot.length && _tgConfig.botToken && _tgConfig.chatId) {
+            const alertRows = newHot.slice(0, 3);
+            const lines = alertRows.map(t =>
                 `${t.signal} <b>${t.baseSymbol}</b> (${t.baseName})\n` +
                 `   Score: <b>${t.score}/100</b> · FDV: $${_fmtK(t.fdv)} · Liq: $${_fmtK(t.liquidityUsd)}\n` +
                 `   <a href="${t.url}">→ Chart DEXScreener</a>`
             ).join('\n\n');
             const emoji = mode === 'early' ? '🎯' : '🚀';
             const msg = `${emoji} <b>DEX Sniper Alert — ${mode === 'early' ? 'Early Entry' : 'Momentum Rider'}</b>\n\n${lines}`;
-            sendTelegram(msg, { botToken: _tgConfig.botToken, chatId: _tgConfig.chatId }).catch(() => {});
+            sendTelegram(msg, {
+                dedupKey: `dex-batch:${chain}:${mode}:${alertRows.map(t => t.pairAddress).join(',')}`,
+                dedupTTL: 7 * 24 * 60 * 60 * 1000,
+            }).then(ok => {
+                if (ok) alertRows.forEach(t => _tgMarkDedup(`dex:${chain}:${mode}:${t.pairAddress}`));
+            }).catch(() => {});
         }
 
         res.json({ ok: true, tokens: top, mode, chain, total: allPairs.length, scannedAt: Date.now() });
@@ -3885,12 +3892,12 @@ setInterval(async () => {
             alert.triggeredAt = Date.now();
             alert.triggeredPrice = cur;
             // Send Telegram
-            if (_tgBotToken && _tgChatId) {
+            if (_tgConfig.botToken && _tgConfig.chatId) {
                 const emoji  = alert.condition === 'above' ? '🚀' : '📉';
                 const dir    = alert.condition === 'above' ? 'menembus ke atas' : 'turun ke bawah';
                 const msg    = `${emoji} <b>PRICE ALERT!</b>\n\n<b>${alert.symbol}</b> ${dir} <code>$${alert.price.toLocaleString()}</code>\n\nHarga sekarang: <b>$${cur.toLocaleString()}</b>\n\n⏰ ${new Date().toLocaleString('id-ID')}`;
                 try {
-                    await sendTelegram(msg, { botToken: _tgBotToken, chatId: _tgChatId });
+                    await sendTelegram(msg);
                 } catch (e) {}
             }
         }
@@ -3933,11 +3940,48 @@ app.get('/api/news-sentiment', async (_, res) => {
             } catch (e) { console.warn('[News] Groq score failed:', e.message); }
         }
         _newsCache = { ts: Date.now(), data: newsWithSentiment };
+        sendNewsSentimentTelegram(newsWithSentiment).catch(e => console.warn('[News] Telegram alert failed:', e.message));
         res.json({ ok: true, news: newsWithSentiment });
     } catch (e) {
         res.json({ ok: false, error: e.message });
     }
 });
+
+async function sendNewsSentimentTelegram(newsItems) {
+    if (!_tgConfig.botToken || !_tgConfig.chatId) return false;
+    const actionable = (newsItems || [])
+        .map(n => ({
+            ...n,
+            score: Number(n.score ?? 50),
+            key: `news:${String(n.title || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().slice(0, 120)}`,
+        }))
+        .filter(n =>
+            n.title &&
+            !['neutral', 'mixed'].includes(String(n.sentiment || '').toLowerCase()) &&
+            (n.score >= 70 || n.score <= 30) &&
+            !_tgIsDeduped(n.key, 30 * 24 * 60 * 60 * 1000)
+        )
+        .slice(0, 5);
+    if (!actionable.length) return false;
+
+    const lines = actionable.slice(0, 3).map(n => {
+        const sentiment = String(n.sentiment || '').toLowerCase();
+        const icon = sentiment === 'bullish' ? '🟢' : '🔴';
+        return `${icon} <b>${escapeTelegramHtml(n.title)}</b>\n   Sentiment: <b>${escapeTelegramHtml(sentiment.toUpperCase())}</b> · Score: <b>${n.score}/100</b>`;
+    }).join('\n\n');
+    const extra = actionable.length > 3 ? `\n\n…dan <b>${actionable.length - 3}</b> headline kuat lainnya.` : '';
+    const msg =
+        `📰 <b>NEWS SENTIMENT SIGNAL</b>\n` +
+        `🕐 ${new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })} WIB\n\n` +
+        `${lines}${extra}`;
+
+    const ok = await sendTelegram(msg, {
+        dedupKey: `news-batch:${actionable.map(n => n.key).join('|')}`,
+        dedupTTL: 24 * 60 * 60 * 1000,
+    });
+    if (ok) actionable.forEach(n => _tgMarkDedup(n.key, 24 * 60 * 60 * 1000));
+    return ok;
+}
 
 
 //  Fitur:
@@ -4104,13 +4148,13 @@ app.get('/api/sniper-scan', async (req, res) => {
 
         // Kirim Telegram alert untuk sniper score >= 80
         const snipers = coins.filter(c => c.score >= 80);
-        if (snipers.length && _tgBotToken && _tgChatId) {
+        if (snipers.length && _tgConfig.botToken && _tgConfig.chatId) {
             const lines = snipers.map(c =>
                 `🎯 <b>${c.symbol}</b> — Score: <b>${c.score}/100</b>\n` +
                 `   Harga: $${c.price.toFixed(4)} (${c.ch24h > 0 ? '+' : ''}${c.ch24h}%) · RSI: ${c.rsi}`
             ).join('\n\n');
             const msg = `🎯 <b>SNIPER ENTRY ALERT!</b>\n\n${lines}\n\n<i>Timeframe: ${validTf} · ${new Date().toLocaleString('id-ID', {timeZone:'Asia/Jakarta'})}</i>`;
-            sendTelegram(msg, { botToken: _tgBotToken, chatId: _tgChatId }).catch(() => {});
+            sendTelegram(msg).catch(() => {});
         }
 
         res.json({ ok: true, coins, tf: validTf, scannedAt: Date.now(), totalScanned: pairs.length });
@@ -4833,19 +4877,60 @@ app.get('/api/whale-accumulation', async (req, res) => {
 //  TELEGRAM ALERT
 // ══════════════════════════════════════════════════════════════
 const TG_CONFIG_FILE = path.join(__dirname, 'telegram-config.json');
-let _tgConfig = { botToken: '', chatId: '' };
+let _tgConfig = { botToken: '', chatId: '', topicId: '' };
+function _validTelegramEnv(value, placeholder) {
+    return value && value.trim() && value.trim() !== placeholder;
+}
 try {
     if (fs.existsSync(TG_CONFIG_FILE)) {
         _tgConfig = { ..._tgConfig, ...JSON.parse(fs.readFileSync(TG_CONFIG_FILE, 'utf8')) };
     }
     // Also allow override via .env
-    if (process.env.TELEGRAM_BOT_TOKEN) _tgConfig.botToken = process.env.TELEGRAM_BOT_TOKEN;
-    if (process.env.TELEGRAM_CHAT_ID)   _tgConfig.chatId   = process.env.TELEGRAM_CHAT_ID;
+    if (_validTelegramEnv(process.env.TELEGRAM_BOT_TOKEN, 'GANTI_DENGAN_BOT_TOKEN')) _tgConfig.botToken = process.env.TELEGRAM_BOT_TOKEN.trim();
+    if (_validTelegramEnv(process.env.TELEGRAM_CHAT_ID, 'GANTI_DENGAN_CHAT_ID')) _tgConfig.chatId = process.env.TELEGRAM_CHAT_ID.trim();
+    if (_validTelegramEnv(process.env.TELEGRAM_TOPIC_ID, 'GANTI_DENGAN_TOPIC_ID')) _tgConfig.topicId = process.env.TELEGRAM_TOPIC_ID.trim();
 } catch (_) {}
 
 // ── Dedup cache: cegah alert sama dikirim ulang dalam 3 jam ──
 const _tgDedupCache = new Map(); // key → timestamp last sent
 const TG_DEDUP_TTL  = 3 * 60 * 60 * 1000; // 3 jam dalam ms
+const TG_HISTORY_FILE = path.join(__dirname, 'telegram-alert-history.json');
+try {
+    if (fs.existsSync(TG_HISTORY_FILE)) {
+        const saved = JSON.parse(fs.readFileSync(TG_HISTORY_FILE, 'utf8'));
+        Object.entries(saved || {}).forEach(([key, ts]) => {
+            if (Number.isFinite(Number(ts))) _tgDedupCache.set(key, Number(ts));
+        });
+    }
+} catch (_) {}
+
+function _tgPersistDedup() {
+    try {
+        const now = Date.now();
+        const out = {};
+        for (const [key, ts] of _tgDedupCache.entries()) {
+            if (now - ts < 30 * 24 * 60 * 60 * 1000) out[key] = ts;
+        }
+        fs.writeFileSync(TG_HISTORY_FILE, JSON.stringify(out, null, 2));
+    } catch (_) {}
+}
+
+function _tgIsDeduped(key, ttl = TG_DEDUP_TTL) {
+    const last = _tgDedupCache.get(key);
+    return !!(last && (Date.now() - last) < ttl);
+}
+
+function _tgMarkDedup(key) {
+    _tgDedupCache.set(key, Date.now());
+    _tgPersistDedup();
+}
+
+function escapeTelegramHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
 
 /**
  * Buat dedup key dari teks alert.
@@ -4857,10 +4942,15 @@ function _tgDedupKey(text) {
     return clean;
 }
 
-async function sendTelegram(text, { botToken: overrideToken, chatId: overrideChatId, dedupKey, dedupTTL } = {}) {
+async function sendTelegram(text, { botToken: overrideToken, chatId: overrideChatId, topicId: overrideTopicId, dedupKey, dedupTTL } = {}) {
     const botToken = overrideToken || _tgConfig.botToken;
     const chatId   = overrideChatId || _tgConfig.chatId;
+    const topicId  = overrideTopicId !== undefined ? overrideTopicId : _tgConfig.topicId;
     if (!botToken || !chatId) return false;
+    if (!topicId || !Number.isFinite(Number(topicId))) {
+        console.warn('[Telegram] skipped: TELEGRAM topicId is required for forum alerts.');
+        return false;
+    }
 
     // ── Dedup check ───────────────────────────────────────────
     const key  = dedupKey || _tgDedupKey(text);
@@ -4875,12 +4965,18 @@ async function sendTelegram(text, { botToken: overrideToken, chatId: overrideCha
         const r = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML', disable_web_page_preview: true }),
+            body: JSON.stringify({
+                chat_id: chatId,
+                ...(topicId ? { message_thread_id: Number(topicId) } : {}),
+                text,
+                parse_mode: 'HTML',
+                disable_web_page_preview: true,
+            }),
             signal: AbortSignal.timeout(8000),
         });
         const d = await r.json();
         if (!d.ok) console.warn('[Telegram]', d.description);
-        if (d.ok) _tgDedupCache.set(key, Date.now()); // simpan timestamp hanya jika sukses
+        if (d.ok) _tgMarkDedup(key); // simpan timestamp hanya jika sukses
         return d.ok;
     } catch (e) {
         console.warn('[Telegram] send error:', e.message);
@@ -4888,19 +4984,184 @@ async function sendTelegram(text, { botToken: overrideToken, chatId: overrideCha
     }
 }
 
+async function sendTelegramPhoto(photoPath, caption, { botToken: overrideToken, chatId: overrideChatId, topicId: overrideTopicId, dedupKey, dedupTTL } = {}) {
+    const botToken = overrideToken || _tgConfig.botToken;
+    const chatId   = overrideChatId || _tgConfig.chatId;
+    const topicId  = overrideTopicId !== undefined ? overrideTopicId : _tgConfig.topicId;
+    if (!botToken || !chatId || !photoPath || !fs.existsSync(photoPath)) return false;
+    if (!topicId || !Number.isFinite(Number(topicId))) {
+        console.warn('[Telegram] skipped photo: TELEGRAM topicId is required for forum alerts.');
+        return false;
+    }
+
+    const key = dedupKey || `photo:${path.basename(photoPath)}`;
+    const ttl = dedupTTL !== undefined ? dedupTTL : TG_DEDUP_TTL;
+    if (_tgIsDeduped(key, ttl)) {
+        console.log(`[Telegram] ⏭ Skipped photo (dedup): ${key.slice(0, 60)}…`);
+        return false;
+    }
+
+    const boundary = '----HollowCatBoundary' + Date.now().toString(16);
+    const file = fs.readFileSync(photoPath);
+    const fields = {
+        chat_id: String(chatId),
+        message_thread_id: String(Number(topicId)),
+        caption: String(caption || '').slice(0, 1024),
+        parse_mode: 'HTML',
+    };
+    const parts = [];
+    for (const [name, value] of Object.entries(fields)) {
+        parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`));
+    }
+    parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="photo"; filename="${path.basename(photoPath)}"\r\nContent-Type: image/png\r\n\r\n`));
+    parts.push(file);
+    parts.push(Buffer.from(`\r\n--${boundary}--\r\n`));
+    const body = Buffer.concat(parts);
+
+    try {
+        const r = await fetch(`https://api.telegram.org/bot${botToken}/sendPhoto`, {
+            method: 'POST',
+            headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}`, 'Content-Length': String(body.length) },
+            body,
+            signal: AbortSignal.timeout(15000),
+        });
+        const d = await r.json();
+        if (!d.ok) console.warn('[Telegram photo]', d.description);
+        if (d.ok) _tgMarkDedup(key);
+        return d.ok;
+    } catch (e) {
+        console.warn('[Telegram photo] send error:', e.message);
+        return false;
+    }
+}
+
+function getMoonPhaseSignal(date = new Date()) {
+    const synodicMonth = 29.53058867;
+    const knownNewMoon = Date.UTC(2025, 0, 29, 12, 36);
+    const age = ((((date.getTime() - knownNewMoon) / 86400000) % synodicMonth) + synodicMonth) % synodicMonth;
+    if (age <= 1)  return { emoji:'🌑', phase:'New Moon', bias:'RESET / accumulation zone', action:'Akumulasi bertahap, tunggu struktur confirm.', age: Math.round(age) };
+    if (age <= 7)  return { emoji:'🌒', phase:'Waxing Crescent', bias:'Bullish build-up', action:'Cari continuation dengan stop ketat.', age: Math.round(age) };
+    if (age <= 9)  return { emoji:'🌓', phase:'First Quarter', bias:'Breakout watch', action:'Validasi breakout/BOS sebelum entry.', age: Math.round(age) };
+    if (age <= 14) return { emoji:'🌔', phase:'Waxing Gibbous', bias:'Bullish momentum / FOMO risk', action:'Ikuti momentum, jangan chase candle panjang.', age: Math.round(age) };
+    if (age <= 16) return { emoji:'🌕', phase:'Full Moon', bias:'Peak / reversal risk', action:'Waspada exhaustion, take-profit sebagian.', age: Math.round(age) };
+    if (age <= 22) return { emoji:'🌖', phase:'Waning Gibbous', bias:'Distribution phase', action:'Prioritaskan risk reduction dan confirmation.', age: Math.round(age) };
+    if (age <= 24) return { emoji:'🌗', phase:'Last Quarter', bias:'Bearish pressure', action:'Short bias valid jika structure breakdown.', age: Math.round(age) };
+    return { emoji:'🌘', phase:'Waning Crescent', bias:'Slow accumulation', action:'Tunggu reset likuiditas dan reversal setup.', age: Math.round(age) };
+}
+
+function avg(values) {
+    return values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+}
+
+function buildHollowCatFuturesRecommendation({ signal, confidence, candles, moon }) {
+    const closes = (candles || []).map(c => Number(c.close)).filter(Number.isFinite);
+    if (closes.length < 30) {
+        return {
+            label: 'Neutral',
+            stance: 'WAIT',
+            reason: 'Data candle belum cukup. Tunggu konfirmasi struktur dan volume.',
+            plan: 'Hindari entry agresif sampai candle berikutnya memberi arah jelas.',
+        };
+    }
+
+    const last = closes[closes.length - 1];
+    const prev = closes[closes.length - 2];
+    const ma20 = avg(closes.slice(-20));
+    const ma50 = avg(closes.slice(-50));
+    const chg = prev ? ((last - prev) / prev) * 100 : 0;
+    const above20 = last > ma20;
+    const above50 = last > ma50;
+    const lunarRisk = ['Full Moon', 'Waning Gibbous', 'Last Quarter'].includes(moon?.phase);
+
+    if (signal === 'LONG' && confidence >= 65 && above20 && chg > 0) {
+        return {
+            label: lunarRisk ? 'LONG selektif' : 'LONG',
+            stance: 'BUY THE CONFIRMATION',
+            reason: `Harga di atas MA20${above50 ? ' dan MA50' : ''}, struktur mendukung continuation. ${lunarRisk ? 'Namun fase bulan meningkatkan risiko reversal, jangan chase.' : 'Momentum masih layak diikuti selama struktur bertahan.'}`,
+            plan: 'Entry hanya setelah candle close confirm di atas area BOS/FVG. Stop di bawah swing low terdekat.',
+        };
+    }
+
+    if (signal === 'SHORT' && confidence >= 65 && !above20 && chg < 0) {
+        return {
+            label: lunarRisk ? 'SHORT valid tapi hati-hati squeeze' : 'SHORT',
+            stance: 'SELL THE BREAKDOWN',
+            reason: `Harga di bawah MA20${!above50 ? ' dan MA50' : ''}, tekanan jual dominan. Struktur breakdown lebih kuat jika volume ikut naik.`,
+            plan: 'Entry setelah retest gagal. Stop di atas lower high / invalidation candle.',
+        };
+    }
+
+    return {
+        label: 'Neutral',
+        stance: 'WAIT',
+        reason: 'Trend belum jelas, tunggu konfirmasi.',
+        plan: 'Tidak ada edge futures yang bersih. Tunggu BOS jelas, reclaim MA20, atau sweep liquidity sebelum entry.',
+    };
+}
+
+function btcDominanceRead(btcDom) {
+    if (!Number.isFinite(btcDom)) return 'Data BTC dominance belum tersedia.';
+    if (btcDom >= 58) return 'BTC DOM tinggi: market cenderung defensif, altcoin lebih rentan underperform.';
+    if (btcDom >= 52) return 'BTC masih memimpin arus modal. Altcoin signal perlu konfirmasi ekstra.';
+    if (btcDom <= 45) return 'BTC DOM rendah: rotasi altcoin lebih mendukung, tapi tetap validasi volume.';
+    return 'BTC DOM transisi: market belum memberi arah rotasi yang jelas.';
+}
+
+function buildHollowCatTelegramCaption({ symbol, interval, ohlc, marketContext = {} }) {
+    const sig = ohlc?.signal || {};
+    const meta = ohlc?.meta || {};
+    const candles = ohlc?.candles || [];
+    const last = candles[candles.length - 1] || {};
+    const moon = getMoonPhaseSignal();
+    const signal = sig.signal || 'NONE';
+    const confidence = sig.confidence ?? 0;
+    const price = Number(last.close || 0);
+    const fvgCount = Array.isArray(ohlc?.fvgZones) ? ohlc.fvgZones.length : 0;
+    const bosCount = Array.isArray(ohlc?.bosEvents) ? ohlc.bosEvents.length : 0;
+    const swingCount = Array.isArray(ohlc?.swings) ? ohlc.swings.length : 0;
+    const reason = sig.reason || meta.summary || 'SMC structure scanned by HollowCat.';
+    const futures = buildHollowCatFuturesRecommendation({ signal, confidence, candles, moon });
+    const btcDom = Number(marketContext.btcDom);
+    const btcDomText = Number.isFinite(btcDom) ? `${btcDom.toFixed(2)}%` : 'N/A';
+    const biasIcon = signal === 'LONG' ? '🟢' : signal === 'SHORT' ? '🔴' : '⚪';
+
+    return [
+        `🐾 <b>HollowCat Professional Trader Report</b>`,
+        `${biasIcon} <b>${escapeTelegramHtml(symbol)}</b> · <b>${escapeTelegramHtml(interval.toUpperCase())}</b> · Signal: <b>${escapeTelegramHtml(signal)}</b> (${confidence}%)`,
+        price ? `💰 Price: <b>$${price >= 1 ? price.toFixed(2) : price.toFixed(6)}</b>` : null,
+        `📊 Structure: FVG <b>${fvgCount}</b> · BOS <b>${bosCount}</b> · Swings <b>${swingCount}</b>`,
+        ``,
+        `₿ <b>BTC DOM:</b> <b>${btcDomText}</b>`,
+        `${escapeTelegramHtml(btcDominanceRead(btcDom))}`,
+        ``,
+        `📈 <b>Futures Recommendation</b>`,
+        `<b>${escapeTelegramHtml(futures.label)}</b> · ${escapeTelegramHtml(futures.stance)}`,
+        `${escapeTelegramHtml(futures.reason)}`,
+        `Plan: ${escapeTelegramHtml(futures.plan)}`,
+        ``,
+        `${moon.emoji} <b>Moon Phase:</b> ${escapeTelegramHtml(moon.phase)} (day ${moon.age}/30)`,
+        `Bias lunar: <b>${escapeTelegramHtml(moon.bias)}</b>`,
+        `Action: ${escapeTelegramHtml(moon.action)}`,
+        ``,
+        `🧠 <b>Trader Notes:</b> ${escapeTelegramHtml(String(reason).slice(0, 220))}`,
+        `<i>Not financial advice. DYOR.</i>`,
+    ].filter(v => v !== null).join('\n');
+}
+
 // GET /api/telegram-config — cek status konfigurasi
 app.get('/api/telegram-config', (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
-    const { botToken, chatId } = _tgConfig;
-    res.json({ ok: true, configured: !!(botToken && chatId), chatId: chatId || '', hasToken: !!botToken });
+    const { botToken, chatId, topicId } = _tgConfig;
+    res.json({ ok: true, configured: !!(botToken && chatId), chatId: chatId || '', topicId: topicId || '', hasToken: !!botToken });
 });
 
-// POST /api/telegram-config — simpan token + chatId
+// POST /api/telegram-config — simpan token + chatId + topicId
 app.post('/api/telegram-config', express.json(), (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
-    const { botToken, chatId } = req.body || {};
+    const { botToken, chatId, topicId } = req.body || {};
     if (botToken !== undefined) _tgConfig.botToken = botToken.trim();
     if (chatId   !== undefined) _tgConfig.chatId   = String(chatId).trim();
+    if (topicId  !== undefined) _tgConfig.topicId  = String(topicId).trim();
     try { fs.writeFileSync(TG_CONFIG_FILE, JSON.stringify(_tgConfig, null, 2)); } catch (_) {}
     res.json({ ok: true, configured: !!(_tgConfig.botToken && _tgConfig.chatId) });
 });
@@ -4932,6 +5193,63 @@ app.post('/api/whale-alert-tg', express.json(), async (req, res) => {
         return res.status(400).json({ ok: false, error: 'Telegram belum dikonfigurasi — isi Bot Token & Chat ID di panel Alerts dulu' });
     const ok = await sendTelegram(message);
     res.json({ ok, error: ok ? null : 'Gagal kirim ke Telegram — cek token & chatId' });
+});
+
+// POST /api/hollowcat-telegram — capture HollowCat chart and send image + analysis to Telegram
+app.post('/api/hollowcat-telegram', express.json(), async (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    const symbol = String(req.body?.symbol || 'BTCUSDT').trim().toUpperCase();
+    const interval = String(req.body?.interval || '1h').trim();
+    if (!symbol) return res.status(400).json({ ok: false, error: 'symbol required' });
+    if (!_tgConfig.botToken || !_tgConfig.chatId || !_tgConfig.topicId) {
+        return res.status(400).json({ ok: false, error: 'Telegram belum lengkap: botToken, chatId, topicId wajib ada' });
+    }
+
+    try {
+        const ohlcRes = await fetch(`http://127.0.0.1:${PORT}/api/ohlc/${encodeURIComponent(symbol)}?interval=${encodeURIComponent(interval)}&limit=200`, {
+            signal: AbortSignal.timeout(12000),
+        });
+        const ohlc = ohlcRes.ok ? await ohlcRes.json() : null;
+        const lastCandle = ohlc?.candles?.[ohlc.candles.length - 1];
+        const signal = ohlc?.signal?.signal || 'NONE';
+        const dedupKey = `hollowcat-chart:${symbol}:${interval}:${signal}:${lastCandle?.time || 'na'}`;
+        const dedupTTL = 24 * 60 * 60 * 1000;
+        if (_tgIsDeduped(dedupKey, dedupTTL)) {
+            return res.json({ ok: true, skipped: true, message: 'Chart signal sudah pernah dikirim untuk candle ini.' });
+        }
+
+        const { captureChart } = require('./chart-screenshot');
+        const imagePath = await captureChart({
+            symbol,
+            interval,
+            signal,
+            chartBase: req.body?.chartBase || 'http://127.0.0.1:8000',
+        });
+        let marketContext = {};
+        try {
+            const globalR = await fetch('https://api.coingecko.com/api/v3/global', { signal: AbortSignal.timeout(6000) });
+            if (globalR.ok) {
+                const globalJson = await globalR.json();
+                marketContext.btcDom = Number(globalJson?.data?.market_cap_percentage?.btc);
+            }
+        } catch (_) {}
+        const caption = buildHollowCatTelegramCaption({ symbol, interval, ohlc, marketContext });
+        const ok = await sendTelegramPhoto(imagePath, caption, { dedupKey, dedupTTL });
+        res.json({ ok, skipped: false, imagePath: ok ? imagePath : null, error: ok ? null : 'Gagal kirim chart ke Telegram' });
+    } catch (e) {
+        res.status(500).json({
+            ok: false,
+            error: `Gagal capture/kirim HollowCat chart: ${e.message}`,
+            hint: 'Pastikan dashboard berjalan di http://127.0.0.1:8000 dan proxy di :3001.',
+        });
+    }
+});
+
+app.options('/api/hollowcat-telegram', (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.sendStatus(204);
 });
 
 // OPTIONS preflight whale-alert-tg
@@ -5192,7 +5510,9 @@ async function _wwmCheckWallet(wallet) {
              `💡 <i>Pantau pergerakan selanjutnya.</i>`) + `\n\n` +
             `<a href="${solscanUrl}">→ Lihat di Solscan</a>`;
 
-        const sent = await sendTelegram(msg);
+        const sent = await sendTelegram(msg, {
+            topicId: _tgConfig.walletTopicId || _tgConfig.topicId,
+        });
         if (sent) {
             console.log(`[WhaleMonitor] ✅ Alert ${pattern} dikirim: ${label} (${shortAddr})`);
             pushLog('WARN', 'WhaleMonitor', `${pattern} detected: ${label}`, { addr, pattern, txCount: events.length });
@@ -6245,6 +6565,7 @@ async function _walletTrackerPoll() {
                     await sendTelegram(msg, {
                         botToken: _tgConfig.botToken,
                         chatId: _tgConfig.chatId,
+                        topicId: _tgConfig.walletTopicId || _tgConfig.topicId,
                         dedupKey: `wt:${sigInfo.signature}`,
                         dedupTTL: 30 * 1000,
                     }).catch(() => {});
@@ -6369,7 +6690,7 @@ app.listen(PORT, '127.0.0.1', () => {
 
     // ── AI Daily Brief: kirim ke Telegram setiap pukul 08:00 WIB (01:00 UTC) ──
     async function sendAIDailyBrief() {
-        if (!_aiChatKey || !_tgBotToken || !_tgChatId) return;
+        if (!_aiChatKey || !_tgConfig.botToken || !_tgConfig.chatId) return;
         try {
             console.log('[Daily Brief] Generating AI daily brief...');
             // Fetch BTC price
@@ -6405,11 +6726,7 @@ Berikan ringkasan pasar, outlook hari ini, dan 2-3 rekomendasi strategi dalam fo
             const data = await resp.json();
             const brief = data.choices?.[0]?.message?.content || 'Gagal generate brief.';
             const msg = `🌅 <b>AI Daily Brief — ${new Date().toLocaleDateString('id-ID', {weekday:'long', day:'numeric', month:'long', timeZone:'Asia/Jakarta'})}</b>\n\n${brief}\n\n<i>— CryptoMind AI 🤖</i>`;
-            await fetch(`https://api.telegram.org/bot${_tgBotToken}/sendMessage`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ chat_id: _tgChatId, text: msg, parse_mode: 'HTML' })
-            });
+            await sendTelegram(msg);
             console.log('[Daily Brief] Sent successfully!');
         } catch (e) { console.warn('[Daily Brief] Error:', e.message); }
     }

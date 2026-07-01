@@ -1488,6 +1488,20 @@ const SmartMoneyIntel = (() => {
                             value="${_tgCfg.chatId||''}">
                     </div>
                 </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+                    <div>
+                        <div style="font-size:11px;color:#475569;margin-bottom:5px">🤖 Topic ID — Signal &amp; Bot Alert</div>
+                        <input id="smiTgTopic" placeholder="2" class="smi-tg-input"
+                            value="${_tgCfg.topicId||'2'}">
+                        <div style="font-size:10px;color:#64748b;margin-top:3px">Whale signal, auto-trader, news</div>
+                    </div>
+                    <div>
+                        <div style="font-size:11px;color:#475569;margin-bottom:5px">💼 Topic ID — Wallet Tracker</div>
+                        <input id="smiTgWalletTopic" placeholder="294" class="smi-tg-input"
+                            value="${_tgCfg.walletTopicId||'294'}">
+                        <div style="font-size:10px;color:#64748b;margin-top:3px">Aktivitas wallet &amp; smart money</div>
+                    </div>
+                </div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
                     <button class="smi-btn-primary" style="background:linear-gradient(135deg,#0ea5e9,#0284c7)"
                         onclick="SmartMoneyIntel.testTg()">📤 Test Alert</button>
@@ -1713,6 +1727,77 @@ const SmartMoneyIntel = (() => {
             btn.textContent = '❌ Error';
         }
         setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000);
+    }
+
+    // ── Stub functions (referenced in HTML / export but defined elsewhere) ──
+    function openWalletDetail(addr, label) {
+        // Show wallet detail — minimal modal
+        const existing = document.getElementById('smiWalletModal');
+        if (existing) existing.remove();
+        const m = document.createElement('div');
+        m.id = 'smiWalletModal';
+        m.style.cssText = 'position:fixed;inset:0;z-index:9900;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center';
+        m.innerHTML = `<div style="background:#030b15;border:1px solid #1e293b;border-radius:14px;padding:24px;width:420px;max-width:90vw">
+            <div style="display:flex;justify-content:space-between;margin-bottom:14px">
+                <div style="font-size:14px;font-weight:800;color:#e2e8f0">🔍 ${label||addr.slice(0,8)+'…'}</div>
+                <button onclick="document.getElementById('smiWalletModal').remove()" style="background:none;border:none;color:#64748b;font-size:18px;cursor:pointer">✕</button>
+            </div>
+            <div style="font-size:10px;font-family:monospace;color:#475569;word-break:break-all;margin-bottom:14px">${addr}</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <a href="https://solscan.io/account/${addr}" target="_blank" style="background:#0f172a;border:1px solid #1e293b;color:#60a5fa;border-radius:6px;padding:6px 14px;font-size:11px;text-decoration:none">🔍 Solscan↗</a>
+                <a href="https://de.fi/scanner?address=${addr}" target="_blank" style="background:#0f172a;border:1px solid #1e293b;color:#a78bfa;border-radius:6px;padding:6px 14px;font-size:11px;text-decoration:none">🛡 DeFi Scanner↗</a>
+            </div>
+        </div>`;
+        m.addEventListener('click', e => { if (e.target === m) m.remove(); });
+        document.body.appendChild(m);
+    }
+    async function syncWalletMonitor() {
+        const st = document.getElementById('smiTgSt');
+        if (st) { st.textContent = 'Syncing…'; st.style.color='#94a3b8'; }
+        try {
+            const saved = _swLoad();
+            const r = await fetch(`${BASE}/api/whale-monitor/sync`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ wallets: saved }) });
+            const d = await r.json();
+            if (st) { st.textContent = d.ok ? '✅ Synced '+saved.length+' wallet' : '❌ Gagal sync'; st.style.color = d.ok?'#4ade80':'#f87171'; }
+        } catch(e) { if (st) { st.textContent = '❌ '+e.message; st.style.color='#f87171'; } }
+    }
+    function removeFromMonitor(addr) {
+        const saved = _swLoad().filter(w => w.addr !== addr);
+        _swSave(saved);
+        _swRefreshPanel('smiSavedList');
+    }
+
+    // ── Telegram Config Save / Test ───────────────────────────────
+    async function saveTg() {        const token  = (document.getElementById('smiTgToken')?.value || '').trim();
+        const chatId = (document.getElementById('smiTgChat')?.value  || '').trim();
+        const topicId = (document.getElementById('smiTgTopic')?.value || '2').trim();
+        const walletTopicId = (document.getElementById('smiTgWalletTopic')?.value || '294').trim();
+        const st     = document.getElementById('smiTgSt');
+        if (!chatId) { if (st) { st.textContent = '⚠ Chat ID wajib diisi'; st.style.color='#f87171'; } return; }
+        if (!topicId || !Number.isFinite(Number(topicId))) { if (st) { st.textContent = '⚠ Topic ID signal wajib angka'; st.style.color='#f87171'; } return; }
+        if (!walletTopicId || !Number.isFinite(Number(walletTopicId))) { if (st) { st.textContent = '⚠ Topic ID wallet wajib angka'; st.style.color='#f87171'; } return; }
+        if (st) { st.textContent = 'Menyimpan…'; st.style.color='#94a3b8'; }
+        try {
+            const body = { chatId, topicId, walletTopicId };
+            if (token) body.botToken = token;
+            const r = await fetch(`${BASE}/api/telegram-config`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+            const d = await r.json();
+            if (st) { st.textContent = d.ok ? '✅ Tersimpan' : ('❌ '+(d.error||'Gagal')); st.style.color = d.ok ? '#4ade80' : '#f87171'; }
+            if (d.ok) setTimeout(() => _smRenderAlerts && _smRenderAlerts(), 500);
+        } catch(e) {
+            if (st) { st.textContent = '❌ Error: '+e.message; st.style.color='#f87171'; }
+        }
+    }
+    async function testTg() {
+        const st = document.getElementById('smiTgSt');
+        if (st) { st.textContent = 'Mengirim test…'; st.style.color='#94a3b8'; }
+        try {
+            const r = await fetch(`${BASE}/api/telegram-test`, { method:'POST', headers:{'Content-Type':'application/json'}, body: '{}' });
+            const d = await r.json();
+            if (st) { st.textContent = d.ok ? '✅ Test terkirim!' : ('❌ '+(d.error||'Gagal')); st.style.color = d.ok ? '#4ade80' : '#f87171'; }
+        } catch(e) {
+            if (st) { st.textContent = '❌ '+e.message; st.style.color='#f87171'; }
+        }
     }
 
     // ── Public API ────────────────────────────────────────────────

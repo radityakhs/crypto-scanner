@@ -50,25 +50,30 @@ function calcGrade(winRate, total) {
 // ── Fetch harga terkini dari proxy ────────────────────────────────────────────
 function fetchPrice(coinSymbol) {
     return new Promise((resolve) => {
-        const instId = `${coinSymbol.toUpperCase()}-USDT`;
+        // Skip simbol non-ASCII (e.g. karakter Cina) — tidak ada di exchange
+        if (/[^\x00-\x7F]/.test(coinSymbol)) return resolve(null);
+        const instId  = `${coinSymbol.toUpperCase()}-USDT`;
         const options = {
             hostname: CFG.PROXY_HOST,
             port    : CFG.PROXY_PORT,
-            path    : `/api/v5/market/ticker?instId=${instId}`,
+            path    : `/api/v5/market/ticker?instId=${encodeURIComponent(instId)}`,
             method  : 'GET',
             timeout : CFG.PRICE_TIMEOUT,
         };
-        const req = http.request(options, (res) => {
-            let data = '';
-            res.on('data', chunk => data += chunk);
-            res.on('end', () => {
-                try {
-                    const json = JSON.parse(data);
-                    const price = parseFloat(json?.data?.[0]?.last);
-                    resolve(isNaN(price) ? null : price);
-                } catch { resolve(null); }
+        let req;
+        try {
+            req = http.request(options, (res) => {
+                let data = '';
+                res.on('data', chunk => data += chunk);
+                res.on('end', () => {
+                    try {
+                        const json  = JSON.parse(data);
+                        const price = parseFloat(json?.data?.[0]?.last);
+                        resolve(isNaN(price) ? null : price);
+                    } catch { resolve(null); }
+                });
             });
-        });
+        } catch { return resolve(null); }
         req.on('error',   () => resolve(null));
         req.on('timeout', () => { req.destroy(); resolve(null); });
         req.end();

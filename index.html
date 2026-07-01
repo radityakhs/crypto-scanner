@@ -1668,6 +1668,101 @@
                 </table>
             </div>
 
+            <!-- ══════════════════════════════════════════════════════════
+                 EXPERT CHART MODAL — MA/EMA/MACD + S/R + Elliott Wave
+            ══════════════════════════════════════════════════════════════ -->
+            <div id="expertChartModal" class="ec-modal-overlay" style="display:none" onclick="if(event.target===this)closeExpertChart()">
+                <div class="ec-modal">
+                    <div class="ec-header">
+                        <div class="ec-header-left">
+                            <span class="ec-header-icon">📊</span>
+                            <div>
+                                <div class="ec-header-title">
+                                    <span id="ecSymbolLabel">—</span>
+                                    <span class="ec-header-badge" id="ecTrendBadge">—</span>
+                                    <span class="ec-price-live" id="ecPriceLive">—</span>
+                                </div>
+                                <div class="ec-header-sub">Expert Chart · MA/EMA · MACD · Bollinger · S/R · Volume · Elliott Wave</div>
+                            </div>
+                        </div>
+                        <div class="ec-header-right">
+                            <div class="ec-tf-group">
+                                <button class="ec-tf-btn" data-tf="1m">1m</button>
+                                <button class="ec-tf-btn" data-tf="5m">5m</button>
+                                <button class="ec-tf-btn" data-tf="15m">15m</button>
+                                <button class="ec-tf-btn active" data-tf="1h">1h</button>
+                                <button class="ec-tf-btn" data-tf="4h">4h</button>
+                                <button class="ec-tf-btn" data-tf="1d">1d</button>
+                                <button class="ec-tf-btn" data-tf="1w">1w</button>
+                            </div>
+                            <div class="ec-ov-group">
+                                <button class="ec-ov-btn active" data-ec-ov="ma">MA</button>
+                                <button class="ec-ov-btn active" data-ec-ov="ema">EMA</button>
+                                <button class="ec-ov-btn active" data-ec-ov="bb">BB</button>
+                                <button class="ec-ov-btn active" data-ec-ov="sr">S/R</button>
+                                <button class="ec-ov-btn active" data-ec-ov="macd">MACD</button>
+                                <button class="ec-ov-btn active" data-ec-ov="vol">VOL</button>
+                                <button class="ec-ov-btn active" data-ec-ov="ew">EW</button>
+                            </div>
+                            <button class="ec-close-btn" onclick="closeExpertChart()">✕</button>
+                        </div>
+                    </div>
+
+                    <div class="ec-body">
+                        <div class="ec-chart-col">
+                            <div class="ec-main-chart-wrap">
+                                <canvas id="ecMainChart"></canvas>
+                                <div class="ec-chart-loading" id="ecChartLoading">
+                                    <span style="font-size:2.2rem">📊</span>
+                                    <span>Memuat data…</span>
+                                </div>
+                                <div class="ec-crosshair-tip" id="ecCrosshairTip" style="display:none"></div>
+                            </div>
+                            <div class="ec-vol-chart-wrap" id="ecVolWrap"><canvas id="ecVolChart"></canvas></div>
+                            <div class="ec-macd-chart-wrap" id="ecMacdWrap"><canvas id="ecMacdChart"></canvas></div>
+                        </div>
+
+                        <div class="ec-analysis-col">
+                            <div class="ec-indicator-card">
+                                <div class="ec-ind-title">📈 Indikator Aktif</div>
+                                <div class="ec-ind-grid">
+                                    <div class="ec-ind-row"><span class="ec-ind-lbl">MA20</span><span class="ec-ind-val" id="ecMA20">—</span></div>
+                                    <div class="ec-ind-row"><span class="ec-ind-lbl">MA50</span><span class="ec-ind-val" id="ecMA50">—</span></div>
+                                    <div class="ec-ind-row"><span class="ec-ind-lbl">MA200</span><span class="ec-ind-val" id="ecMA200">—</span></div>
+                                    <div class="ec-ind-row"><span class="ec-ind-lbl">EMA9</span><span class="ec-ind-val" id="ecEMA9">—</span></div>
+                                    <div class="ec-ind-row"><span class="ec-ind-lbl">EMA21</span><span class="ec-ind-val" id="ecEMA21">—</span></div>
+                                    <div class="ec-ind-row"><span class="ec-ind-lbl">BB Upper</span><span class="ec-ind-val" id="ecBBU">—</span></div>
+                                    <div class="ec-ind-row"><span class="ec-ind-lbl">BB Lower</span><span class="ec-ind-val" id="ecBBL">—</span></div>
+                                    <div class="ec-ind-row"><span class="ec-ind-lbl">RSI(14)</span><span class="ec-ind-val" id="ecRSI">—</span></div>
+                                    <div class="ec-ind-row"><span class="ec-ind-lbl">MACD</span><span class="ec-ind-val" id="ecMACDVal">—</span></div>
+                                    <div class="ec-ind-row"><span class="ec-ind-lbl">Signal</span><span class="ec-ind-val" id="ecMACDSig">—</span></div>
+                                    <div class="ec-ind-row"><span class="ec-ind-lbl">ATR(14)</span><span class="ec-ind-val" id="ecATRVal">—</span></div>
+                                    <div class="ec-ind-row"><span class="ec-ind-lbl">Elliott</span><span class="ec-ind-val" id="ecEWVal">—</span></div>
+                                </div>
+                            </div>
+
+                            <div class="ec-indicator-card">
+                                <div class="ec-ind-title">🎯 Support &amp; Resistance</div>
+                                <div id="ecSRList"></div>
+                            </div>
+
+                            <div class="ec-indicator-card">
+                                <div class="ec-ind-title">🧠 Analisa Timeframe: <span id="ecAnalysisTfLabel" style="color:#22d3ee;font-weight:700">1H</span></div>
+                                <div id="ecAnalysisText" class="ec-analysis-text">Pilih coin dan timeframe untuk melihat analisa.</div>
+                            </div>
+
+                            <div class="ec-rec-card" id="ecRecCard">
+                                <div class="ec-rec-badge" id="ecRecBadge">NEUTRAL</div>
+                                <div class="ec-rec-text" id="ecRecText">—</div>
+                                <div class="ec-rec-levels" id="ecRecLevels"></div>
+                                <div class="ec-rec-disclaimer">⚠ Bukan saran keuangan. Gunakan manajemen risiko.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- ══ END EXPERT CHART MODAL ══════════════════════════════ -->
+
             <!-- ── DEX CANDIDATES TABLE (ALL, INCLUDING PENDING) ── -->
             <div class="dex-table-wrap" style="margin-top:32px">
                 <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
@@ -3122,6 +3217,7 @@
                                 <button class="hcs-zoom-btn" id="hcsZoomOut"  title="Zoom out">－</button>
                                 <button class="hcs-zoom-btn" id="hcsZoomReset" title="Reset view">⌂</button>
                                 <div class="hcs-toolbar-sep"></div>
+                                <button class="hcs-dl-btn" id="hcsTelegramBtn" title="Send chart and analysis to Telegram">📤 Telegram</button>
                                 <button class="hcs-dl-btn" id="hcsDownloadBtn" title="Download chart as PNG">📷 Save</button>
                             </div>
                         </div>
@@ -3270,6 +3366,155 @@
                 </div>
 
             </div>
+
+            <!-- ══════════════════════════════════════════════════════════
+                 ELLIOTT WAVE ANALYSIS SECTION
+                 Impulse (1-5) · Correction (A-B-C) · Fibonacci · Projection
+            ══════════════════════════════════════════════════════════════ -->
+            <div class="hcs-ew-section" id="hcsEWSection" style="display:none">
+
+                <!-- Header -->
+                <div class="hcs-ew-header">
+                    <div class="hcs-ew-title-row">
+                        <div class="hcs-ew-title-icon">〽️</div>
+                        <div>
+                            <div class="hcs-ew-title">Elliott Wave Analysis</div>
+                            <div class="hcs-ew-subtitle">Impulse · Correction · Fibonacci Extension · Price Projection</div>
+                        </div>
+                        <div id="hcsEWCurrentWave" class="hcs-ew-current-badge">—</div>
+                    </div>
+                </div>
+
+                <!-- Phase Cards Row -->
+                <div class="hcs-ew-state-row">
+                    <div class="hcs-ew-state-card bull" id="hcsEWBullCard">
+                        <div class="hcs-ew-sc-label">🟢 BULLISH IMPULSE</div>
+                        <div class="hcs-ew-sc-sub">(Sebelumnya)</div>
+                        <div class="hcs-ew-sc-waves">
+                            <span class="hcs-ew-w bull" data-ew="b1">(1) Awal kebangkitan</span>
+                            <span class="hcs-ew-w bull" data-ew="b2">(2) Koreksi dalam</span>
+                            <span class="hcs-ew-w bull" data-ew="b3">(3) Wave terkuat 🔥</span>
+                            <span class="hcs-ew-w bull" data-ew="b4">(4) Cooling phase</span>
+                            <span class="hcs-ew-w bull" data-ew="b5">(5) Euphoria / Last push</span>
+                        </div>
+                    </div>
+                    <div class="hcs-ew-state-card bear" id="hcsEWBearCard">
+                        <div class="hcs-ew-sc-label">🔴 BEARISH IMPULSE</div>
+                        <div class="hcs-ew-sc-sub">(Saat Ini)</div>
+                        <div class="hcs-ew-sc-waves">
+                            <span class="hcs-ew-w bear" data-ew="d1">(1) Awal breakdown</span>
+                            <span class="hcs-ew-w bear" data-ew="d2">(2) Relief bounce</span>
+                            <span class="hcs-ew-w bear" data-ew="d3">(3) Panic sell (terkuat) 💥</span>
+                            <span class="hcs-ew-w bear" data-ew="d4">(4) Bear market rally</span>
+                            <span class="hcs-ew-w bear" data-ew="d5">(5) Capitulation (final low)</span>
+                        </div>
+                    </div>
+                    <div class="hcs-ew-state-card abc" id="hcsEWAbcCard">
+                        <div class="hcs-ew-sc-label">🟣 KOREKSI ABC</div>
+                        <div class="hcs-ew-sc-sub">(Setelah Wave 5)</div>
+                        <div class="hcs-ew-sc-waves">
+                            <span class="hcs-ew-w abc">(A) Shock awal</span>
+                            <span class="hcs-ew-w abc">(B) Trap / False hope</span>
+                            <span class="hcs-ew-w abc">(C) Pain move selesai ✅</span>
+                        </div>
+                        <div class="hcs-ew-abc-note">Setelah C → new impulse cycle</div>
+                    </div>
+                </div>
+
+                <!-- EW Chart Canvas -->
+                <div class="hcs-ew-chart-wrap">
+                    <canvas id="hcsEWChart"></canvas>
+                    <div class="hcs-ew-chart-overlay" id="hcsEWOverlay">
+                        <span style="font-size:2.2rem;line-height:1">〽️</span>
+                        <span style="color:#475569;font-size:.85rem;margin-top:8px">Jalankan scan untuk melihat Elliott Wave chart</span>
+                    </div>
+                </div>
+
+                <!-- Info Panels -->
+                <div class="hcs-ew-info-grid">
+
+                    <!-- Sifat Tiap Wave -->
+                    <div class="hcs-ew-info-card">
+                        <div class="hcs-ew-info-title">📊 Sifat Tiap Wave (Bearish)</div>
+                        <table class="hcs-ew-table">
+                            <thead>
+                                <tr><th>Wave</th><th>Pergerakan</th><th>Psikologi Pasar</th></tr>
+                            </thead>
+                            <tbody>
+                                <tr class="hcs-ew-tr hcs-ew-tr-1"><td>(1)</td><td>Awal breakdown</td><td>Masih dianggap koreksi biasa.</td></tr>
+                                <tr class="hcs-ew-tr hcs-ew-tr-2"><td>(2)</td><td>Relief bounce. Rebound sementara.</td><td>Banyak yang mengira bullish lanjut.</td></tr>
+                                <tr class="hcs-ew-tr hcs-ew-tr-3"><td>(3)</td><td>Dump cepat &amp; agresif. Smart money jual.</td><td>Fear, liquidation, support jebol.</td></tr>
+                                <tr class="hcs-ew-tr hcs-ew-tr-4"><td>(4)</td><td>Naik choppy / sideways.</td><td>Banyak trader ketipu reversal.</td></tr>
+                                <tr class="hcs-ew-tr hcs-ew-tr-5"><td>(5)</td><td>Panik ekstrem, semua menyerah.</td><td>Sering muncul bullish divergence.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Psikologi + Current Position -->
+                    <div class="hcs-ew-info-card">
+                        <div class="hcs-ew-info-title">🧠 Psikologi Bearish Wave</div>
+                        <table class="hcs-ew-table psych">
+                            <thead>
+                                <tr><th>Wave</th><th>Psikologi Trader</th></tr>
+                            </thead>
+                            <tbody>
+                                <tr class="hcs-ew-tr hcs-ew-tr-1"><td>(1)</td><td><span class="hcs-ew-psych-pill p1">Denial</span></td></tr>
+                                <tr class="hcs-ew-tr hcs-ew-tr-2"><td>(2)</td><td><span class="hcs-ew-psych-pill p2">Hope</span></td></tr>
+                                <tr class="hcs-ew-tr hcs-ew-tr-3"><td>(3)</td><td><span class="hcs-ew-psych-pill p3">Fear &amp; Panic</span></td></tr>
+                                <tr class="hcs-ew-tr hcs-ew-tr-4"><td>(4)</td><td><span class="hcs-ew-psych-pill p4">False Recovery</span></td></tr>
+                                <tr class="hcs-ew-tr hcs-ew-tr-5"><td>(5)</td><td><span class="hcs-ew-psych-pill p5">Capitulation</span></td></tr>
+                            </tbody>
+                        </table>
+                        <div class="hcs-ew-pos-box" id="hcsEWPosBox">
+                            <div class="hcs-ew-pos-label">📍 Posisi Estimasi Saat Ini</div>
+                            <div class="hcs-ew-pos-content" id="hcsEWPosContent">Scan untuk melihat posisi wave</div>
+                        </div>
+                    </div>
+
+                    <!-- Aturan Penting -->
+                    <div class="hcs-ew-info-card rules">
+                        <div class="hcs-ew-info-title">⚠️ Aturan Penting Elliott Wave</div>
+                        <ul class="hcs-ew-rules-list">
+                            <li><span class="hcs-ew-rule-tag">W2</span> tidak boleh retrace &gt; 100% Wave 1</li>
+                            <li><span class="hcs-ew-rule-tag">W3</span> tidak boleh menjadi wave terpendek</li>
+                            <li><span class="hcs-ew-rule-tag">W4</span> tidak boleh overlap area Wave 1</li>
+                            <li><span class="hcs-ew-rule-tag">W5</span> sering berakhir di area support kuat</li>
+                            <li><span class="hcs-ew-rule-tag">ABC</span> Setelah Wave 5 → biasanya koreksi ABC</li>
+                        </ul>
+                        <div class="hcs-ew-legend-mini">
+                            <div class="hcs-ew-leg-item"><span class="hcs-ew-leg-box bull-box"></span>Area Resistance / Supply</div>
+                            <div class="hcs-ew-leg-item"><span class="hcs-ew-leg-box bear-box"></span>Target Wave 5 (Support Kuat)</div>
+                            <div class="hcs-ew-leg-item"><span class="hcs-ew-leg-box fib-box"></span>Fibonacci Extension 1.618 – 2.0</div>
+                            <div class="hcs-ew-leg-item"><span class="hcs-ew-leg-box proj-box"></span>Proyeksi Koreksi ABC</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Fibonacci Levels Grid -->
+                <div class="hcs-ew-fib-section">
+                    <div class="hcs-ew-fib-header">
+                        <span class="hcs-ew-fib-title">📐 Fibonacci Retracement &amp; Extension Levels</span>
+                        <span class="hcs-ew-fib-sub" id="hcsEWFibRange">Wave Range: —</span>
+                    </div>
+                    <div class="hcs-ew-fib-grid">
+                        <div class="hcs-ew-fib-item ret"><span class="hcs-ew-fib-lvl">0%</span><span class="hcs-ew-fib-price" id="ewFib0">—</span><span class="hcs-ew-fib-tag">Base</span></div>
+                        <div class="hcs-ew-fib-item ret"><span class="hcs-ew-fib-lvl">23.6%</span><span class="hcs-ew-fib-price" id="ewFib236">—</span><span class="hcs-ew-fib-tag">Minor</span></div>
+                        <div class="hcs-ew-fib-item ret hot"><span class="hcs-ew-fib-lvl">38.2%</span><span class="hcs-ew-fib-price" id="ewFib382">—</span><span class="hcs-ew-fib-tag">W2 zone</span></div>
+                        <div class="hcs-ew-fib-item ret hot"><span class="hcs-ew-fib-lvl">50%</span><span class="hcs-ew-fib-price" id="ewFib500">—</span><span class="hcs-ew-fib-tag">Mid</span></div>
+                        <div class="hcs-ew-fib-item ret hot"><span class="hcs-ew-fib-lvl">61.8%</span><span class="hcs-ew-fib-price" id="ewFib618">—</span><span class="hcs-ew-fib-tag">Golden</span></div>
+                        <div class="hcs-ew-fib-item ret"><span class="hcs-ew-fib-lvl">78.6%</span><span class="hcs-ew-fib-price" id="ewFib786">—</span><span class="hcs-ew-fib-tag">Deep</span></div>
+                        <div class="hcs-ew-fib-item ret"><span class="hcs-ew-fib-lvl">100%</span><span class="hcs-ew-fib-price" id="ewFib100">—</span><span class="hcs-ew-fib-tag">Full</span></div>
+                        <div class="hcs-ew-fib-item ext"><span class="hcs-ew-fib-lvl">127.2%</span><span class="hcs-ew-fib-price" id="ewFib1272">—</span><span class="hcs-ew-fib-tag">Ext</span></div>
+                        <div class="hcs-ew-fib-item ext hot"><span class="hcs-ew-fib-lvl">161.8%</span><span class="hcs-ew-fib-price" id="ewFib1618">—</span><span class="hcs-ew-fib-tag">W3 target</span></div>
+                        <div class="hcs-ew-fib-item ext hot"><span class="hcs-ew-fib-lvl">200%</span><span class="hcs-ew-fib-price" id="ewFib200">—</span><span class="hcs-ew-fib-tag">W5 target</span></div>
+                        <div class="hcs-ew-fib-item ext"><span class="hcs-ew-fib-lvl">261.8%</span><span class="hcs-ew-fib-price" id="ewFib2618">—</span><span class="hcs-ew-fib-tag">Extreme</span></div>
+                    </div>
+                </div>
+
+            </div>
+            <!-- ══ END ELLIOTT WAVE ══════════════════════════════════ -->
+
+        </div>
         </div>
         <!-- ═══ END HOLLOWCAT SCAN ════════════════════════════ -->
 
@@ -5466,8 +5711,8 @@
 
     <!-- External Scripts -->
     <script src="analysis-utils.js"></script>
-    <script src="app.js"></script>
-    <script src="smart-money-intel.js"></script>
+    <script src="app.js?v=2"></script>
+    <script src="smart-money-intel.js?v=3"></script>
     <script src="advanced-analysis.js"></script>
     <script src="liquidity-heatmap.js"></script>
     <script src="ai-market-expert.js"></script>
@@ -5493,6 +5738,7 @@
     <script src="auto-trader-ui.js"></script>
     <script src="dex-hunter-ui.js"></script>
     <script src="dex-forensics.js"></script>
+    <script src="wallet-tracker-ui.js?v=3"></script>
     <script src="wallet-graph.js"></script>
     <script src="ecosystem-pump.js"></script>
     <script src="whale-accumulation.js"></script>
@@ -11187,6 +11433,14 @@ ${rnd(CAT_OUTROS)}`,
                 if (lb) lb.textContent = '● LIVE';
                 // MTF Analysis (async background)
                 fetchMtfAnalysis(sym, tf);
+                // Elliott Wave Analysis — isolated try/catch agar tidak merusak scan utama
+                try {
+                    const ewData = detectElliottWaves(candles, swings);
+                    renderEWInfoPanels(ewData, candles);
+                    setTimeout(() => renderEWChart(candles, ewData), 80);
+                } catch(ewErr) {
+                    console.warn('[HCS] EW analysis error (non-fatal):', ewErr.message);
+                }
 
             } catch(e) {
                 console.error('[HCS] scan error', e);
@@ -11632,6 +11886,30 @@ ${rnd(CAT_OUTROS)}`,
             });
         }
 
+        async function sendChartTelegram() {
+            const btn = document.getElementById('hcsTelegramBtn');
+            const sym = (document.getElementById('hcsSymbolInput')?.value || _sym || 'BTCUSDT').trim().toUpperCase();
+            const tf = _tf || '1h';
+            if (btn) { btn.disabled = true; btn.textContent = '⏳ Sending…'; }
+            try {
+                const r = await fetch('http://127.0.0.1:3001/api/hollowcat-telegram', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ symbol: sym, interval: tf }),
+                });
+                const d = await r.json();
+                if (!d.ok) throw new Error(d.error || d.message || 'Gagal kirim Telegram');
+                if (btn) btn.textContent = d.skipped ? '⏭ Sent Before' : '✅ Sent';
+            } catch (e) {
+                if (btn) btn.textContent = '❌ Failed';
+                console.warn('[HollowCat] Telegram send failed:', e.message);
+            } finally {
+                setTimeout(() => {
+                    if (btn) { btn.disabled = false; btn.textContent = '📤 Telegram'; }
+                }, 2500);
+            }
+        }
+
         /* ── UI binding ─────────────────────────────────────────────────────── */
         function bindEvents() {
             const btn = document.getElementById('hcsScanBtn');
@@ -11656,6 +11934,8 @@ ${rnd(CAT_OUTROS)}`,
             if (inp) inp.addEventListener('keydown', e => { if (e.key==='Enter') { e.preventDefault(); scan(inp.value.trim()||_sym, _tf); } });
             const dlBtn = document.getElementById('hcsDownloadBtn');
             if (dlBtn) dlBtn.addEventListener('click', downloadChart);
+            const tgBtn = document.getElementById('hcsTelegramBtn');
+            if (tgBtn) tgBtn.addEventListener('click', sendChartTelegram);
 
             // Tweet actions
             const copyBtn  = document.getElementById('hcsTweetCopyBtn');
@@ -11721,7 +12001,689 @@ ${rnd(CAT_OUTROS)}`,
             }
         });
 
-        return { init, scan };
+        /* ══════════════════════════════════════════════════════════════════
+           ███████╗██╗     ██╗     ██╗ ██████╗ ████████╗████████╗
+           ██╔════╝██║     ██║     ██║██╔═══██╗╚══██╔══╝╚══██╔══╝
+           █████╗  ██║     ██║     ██║██║   ██║   ██║      ██║
+           ██╔══╝  ██║     ██║     ██║██║   ██║   ██║      ██║
+           ███████╗███████╗███████╗██║╚██████╔╝   ██║      ██║
+            WAVE   ENGINE · Detect Impulse + ABC · Fibonacci
+        ══════════════════════════════════════════════════════════════════ */
+
+        /* ── Build alternating pivot list (H-L-H-L…)
+           minIdx: filter out pivots older than this index (recency guard)
+        ─────────────────────────────────────────────────────────────────── */
+        function buildAlternatingPivots(swings, lookback, minIdx) {
+            const lb  = lookback || 25;
+            const min = (minIdx != null) ? minIdx : 0;
+            const rawH = (swings.highs || [])
+                .filter(h => h.idx >= min).slice(-lb)
+                .map(h => ({type:'high', price:h.price, idx:h.idx}));
+            const rawL = (swings.lows  || [])
+                .filter(l => l.idx >= min).slice(-lb)
+                .map(l => ({type:'low',  price:l.price, idx:l.idx}));
+            const all = [...rawH, ...rawL].sort((a,b) => a.idx - b.idx);
+            const alt = [];
+            for (const p of all) {
+                if (!alt.length) { alt.push(p); continue; }
+                const prev = alt[alt.length-1];
+                if (prev.type === p.type) {
+                    if (p.type==='high' && p.price >= prev.price) alt[alt.length-1] = p;
+                    if (p.type==='low'  && p.price <= prev.price) alt[alt.length-1] = p;
+                } else {
+                    alt.push(p);
+                }
+            }
+            return alt;
+        }
+
+        /* ── Try to fit a bullish impulse from a starting low ──────── */
+        function tryFitBullish5(pivots, startIdx) {
+            const seq = ['low','high','low','high','low','high'];
+            const pts = [];
+            let pi = startIdx;
+            for (const t of seq) {
+                while (pi < pivots.length && pivots[pi].type !== t) pi++;
+                if (pi >= pivots.length) break;
+                pts.push(pivots[pi]); pi++;
+            }
+            if (pts.length < 3) return null;
+            const [L0,H1,L2,H3,L4,H5] = pts;
+            let score = 30;
+            if (H1 && L2 && L0) {
+                const w1 = H1.price - L0.price;
+                const w2 = H1.price - L2.price;
+                if (w1 <= 0 || w2 >= w1) return null;
+                score += (w2/w1 >= 0.382 && w2/w1 <= 0.786) ? 30 : 8;
+            }
+            if (H3 && L2 && H1 && L0) {
+                const w1 = H1.price - L0.price;
+                const w3 = H3.price - L2.price;
+                if (w3 < 0) return null;
+                score += w3 > w1 ? 20 : w3 < w1*0.5 ? -15 : 5;
+            }
+            if (L4 && H1) score += L4.price <= H1.price ? -30 : 15;
+            if (H5 && H3) score += H5.price > H3.price ? 10 : 0;
+            return { trend:'bullish', points:pts, completedWaves:pts.length-1, score };
+        }
+
+        /* ── Try to fit a bearish impulse from a starting high ──────── */
+        function tryFitBearish5(pivots, startIdx) {
+            const seq = ['high','low','high','low','high','low'];
+            const pts = [];
+            let pi = startIdx;
+            for (const t of seq) {
+                while (pi < pivots.length && pivots[pi].type !== t) pi++;
+                if (pi >= pivots.length) break;
+                pts.push(pivots[pi]); pi++;
+            }
+            if (pts.length < 3) return null;
+            const [H0,L1,H2,L3,H4,L5] = pts;
+            let score = 30;
+            if (H0 && L1 && H2) {
+                const w1 = H0.price - L1.price;
+                const w2 = H2.price - L1.price;
+                if (w1 <= 0 || w2 >= w1) return null;
+                score += (w2/w1 >= 0.382 && w2/w1 <= 0.786) ? 30 : 8;
+            }
+            if (L3 && H2 && H0 && L1) {
+                const w1 = H0.price - L1.price;
+                const w3 = H2.price - L3.price;
+                if (w3 < 0) return null;
+                score += w3 > w1 ? 20 : w3 < w1*0.5 ? -15 : 5;
+            }
+            if (H4 && L1) score += H4.price >= L1.price ? -30 : 15;
+            if (L5 && L3) score += L5.price < L3.price ? 10 : 0;
+            return { trend:'bearish', points:pts, completedWaves:pts.length-1, score };
+        }
+
+        /* ── Compute fibonacci levels from a price range ─────────────── */
+        function computeEWFib(low, high, inverted) {
+            const range = (high - low) || 1;
+            const base  = inverted ? high : low;
+            const dir   = inverted ? -1   : 1;
+            const levels = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0, 1.272, 1.618, 2.0, 2.618];
+            const out = {};
+            levels.forEach(l => { out[l] = base + dir * range * l; });
+            return out;
+        }
+
+        /* ── ATR helper ──────────────────────────────────────────────── */
+        function ewATR(candles, period) {
+            const s = candles.slice(-period);
+            let sum = 0;
+            for (let i=1; i<s.length; i++) {
+                sum += Math.max(s[i].high-s[i].low,
+                    Math.abs(s[i].high-s[i-1].close),
+                    Math.abs(s[i].low-s[i-1].close));
+            }
+            return sum / (s.length-1 || 1);
+        }
+
+        /* ── Build ABC correction projection after Wave 5 ────────────── */
+        function buildABCProj(w5pt, trend, atr, totalLen) {
+            const dir = trend==='bearish' ? 1 : -1;
+            const A = { idx: totalLen+6,  price: w5pt.price + dir*atr*2.8 };
+            const B = { idx: totalLen+11, price: A.price   - dir*atr*1.4 };
+            const C = { idx: totalLen+18, price: B.price   + dir*atr*3.2 };
+            return { w5:w5pt, A, B, C };
+        }
+
+        /* ── Main EW detection — works for ALL coins ─────────────────── */
+        function detectElliottWaves(candles, swings) {
+            if (!candles || candles.length < 10) return buildFallbackEW(candles, null, null);
+            if (!swings)                          return buildFallbackEW(candles, null, null);
+
+            // Use only pivots within the LAST 100 candles → always on-screen
+            const minIdx = Math.max(0, candles.length - 100);
+            let pivots = buildAlternatingPivots(swings, 30, minIdx);
+
+            // Not enough? Try more sensitive detection
+            if (pivots.length < 4) {
+                const s2 = detectSwings(candles, 2);
+                pivots = buildAlternatingPivots(s2, 30, minIdx);
+            }
+            // Still short? Widen window to last 150
+            if (pivots.length < 4) {
+                const minIdx2 = Math.max(0, candles.length - 150);
+                pivots = buildAlternatingPivots(swings, 40, minIdx2);
+            }
+
+            if (pivots.length < 3) return buildFallbackEW(candles, swings, null);
+            return fitBestEW(candles, pivots, swings);
+        }
+
+        function fitBestEW(candles, pivots, swings) {
+            let best = null, bestScore = -Infinity;
+            const recent = pivots.slice(-20);
+
+            for (let si = 0; si < recent.length - 2; si++) {
+                const p = recent[si];
+                const r = p.type==='low'
+                    ? tryFitBullish5(recent, si)
+                    : tryFitBearish5(recent, si);
+                if (r && r.score > bestScore) { bestScore = r.score; best = r; }
+            }
+
+            if (!best || bestScore < 15) return buildFallbackEW(candles, swings, pivots);
+
+            const pts    = best.points;
+            const prices = pts.map(p => p.price);
+            const pMin   = Math.min(...prices);
+            const pMax   = Math.max(...prices);
+            const isBull = best.trend === 'bullish';
+            const fibLevels = computeEWFib(pMin, pMax, isBull);
+
+            const atr = ewATR(candles, 14);
+            let abcProjection = null;
+            if (best.completedWaves >= 5) {
+                abcProjection = buildABCProj(pts[pts.length-1], best.trend, atr, candles.length);
+            }
+
+            const waveNum    = best.completedWaves;
+            const trendLabel = isBull ? '▲ BULLISH' : '▼ BEARISH';
+            const waveLabel  = waveNum >= 5
+                ? (isBull ? '▲ Koreksi ABC' : '▼ Koreksi ABC')
+                : `${trendLabel} · Wave ${waveNum} of 5`;
+
+            return {
+                trend: best.trend, currentWave: waveLabel,
+                completedWaves: waveNum, points: pts,
+                fibLevels, abcProjection,
+                inABC: waveNum >= 5, score: bestScore, pMin, pMax, isFallback: false
+            };
+        }
+
+        /* ── Fallback — lugas: ambil swing terbaru sebagai wave points ── */
+        function buildFallbackEW(candles, swings, pivots) {
+            if (!candles || !candles.length) return null;
+            const LOOK   = 80;
+            const offset = Math.max(0, candles.length - LOOK);
+            const slice  = candles.slice(-LOOK);
+            const hi     = slice.reduce((m,c) => Math.max(m,c.high), -Infinity);
+            const lo     = slice.reduce((m,c) => Math.min(m,c.low),   Infinity);
+            const last   = candles[candles.length-1].close;
+            const trend  = last > (hi+lo)/2 ? 'bullish' : 'bearish';
+
+            // Build synthetic wave points from available data
+            const synPts = [];
+            if (pivots && pivots.length >= 2) {
+                pivots.slice(-5).forEach(p => synPts.push({idx:p.idx, price:p.price, approx:true}));
+            } else if (swings) {
+                const rH = (swings.highs||[]).filter(h=>h.idx>=offset).slice(-3);
+                const rL = (swings.lows ||[]).filter(l=>l.idx>=offset).slice(-3);
+                [...rH.map(h=>({...h,type:'high'})), ...rL.map(l=>({...l,type:'low'}))]
+                    .sort((a,b)=>a.idx-b.idx).slice(-5)
+                    .forEach(p => synPts.push({idx:p.idx, price:p.price, approx:true}));
+            }
+
+            // Guarantee at least 2 points: range high and range low
+            if (synPts.length < 2) {
+                let hiIdx = offset, loIdx = offset;
+                slice.forEach((c,i) => {
+                    if (c.high >= slice[hiIdx-offset]?.high || i===0) hiIdx = offset+i;
+                    if (c.low  <= slice[loIdx-offset]?.low  || i===0) loIdx = offset+i;
+                });
+                synPts.push({idx: loIdx, price: lo, approx: true});
+                synPts.push({idx: hiIdx, price: hi, approx: true});
+            }
+            synPts.sort((a,b)=>a.idx-b.idx);
+
+            return {
+                trend, isFallback: true,
+                currentWave: trend==='bullish' ? '▲ Trend Naik (Estimasi)' : '▼ Trend Turun (Estimasi)',
+                completedWaves: Math.min(synPts.length - 1, 3),
+                points: synPts,
+                fibLevels: computeEWFib(lo, hi, trend==='bullish'),
+                abcProjection: null, inABC: false, pMin: lo, pMax: hi
+            };
+        }
+
+        /* ══════════════════════════════════════════════════════════════════
+           ELLIOTT WAVE CHART RENDERER — Full canvas rendering
+        ══════════════════════════════════════════════════════════════════ */
+        function renderEWChart(candles, ew) {
+            const canvas = document.getElementById('hcsEWChart');
+            const overlay = document.getElementById('hcsEWOverlay');
+            if (!canvas) return;
+            if (!ew || !candles || candles.length < 5) {
+                if (overlay) overlay.style.display = 'flex';
+                return;
+            }
+            if (overlay) overlay.style.display = 'none';
+
+            const ctx = canvas.getContext('2d');
+            const DPR = window.devicePixelRatio || 1;
+            const W   = canvas.offsetWidth  || 1000;
+            const H   = 500;
+            canvas.width  = W * DPR;
+            canvas.height = H * DPR;
+            ctx.scale(DPR, DPR);
+
+            // Candles to display — extend SHOW to include the earliest wave point
+            let SHOW = Math.min(candles.length, 130);
+            if (ew.points && ew.points.length > 0) {
+                const earliestWaveIdx = Math.min(...ew.points.map(p => p.idx));
+                const neededShow = candles.length - earliestWaveIdx + 5;
+                SHOW = Math.min(candles.length, Math.max(SHOW, neededShow, 80));
+            }
+            const cvs   = candles.slice(-SHOW);
+            const PROJ_SLOTS = ew.abcProjection ? 22 : 10;
+            const TOTAL = cvs.length + PROJ_SLOTS;
+            const PAD   = { top:52, right:88, bottom:46, left:6 };
+            const cW    = W - PAD.left - PAD.right;
+            const cH    = H - PAD.top  - PAD.bottom;
+            const slotW = cW / TOTAL;
+            const barW  = Math.max(1.5, slotW * 0.72);
+
+            // Price range
+            let pMin=Infinity, pMax=-Infinity;
+            cvs.forEach(c => { pMax=Math.max(pMax,c.high); pMin=Math.min(pMin,c.low); });
+            if (ew.points && ew.points.length) {
+                ew.points.forEach(p => { pMax=Math.max(pMax,p.price); pMin=Math.min(pMin,p.price); });
+            }
+            if (ew.abcProjection) {
+                const abc = ew.abcProjection;
+                [abc.A,abc.B,abc.C].forEach(p=>{ pMax=Math.max(pMax,p.price); pMin=Math.min(pMin,p.price); });
+            }
+            // Include key fib levels
+            if (ew.fibLevels) {
+                [ew.fibLevels[1.618], ew.fibLevels[2.0]].forEach(p => {
+                    if (p && isFinite(p)) { pMax=Math.max(pMax,p); pMin=Math.min(pMin,p); }
+                });
+            }
+            const padPct = (pMax-pMin)*0.1;
+            pMax += padPct; pMin -= padPct;
+            const pRange = pMax-pMin||1;
+
+            const pxX = i => PAD.left + (i+0.5)*slotW;
+            const pxY = p => PAD.top + cH - ((p-pMin)/pRange)*cH;
+            const cToI = idx => idx - (candles.length - SHOW);
+
+            // ── Background gradient ──────────────────────────────────
+            const bg = ctx.createLinearGradient(0,0,0,H);
+            bg.addColorStop(0, '#030611');
+            bg.addColorStop(0.6, '#060a16');
+            bg.addColorStop(1, '#090d1e');
+            ctx.fillStyle = bg;
+            ctx.fillRect(0,0,W,H);
+
+            // Subtle star-like dots
+            ctx.fillStyle = 'rgba(255,255,255,0.014)';
+            for (let gx=20; gx<W; gx+=28) for (let gy=20; gy<H; gy+=28) {
+                ctx.beginPath(); ctx.arc(gx,gy,0.9,0,Math.PI*2); ctx.fill();
+            }
+
+            // ── Price grid & labels ─────────────────────────────────
+            const GN = 8;
+            for (let i=0; i<=GN; i++) {
+                const p = pMin + (pRange/GN)*i;
+                const y = pxY(p);
+                ctx.strokeStyle = 'rgba(255,255,255,0.03)'; ctx.lineWidth=1; ctx.setLineDash([]);
+                ctx.beginPath(); ctx.moveTo(PAD.left,y); ctx.lineTo(W-PAD.right,y); ctx.stroke();
+                ctx.fillStyle='#334155'; ctx.font='10px monospace'; ctx.textAlign='left';
+                ctx.fillText('$'+fmtP(p), W-PAD.right+4, y+4);
+            }
+
+            // ── Time labels ─────────────────────────────────────────
+            const tStep = Math.max(1, Math.floor(cvs.length/8));
+            cvs.forEach((c,i) => {
+                if (i%tStep===0) {
+                    ctx.fillStyle='#2d3a4a'; ctx.font='9px monospace'; ctx.textAlign='center';
+                    ctx.fillText(fmtTime(c.time,_tf), pxX(i), H-PAD.bottom+14);
+                }
+            });
+
+            // ── Wave zone backgrounds ───────────────────────────────
+            if (ew.points && ew.points.length >= 2) {
+                const isBull = ew.trend==='bullish';
+                const waveZoneColors = [
+                    isBull?'rgba(74,222,128,0.055)' :'rgba(248,113,113,0.055)',  // W1
+                    isBull?'rgba(34,211,238,0.04)'  :'rgba(34,211,238,0.04)',    // W2
+                    isBull?'rgba(74,222,128,0.11)'  :'rgba(248,113,113,0.11)',   // W3 (stronger)
+                    isBull?'rgba(167,139,250,0.04)' :'rgba(167,139,250,0.04)',   // W4
+                    isBull?'rgba(74,222,128,0.065)' :'rgba(248,113,113,0.065)', // W5
+                ];
+                const offset = candles.length - SHOW;
+                ew.points.forEach((p0, wi) => {
+                    if (wi >= ew.points.length-1) return;
+                    const p1 = ew.points[wi+1];
+                    const i0 = cToI(p0.idx), i1 = cToI(p1.idx);
+                    if (i1 < 0) return;
+                    const x0 = pxX(Math.max(0,i0));
+                    const x1 = pxX(Math.min(cvs.length-1,i1));
+                    if (x1<=x0) return;
+                    ctx.fillStyle = waveZoneColors[wi] || 'rgba(255,255,255,0.02)';
+                    ctx.fillRect(x0, PAD.top, x1-x0, cH);
+                    // Thin vertical separator
+                    ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth=1; ctx.setLineDash([2,4]);
+                    ctx.beginPath(); ctx.moveTo(x1,PAD.top); ctx.lineTo(x1,PAD.top+cH); ctx.stroke();
+                    ctx.setLineDash([]);
+                });
+            }
+
+            // ── Fibonacci lines ─────────────────────────────────────
+            const FIB_DEFS = [
+                {k:0.382, col:'rgba(34,211,238,0.3)',  w:1,   d:[4,5],  lbl:'38.2%'},
+                {k:0.5,   col:'rgba(34,211,238,0.4)',  w:1.2, d:[6,4],  lbl:'50.0%'},
+                {k:0.618, col:'rgba(34,211,238,0.55)', w:1.4, d:[6,3],  lbl:'61.8% ★'},
+                {k:0.786, col:'rgba(34,211,238,0.2)',  w:0.8, d:[3,6],  lbl:'78.6%'},
+                {k:1.618, col:'rgba(167,139,250,0.65)',w:1.8, d:[9,4],  lbl:'161.8%'},
+                {k:2.0,   col:'rgba(167,139,250,0.5)', w:1.4, d:[7,5],  lbl:'200.0%'},
+            ];
+            if (ew.fibLevels) {
+                FIB_DEFS.forEach(fd => {
+                    const price = ew.fibLevels[fd.k];
+                    if (!price || price<pMin || price>pMax) return;
+                    const y = pxY(price);
+                    ctx.strokeStyle=fd.col; ctx.lineWidth=fd.w; ctx.setLineDash(fd.d);
+                    ctx.beginPath(); ctx.moveTo(PAD.left,y); ctx.lineTo(W-PAD.right,y); ctx.stroke();
+                    ctx.setLineDash([]);
+                    ctx.fillStyle=fd.col.replace(/[\d.]+\)$/,'0.9)');
+                    ctx.font='bold 8px monospace'; ctx.textAlign='right';
+                    ctx.fillText(fd.lbl+' $'+fmtP(price), W-PAD.right-2, y-3);
+                });
+            }
+
+            // ── Candlesticks ────────────────────────────────────────
+            cvs.forEach((c,i) => {
+                const x = pxX(i);
+                const isBull = c.close>=c.open;
+                const bTop = pxY(Math.max(c.open,c.close));
+                const bBot = pxY(Math.min(c.open,c.close));
+                const bH   = Math.max(1.5, bBot-bTop);
+                ctx.strokeStyle = isBull?'rgba(74,222,128,0.75)':'rgba(248,113,113,0.75)';
+                ctx.lineWidth=1; ctx.beginPath();
+                ctx.moveTo(x,pxY(c.high)); ctx.lineTo(x,pxY(c.low)); ctx.stroke();
+                const g = ctx.createLinearGradient(0,bTop,0,bBot);
+                if (isBull) { g.addColorStop(0,'rgba(74,222,128,0.9)'); g.addColorStop(1,'rgba(74,222,128,0.5)'); }
+                else        { g.addColorStop(0,'rgba(248,113,113,0.5)'); g.addColorStop(1,'rgba(248,113,113,0.9)'); }
+                ctx.fillStyle=g;
+                if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(x-barW/2,bTop,barW,bH,1); ctx.fill(); }
+                else { ctx.fillRect(x-barW/2,bTop,barW,bH); }
+            });
+
+            // ── Current price line ───────────────────────────────────
+            const lastC = cvs[cvs.length-1];
+            const priceY = pxY(lastC.close);
+            const isCurBull = lastC.close>=lastC.open;
+            ctx.strokeStyle=isCurBull?'rgba(74,222,128,0.45)':'rgba(248,113,113,0.45)';
+            ctx.lineWidth=1; ctx.setLineDash([2,3]);
+            ctx.beginPath(); ctx.moveTo(PAD.left,priceY); ctx.lineTo(W-PAD.right,priceY); ctx.stroke();
+            ctx.setLineDash([]);
+            // Price pill
+            const pillColor = isCurBull?'#4ade80':'#f87171';
+            ctx.fillStyle = pillColor;
+            if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(W-PAD.right+2,priceY-10,82,20,4); ctx.fill(); }
+            else ctx.fillRect(W-PAD.right+2,priceY-10,82,20);
+            ctx.fillStyle='#030611'; ctx.font='bold 10px monospace'; ctx.textAlign='left';
+            ctx.fillText('$'+fmtP(lastC.close), W-PAD.right+6, priceY+4);
+
+            // ── Elliott Wave connecting lines ────────────────────────
+            if (ew.points && ew.points.length >= 2) {
+                const isBull = ew.trend==='bullish';
+                const lineClr = isBull ? '#4ade80' : '#f87171';
+
+                // Main wave path — dashed if fallback/approx
+                const isFallback = ew.isFallback || false;
+                ctx.strokeStyle = lineClr; ctx.lineWidth = isFallback ? 1.6 : 2.2;
+                ctx.setLineDash(isFallback ? [6,4] : []);
+                ctx.beginPath();
+                let started = false;
+                ew.points.forEach((p) => {
+                    const xi = cToI(p.idx);
+                    const x  = pxX(Math.max(0, Math.min(cvs.length-1, xi)));
+                    const y  = pxY(p.price);
+                    if (!started) { ctx.moveTo(x,y); started=true; } else ctx.lineTo(x,y);
+                });
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                // Wave point circles + labels
+                const CIRCLE_R = isFallback ? 10 : 13;
+                const wColors  = ['','#f59e0b','#22d3ee','#f87171','#a78bfa','#4ade80'];
+                const bullLabels = ['','Awal naik','Koreksi','Wave terkuat🔥','Cooling','Euphoria'];
+                const bearLabels = ['','Breakdown','Bounce','Panic sell💥','Rally','Capitulation'];
+
+                ew.points.forEach((p, wi) => {
+                    if (wi === 0) return;
+                    const xi = cToI(p.idx);
+                    const x  = pxX(Math.max(0, Math.min(cvs.length-1, xi)));
+                    const y  = pxY(p.price);
+                    const isHigh  = (isBull && wi%2===1) || (!isBull && wi%2===0);
+                    const tipOff  = isHigh ? -(CIRCLE_R+20) : (CIRCLE_R+20);
+                    const clr     = wColors[wi] || '#94a3b8';
+
+                    // Outer glow
+                    ctx.beginPath(); ctx.arc(x,y,CIRCLE_R+4,0,Math.PI*2);
+                    ctx.strokeStyle = clr+'44'; ctx.lineWidth=1.5; ctx.stroke();
+
+                    // Circle body
+                    ctx.beginPath(); ctx.arc(x,y,CIRCLE_R,0,Math.PI*2);
+                    ctx.fillStyle = 'rgba(6,10,22,0.95)'; ctx.fill();
+                    ctx.strokeStyle = clr; ctx.lineWidth = isFallback ? 1.5 : 2; ctx.stroke();
+
+                    // Number/label inside circle
+                    ctx.fillStyle = isFallback ? clr : '#f1f5f9';
+                    ctx.font = isFallback ? `bold 10px "Courier New",monospace` : `bold 13px "Courier New",monospace`;
+                    ctx.textAlign='center'; ctx.textBaseline='middle';
+                    ctx.fillText(isFallback ? '~'+wi : wi, x, y);
+                    ctx.textBaseline='alphabetic';
+
+                    // Label above/below
+                    const lblY   = y + tipOff;
+                    const wLabel = isFallback
+                        ? (isHigh ? 'Swing High' : 'Swing Low')
+                        : (isBull ? bullLabels[wi] || '' : bearLabels[wi] || '');
+
+                    ctx.strokeStyle = clr+'77'; ctx.lineWidth=1; ctx.setLineDash([2,2]);
+                    ctx.beginPath();
+                    ctx.moveTo(x, isHigh?y-CIRCLE_R:y+CIRCLE_R);
+                    ctx.lineTo(x, lblY+(isHigh?13:-2));
+                    ctx.stroke(); ctx.setLineDash([]);
+
+                    ctx.font = 'bold 9px monospace';
+                    const tw = ctx.measureText(wLabel).width + 10;
+                    const lx = Math.max(PAD.left+2, Math.min(W-PAD.right-tw-2, x-tw/2));
+                    ctx.fillStyle = clr+'22';
+                    if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(lx, isHigh?lblY-12:lblY, tw, 14, 4); ctx.fill(); }
+                    ctx.fillStyle = clr; ctx.textAlign='center';
+                    ctx.fillText(wLabel, lx+tw/2, isHigh?lblY:lblY+11);
+
+                    ctx.font='9px monospace'; ctx.fillStyle='#64748b';
+                    ctx.fillText('$'+fmtP(p.price), x, isHigh?lblY-15:lblY+26);
+                });
+
+                // "In Progress" or "Estimating" indicator
+                if (!isFallback && ew.completedWaves < 5) {
+                    const lbl = `◄ W${ew.completedWaves+1} in progress`;
+                    ctx.font='bold 10px monospace'; ctx.fillStyle='#fbbf24'; ctx.textAlign='right';
+                    ctx.fillText(lbl, W-PAD.right-90, priceY-14);
+                    ctx.beginPath(); ctx.moveTo(W-PAD.right-88,priceY-14); ctx.lineTo(W-PAD.right-5,priceY-14);
+                    ctx.strokeStyle='rgba(251,191,36,0.5)'; ctx.lineWidth=1; ctx.setLineDash([2,2]);
+                    ctx.stroke(); ctx.setLineDash([]);
+                }
+                if (isFallback) {
+                    ctx.font='bold 9px monospace'; ctx.fillStyle='#475569'; ctx.textAlign='left';
+                    ctx.fillText('~ Estimasi berdasarkan swing terbaru', PAD.left+6, H-PAD.bottom-6);
+                }
+            }
+
+            // ── ABC Correction projection ────────────────────────────
+            if (ew.abcProjection) {
+                const abc = ew.abcProjection;
+                const abcPts = [
+                    { x:pxX(Math.min(cvs.length-1, cToI(abc.w5.idx))), y:pxY(abc.w5.price), lbl:'' },
+                    { x:pxX(cvs.length + (abc.A.idx - candles.length)), y:pxY(abc.A.price), lbl:'A' },
+                    { x:pxX(cvs.length + (abc.B.idx - candles.length)), y:pxY(abc.B.price), lbl:'B' },
+                    { x:pxX(cvs.length + (abc.C.idx - candles.length)), y:pxY(abc.C.price), lbl:'C' },
+                ];
+
+                ctx.fillStyle = 'rgba(167,139,250,0.05)';
+                ctx.fillRect(abcPts[0].x, PAD.top, abcPts[3].x - abcPts[0].x, cH);
+
+                ctx.strokeStyle='rgba(167,139,250,0.8)'; ctx.lineWidth=2.2; ctx.setLineDash([9,6]);
+                ctx.beginPath();
+                abcPts.forEach((p,i) => i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y));
+                ctx.stroke(); ctx.setLineDash([]);
+
+                abcPts.slice(1).forEach(p => {
+                    ctx.beginPath(); ctx.arc(p.x,p.y,12,0,Math.PI*2);
+                    ctx.fillStyle='rgba(10,5,28,0.95)'; ctx.fill();
+                    ctx.strokeStyle='#a78bfa'; ctx.lineWidth=2; ctx.stroke();
+                    ctx.fillStyle='#e2e8f0'; ctx.font='bold 11px "Courier New",monospace';
+                    ctx.textAlign='center'; ctx.textBaseline='middle';
+                    ctx.fillText(p.lbl, p.x, p.y);
+                    ctx.textBaseline='alphabetic';
+                    ctx.font='9px monospace'; ctx.fillStyle='#7c3aed';
+                    ctx.fillText('$'+fmtP(ew.abcProjection[p.lbl].price), p.x, p.y-18);
+                });
+
+                // "PROJECTION" label
+                ctx.save();
+                ctx.globalAlpha=0.55;
+                ctx.font='bold 10px monospace'; ctx.fillStyle='#a78bfa';
+                ctx.textAlign='center';
+                ctx.fillText('─── PROYEKSI ABC ───', (abcPts[0].x+abcPts[3].x)/2, PAD.top+16);
+                ctx.restore();
+            }
+
+            // ── Title bar overlay ────────────────────────────────────
+            const barGrad = ctx.createLinearGradient(0,0,0,PAD.top);
+            barGrad.addColorStop(0,'rgba(3,6,17,0.95)');
+            barGrad.addColorStop(1,'rgba(3,6,17,0.0)');
+            ctx.fillStyle=barGrad; ctx.fillRect(0,0,W,PAD.top+4);
+
+            ctx.font='bold 13px "Courier New",monospace'; ctx.fillStyle='#a78bfa';
+            ctx.textAlign='left'; ctx.textBaseline='middle';
+            ctx.fillText('〽️  '+_sym+' · '+_tf.toUpperCase()+' · Elliott Wave', PAD.left+6, PAD.top/2);
+
+            const trendColor = ew.trend==='bullish'?'#4ade80':'#f87171';
+            ctx.font='bold 11px monospace'; ctx.fillStyle=trendColor;
+            ctx.textAlign='center';
+            ctx.fillText((ew.trend==='bullish'?'▲ BULLISH':'▼ BEARISH')+' IMPULSE', W/2, PAD.top/2);
+
+            ctx.font='bold 11px monospace'; ctx.fillStyle='#fbbf24';
+            ctx.textAlign='right';
+            ctx.fillText('[ Wave '+ew.completedWaves+' of 5 ]', W-PAD.right-4, PAD.top/2);
+
+            // ── Watermark ────────────────────────────────────────────
+            ctx.save();
+            ctx.globalAlpha=0.025;
+            ctx.font='bold '+Math.round(W*0.11)+'px "Courier New"';
+            ctx.fillStyle='#a78bfa'; ctx.textAlign='center'; ctx.textBaseline='middle';
+            ctx.translate(W/2,H/2); ctx.rotate(-0.3);
+            ctx.fillText('ELLIOTT WAVE',0,0);
+            ctx.restore();
+            ctx.save();
+            ctx.globalAlpha=0.35;
+            ctx.font='bold 10px monospace'; ctx.fillStyle='#a78bfa';
+            ctx.textAlign='left'; ctx.textBaseline='bottom';
+            ctx.fillText('〽️ HollowCat · Elliott Wave · Not Financial Advice', 14, H-10);
+            ctx.restore();
+        }
+
+        /* ══════════════════════════════════════════════════════════════════
+           RENDER EW INFO PANELS — cards, table, fibonacci grid
+        ══════════════════════════════════════════════════════════════════ */
+        function renderEWInfoPanels(ew, candles) {
+            const section = document.getElementById('hcsEWSection');
+            if (!section) return;
+            section.style.display = 'block';
+            if (!ew) return;
+
+            // Update current wave badge
+            const badge = document.getElementById('hcsEWCurrentWave');
+            if (badge) badge.textContent = ew.currentWave || '—';
+
+            // Highlight active wave in card lists
+            const w = ew.completedWaves || 0;
+            document.querySelectorAll('.hcs-ew-w').forEach(el => el.classList.remove('active'));
+            if (w>=1 && w<=5) {
+                document.querySelectorAll(`[data-ew="b${w}"]`).forEach(el=>el.classList.add('active'));
+                document.querySelectorAll(`[data-ew="d${w}"]`).forEach(el=>el.classList.add('active'));
+            }
+            if (ew.inABC) {
+                document.querySelectorAll('.hcs-ew-w.abc').forEach(el=>el.classList.add('active'));
+            }
+
+            // Highlight table rows
+            document.querySelectorAll('.hcs-ew-tr').forEach(tr=>tr.classList.remove('active'));
+            if (w>=1 && w<=5) {
+                document.querySelectorAll('.hcs-ew-tr-'+w).forEach(tr=>tr.classList.add('active'));
+            }
+
+            // Position box
+            const posEl = document.getElementById('hcsEWPosContent');
+            if (posEl && candles) {
+                const last = candles[candles.length-1];
+                const waveDescriptions = {
+                    0: 'Belum ada sinyal wave yang jelas.',
+                    1: 'Wave 1 selesai — Awal pergerakan impulsif.',
+                    2: 'Wave 2 selesai — Koreksi dari Wave 1.',
+                    3: 'Wave 3 selesai — Wave terkuat dan terpanjang.',
+                    4: 'Wave 4 selesai — Koreksi sebelum final push.',
+                    5: 'Wave 5 selesai — Final push, potensi reversal tinggi.',
+                };
+                const psychoMap = ['—','Denial','Hope','Fear & Panic','False Recovery','Capitulation'];
+                const psy = ew.inABC ? 'Koreksi (ABC)' : (psychoMap[w]||'—');
+                const dir = ew.trend==='bullish'?'Bullish':'Bearish';
+                posEl.innerHTML = `
+                    <div style="margin-bottom:6px">
+                        <strong style="color:#e2e8f0">${waveDescriptions[Math.min(w,5)]||ew.currentWave}</strong>
+                    </div>
+                    <div style="font-size:.72rem;color:#64748b;line-height:1.7">
+                        Trend: <span style="color:${ew.trend==='bullish'?'#4ade80':'#f87171'};font-weight:700">${dir} Impulse</span><br>
+                        Psikologi: <span style="color:#a78bfa;font-weight:700">${psy}</span><br>
+                        Harga saat ini: <span style="color:#22d3ee;font-family:'Courier New',monospace;font-weight:700">$${fmtP(last?.close)}</span><br>
+                        ${ew.inABC?'<span style="color:#a78bfa;font-weight:700">⟳ Dalam fase koreksi ABC — tunggu selesai untuk entry</span>':''}
+                        ${w===3?'<span style="color:#f87171;font-weight:700">⚡ Wave 3 — momentum terkuat, hati-hati reversal</span>':''}
+                        ${w===5?'<span style="color:#fbbf24;font-weight:700">⚠️ Wave 5 — potensi exhaustion, waspadai pembalikan</span>':''}
+                    </div>
+                `;
+            }
+
+            // Fibonacci levels
+            if (ew.fibLevels) {
+                const fibMap = {
+                    ewFib0:    0,
+                    ewFib236:  0.236,
+                    ewFib382:  0.382,
+                    ewFib500:  0.5,
+                    ewFib618:  0.618,
+                    ewFib786:  0.786,
+                    ewFib100:  1.0,
+                    ewFib1272: 1.272,
+                    ewFib1618: 1.618,
+                    ewFib200:  2.0,
+                    ewFib2618: 2.618,
+                };
+                Object.entries(fibMap).forEach(([id, key]) => {
+                    const el = document.getElementById(id);
+                    if (!el) return;
+                    const val = ew.fibLevels[key];
+                    el.textContent = (val!=null && isFinite(val)) ? '$'+fmtP(val) : '—';
+                });
+                // Range label
+                const rangeEl = document.getElementById('hcsEWFibRange');
+                if (rangeEl && ew.pMin!=null && ew.pMax!=null) {
+                    rangeEl.textContent = `Wave Range: $${fmtP(ew.pMin)} – $${fmtP(ew.pMax)}`;
+                }
+            }
+
+            // Also redraw EW chart on window resize
+            if (!window._ewResizeBound) {
+                window._ewResizeBound = true;
+                window.addEventListener('resize', () => {
+                    if (_data && _data.candles) {
+                        const ewD = detectElliottWaves(_data.candles, _data.swings);
+                        renderEWChart(_data.candles, ewD);
+                    }
+                });
+            }
+        }
+
+        return { init, scan, sendChartTelegram };
     })();
     </script>
 
@@ -11764,5 +12726,563 @@ ${rnd(CAT_OUTROS)}`,
         });
     })();
     </script>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         EXPERT CHART ENGINE — MA/EMA/BB/MACD/RSI/S&R + EW overlay
+    ═══════════════════════════════════════════════════════════════════ -->
+    <script>
+    (function () {
+        'use strict';
+
+        /* ── State ──────────────────────────────────────────── */
+        var _ecSym  = '';
+        var _ecTF   = '1h';
+        var _ecOvs  = { ma: true, ema: true, bb: true, sr: true, macd: true, vol: true, ew: true };
+        var _ecData = [];   // normalised candles [{time,open,high,low,close,volume}]
+
+        /* ── Math helpers ────────────────────────────────────── */
+        function calcMA(arr, p) {
+            return arr.map(function(_, i) {
+                if (i < p - 1) return null;
+                var s = 0;
+                for (var j = i - p + 1; j <= i; j++) s += arr[j];
+                return s / p;
+            });
+        }
+        function calcEMA(arr, p) {
+            var k = 2 / (p + 1), out = new Array(arr.length).fill(null), e = null;
+            for (var i = 0; i < arr.length; i++) {
+                if (arr[i] == null) continue;
+                e = (e == null) ? arr[i] : arr[i] * k + e * (1 - k);
+                if (i >= p - 1) out[i] = e;
+            }
+            return out;
+        }
+        function calcBB(arr, p, mult) {
+            p = p || 20; mult = mult || 2;
+            var mid = calcMA(arr, p);
+            return arr.map(function(_, i) {
+                if (mid[i] == null) return null;
+                var slice = arr.slice(i - p + 1, i + 1);
+                var mean = mid[i];
+                var sd = Math.sqrt(slice.reduce(function(s, v) { return s + (v - mean) * (v - mean); }, 0) / p);
+                return { upper: mean + mult * sd, mid: mean, lower: mean - mult * sd };
+            });
+        }
+        function calcMACD(arr, fast, slow, sig) {
+            fast = fast || 12; slow = slow || 26; sig = sig || 9;
+            var ef = calcEMA(arr, fast), es = calcEMA(arr, slow);
+            var ml = arr.map(function(_, i) { return (ef[i] != null && es[i] != null) ? ef[i] - es[i] : null; });
+            var sl = calcEMA(ml.map(function(v) { return v != null ? v : 0; }), sig).map(function(v, i) { return ml[i] != null ? v : null; });
+            var hl = ml.map(function(v, i) { return (v != null && sl[i] != null) ? v - sl[i] : null; });
+            return { macd: ml, signal: sl, hist: hl };
+        }
+        function calcRSI(arr, p) {
+            p = p || 14;
+            var out = new Array(arr.length).fill(null), ag = 0, al = 0;
+            for (var i = 1; i <= p && i < arr.length; i++) {
+                var d = arr[i] - arr[i - 1];
+                ag += d > 0 ? d : 0; al += d < 0 ? -d : 0;
+            }
+            ag /= p; al /= p;
+            if (p < arr.length) out[p] = al === 0 ? 100 : 100 - 100 / (1 + ag / al);
+            for (var i = p + 1; i < arr.length; i++) {
+                var d = arr[i] - arr[i - 1];
+                ag = (ag * (p - 1) + (d > 0 ? d : 0)) / p;
+                al = (al * (p - 1) + (d < 0 ? -d : 0)) / p;
+                out[i] = al === 0 ? 100 : 100 - 100 / (1 + ag / al);
+            }
+            return out;
+        }
+        function calcATR(cs, p) {
+            p = p || 14;
+            var tr = cs.map(function(c, i) {
+                if (i === 0) return c.high - c.low;
+                var prev = cs[i - 1];
+                return Math.max(c.high - c.low, Math.abs(c.high - prev.close), Math.abs(c.low - prev.close));
+            });
+            var out = new Array(cs.length).fill(null);
+            var atr = tr.slice(0, p).reduce(function(s, v) { return s + v; }, 0) / p;
+            out[p - 1] = atr;
+            for (var i = p; i < cs.length; i++) { atr = (atr * (p - 1) + tr[i]) / p; out[i] = atr; }
+            return out;
+        }
+        function calcSR(cs) {
+            var lk = 5, minD = 0.005;
+            var levels = [];
+            var hs = cs.map(function(c) { return c.high; });
+            var ls = cs.map(function(c) { return c.low; });
+            for (var i = lk; i < cs.length - lk; i++) {
+                var slH = hs.slice(i - lk, i + lk + 1);
+                if (hs[i] === Math.max.apply(null, slH)) {
+                    var p = hs[i];
+                    if (!levels.some(function(l) { return Math.abs(l.price - p) / p < minD; }))
+                        levels.push({ price: p, type: 'res' });
+                }
+                var slL = ls.slice(i - lk, i + lk + 1);
+                if (ls[i] === Math.min.apply(null, slL)) {
+                    var p = ls[i];
+                    if (!levels.some(function(l) { return Math.abs(l.price - p) / p < minD; }))
+                        levels.push({ price: p, type: 'sup' });
+                }
+            }
+            var cp = cs[cs.length - 1].close;
+            levels.forEach(function(l) { l.dist = Math.abs(l.price - cp) / cp; });
+            levels.sort(function(a, b) { return a.dist - b.dist; });
+            return levels.slice(0, 10);
+        }
+
+        /* ── Format helper ───────────────────────────────────── */
+        function fmtEC(n) {
+            if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
+            if (n >= 1e3) return (n / 1e3).toFixed(2) + 'K';
+            if (n >= 10)  return n.toFixed(2);
+            if (n >= 1)   return n.toFixed(3);
+            if (n >= 0.1) return n.toFixed(4);
+            return n.toPrecision(4);
+        }
+        function setV(id, val, cls) {
+            var el = document.getElementById(id);
+            if (!el) return;
+            el.textContent = val;
+            el.className = 'ec-ind-val' + (cls ? ' ' + cls : '');
+        }
+
+        /* ── Canvas setup ────────────────────────────────────── */
+        function setupC(canvas) {
+            var dpr = window.devicePixelRatio || 1;
+            var rect = canvas.parentElement.getBoundingClientRect();
+            canvas.width  = Math.round(rect.width  * dpr);
+            canvas.height = Math.round(rect.height * dpr);
+            var ctx = canvas.getContext('2d');
+            ctx.scale(dpr, dpr);
+            ctx._W = rect.width;
+            ctx._H = rect.height;
+            return ctx;
+        }
+
+        /* ── Main candlestick + indicator chart ──────────────── */
+        function drawMain(cs) {
+            var canvas = document.getElementById('ecMainChart');
+            if (!canvas) return;
+            var ctx = setupC(canvas);
+            var W = ctx._W, H = ctx._H;
+            var PAD_T = 22, PAD_R = 56, PAD_B = 18;
+
+            var closes = cs.map(function(c) { return c.close; });
+            var highs  = cs.map(function(c) { return c.high; });
+            var lows   = cs.map(function(c) { return c.low; });
+
+            /* indicators */
+            var ma20  = _ecOvs.ma  ? calcMA(closes, 20)  : null;
+            var ma50  = _ecOvs.ma  ? calcMA(closes, 50)  : null;
+            var ma200 = _ecOvs.ma  ? calcMA(closes, 200) : null;
+            var ema9  = _ecOvs.ema ? calcEMA(closes, 9)  : null;
+            var ema21 = _ecOvs.ema ? calcEMA(closes, 21) : null;
+            var bbs   = _ecOvs.bb  ? calcBB(closes)      : null;
+            var srs   = _ecOvs.sr  ? calcSR(cs) : [];
+            var rsiA  = calcRSI(closes);
+            var macdD = calcMACD(closes);
+            var atrA  = calcATR(cs);
+
+            /* price range */
+            var minP = Math.min.apply(null, lows);
+            var maxP = Math.max.apply(null, highs);
+            if (bbs) { bbs.forEach(function(b) { if (b) { if (b.lower < minP) minP = b.lower; if (b.upper > maxP) maxP = b.upper; } }); }
+            var rng = maxP - minP || 1;
+            var vMin = minP - rng * 0.03, vMax = maxP + rng * 0.03;
+
+            var n = cs.length;
+            var chartW = W - PAD_R;
+            var cw = chartW / n;
+            var bw = Math.max(1, cw * 0.65);
+
+            function xOf(i) { return (i + 0.5) * cw; }
+            function yOf(p) { return PAD_T + (1 - (p - vMin) / (vMax - vMin)) * (H - PAD_T - PAD_B); }
+
+            /* background */
+            ctx.fillStyle = '#020814';
+            ctx.fillRect(0, 0, W, H);
+
+            /* grid */
+            ctx.strokeStyle = 'rgba(56,189,248,0.06)';
+            ctx.lineWidth = 1;
+            for (var gi = 0; gi <= 5; gi++) {
+                var gy = PAD_T + (gi / 5) * (H - PAD_T - PAD_B);
+                ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke();
+                var gp = vMax - (gi / 5) * (vMax - vMin);
+                ctx.fillStyle = 'rgba(148,163,184,0.55)';
+                ctx.font = '9px monospace'; ctx.textAlign = 'right';
+                ctx.fillText(fmtEC(gp), W - 2, gy - 2);
+            }
+
+            /* BB fill */
+            if (bbs) {
+                ctx.beginPath();
+                var bStarted = false;
+                bbs.forEach(function(b, i) { if (!b) return; if (!bStarted) { ctx.moveTo(xOf(i), yOf(b.upper)); bStarted = true; } else ctx.lineTo(xOf(i), yOf(b.upper)); });
+                var vi = []; bbs.forEach(function(b, i) { if (b) vi.push(i); });
+                for (var i = vi.length - 1; i >= 0; i--) ctx.lineTo(xOf(vi[i]), yOf(bbs[vi[i]].lower));
+                ctx.closePath();
+                ctx.fillStyle = 'rgba(34,211,238,0.04)'; ctx.fill();
+                /* BB mid */
+                function drawBBline(arr) {
+                    ctx.beginPath(); var s = false;
+                    arr.forEach(function(v, i) { if (v == null) return; if (!s) { ctx.moveTo(xOf(i), yOf(v)); s = true; } else ctx.lineTo(xOf(i), yOf(v)); });
+                    ctx.strokeStyle = 'rgba(34,211,238,0.25)'; ctx.lineWidth = 1; ctx.setLineDash([3,3]); ctx.stroke(); ctx.setLineDash([]);
+                }
+                drawBBline(bbs.map(function(b) { return b ? b.mid : null; }));
+                drawBBline(bbs.map(function(b) { return b ? b.upper : null; }));
+                drawBBline(bbs.map(function(b) { return b ? b.lower : null; }));
+            }
+
+            /* S/R lines */
+            if (_ecOvs.sr) {
+                srs.forEach(function(sr) {
+                    var y = yOf(sr.price);
+                    if (y < PAD_T - 5 || y > H - PAD_B + 5) return;
+                    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W - PAD_R, y);
+                    ctx.strokeStyle = sr.type === 'res' ? 'rgba(248,113,113,0.3)' : 'rgba(74,222,128,0.3)';
+                    ctx.lineWidth = 1; ctx.setLineDash([4,4]); ctx.stroke(); ctx.setLineDash([]);
+                    ctx.fillStyle = sr.type === 'res' ? 'rgba(248,113,113,0.8)' : 'rgba(74,222,128,0.8)';
+                    ctx.font = '9px monospace'; ctx.textAlign = 'left';
+                    ctx.fillText((sr.type === 'res' ? 'R ' : 'S ') + fmtEC(sr.price), W - PAD_R + 2, y - 1);
+                });
+            }
+
+            /* candlesticks */
+            cs.forEach(function(c, i) {
+                var x = xOf(i), isUp = c.close >= c.open;
+                var col = isUp ? '#4ade80' : '#f87171';
+                ctx.strokeStyle = col; ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.moveTo(x, yOf(c.high)); ctx.lineTo(x, yOf(c.low)); ctx.stroke();
+                var bt = Math.min(yOf(c.open), yOf(c.close));
+                var bh = Math.max(1, Math.abs(yOf(c.open) - yOf(c.close)));
+                ctx.fillStyle = col; ctx.globalAlpha = 0.85;
+                ctx.fillRect(x - bw / 2, bt, bw, bh);
+                ctx.globalAlpha = 1;
+            });
+
+            /* MA / EMA lines */
+            function drawLine(arr, color, width, dash) {
+                if (!arr) return;
+                ctx.beginPath(); var s = false;
+                arr.forEach(function(v, i) { if (v == null) return; var px = xOf(i), py = yOf(v); if (!s) { ctx.moveTo(px, py); s = true; } else ctx.lineTo(px, py); });
+                ctx.strokeStyle = color; ctx.lineWidth = width || 1.5;
+                ctx.setLineDash(dash || []); ctx.stroke(); ctx.setLineDash([]);
+            }
+            if (_ecOvs.ma)  { drawLine(ma200, 'rgba(168,85,247,.85)', 1.5); drawLine(ma50, 'rgba(56,189,248,.9)', 1.5); drawLine(ma20, 'rgba(255,255,255,.7)', 1.5); }
+            if (_ecOvs.ema) { drawLine(ema21, 'rgba(251,146,60,.85)', 1.2); drawLine(ema9, 'rgba(251,191,36,.85)', 1.2); }
+
+            /* current price line */
+            var cp = closes[closes.length - 1];
+            var yCp = yOf(cp);
+            ctx.beginPath(); ctx.moveTo(0, yCp); ctx.lineTo(W, yCp);
+            ctx.strokeStyle = 'rgba(251,191,36,0.55)'; ctx.lineWidth = 1; ctx.setLineDash([2,4]); ctx.stroke(); ctx.setLineDash([]);
+
+            /* legend */
+            var legs = [];
+            if (_ecOvs.ma) { legs.push({l:'MA20',c:'rgba(255,255,255,.7)'}); legs.push({l:'MA50',c:'rgba(56,189,248,.9)'}); legs.push({l:'MA200',c:'rgba(168,85,247,.85)'}); }
+            if (_ecOvs.ema){ legs.push({l:'EMA9',c:'rgba(251,191,36,.85)'}); legs.push({l:'EMA21',c:'rgba(251,146,60,.85)'}); }
+            if (_ecOvs.bb)  legs.push({l:'BB(20)',c:'rgba(34,211,238,.7)'});
+            var lx = 8;
+            legs.forEach(function(lg) {
+                ctx.fillStyle = lg.c; ctx.fillRect(lx, 6, 18, 2);
+                ctx.fillStyle = 'rgba(148,163,184,.8)'; ctx.font = '9px sans-serif'; ctx.textAlign = 'left';
+                ctx.fillText(lg.l, lx + 22, 12); lx += ctx.measureText(lg.l).width + 32;
+            });
+
+            /* ── Side panel values ────────────────── */
+            var last = cs.length - 1;
+            var classV = function(v) { return v == null ? '' : v > cp ? 'bear' : v < cp ? 'bull' : 'neutral'; };
+            if (ma20  && ma20[last]  != null) setV('ecMA20',  fmtEC(ma20[last]),  classV(ma20[last]));
+            if (ma50  && ma50[last]  != null) setV('ecMA50',  fmtEC(ma50[last]),  classV(ma50[last]));
+            if (ma200 && ma200[last] != null) setV('ecMA200', fmtEC(ma200[last]), classV(ma200[last]));
+            if (ema9  && ema9[last]  != null) setV('ecEMA9',  fmtEC(ema9[last]),  classV(ema9[last]));
+            if (ema21 && ema21[last] != null) setV('ecEMA21', fmtEC(ema21[last]), classV(ema21[last]));
+            if (bbs && bbs[last]) { setV('ecBBU', fmtEC(bbs[last].upper), 'bear'); setV('ecBBL', fmtEC(bbs[last].lower), 'bull'); }
+            var rsiV = rsiA[last];
+            if (rsiV != null) setV('ecRSI', rsiV.toFixed(1), rsiV > 70 ? 'bear' : rsiV < 30 ? 'bull' : 'neutral');
+            var atrV = atrA[last];
+            if (atrV != null) setV('ecATRVal', fmtEC(atrV), '');
+            var mLast = macdD.macd[last], sLast = macdD.signal[last];
+            if (mLast != null) {
+                setV('ecMACDVal', mLast.toPrecision(4), mLast > 0 ? 'bull' : 'bear');
+                if (sLast != null) setV('ecMACDSig', sLast.toPrecision(4), mLast > sLast ? 'bull' : 'bear');
+            }
+            /* EW value */
+            var ewVal = '—';
+            try {
+                if (_ecOvs.ew && window.HollowCatScan) {
+                    /* Try to access EW functions from HollowCatScan module */
+                    var hcs = window.HollowCatScan;
+                    if (typeof hcs.detectElliottWaves === 'function' && typeof hcs.detectSwings === 'function') {
+                        var swings = hcs.detectSwings(cs, 5);
+                        var ew = hcs.detectElliottWaves(cs, swings);
+                        if (ew) {
+                            ewVal = ew.phase === 'bullish5' ? '📈 Bull W' + (ew.currentWave || '?')
+                                  : ew.phase === 'bearish5' ? '📉 Bear W' + (ew.currentWave || '?')
+                                  : ew.phase === 'abc' ? '🔄 ABC' : '~ Est.';
+                        }
+                    }
+                }
+            } catch(_) {}
+            setV('ecEWVal', ewVal, '');
+
+            /* S/R list */
+            var srEl = document.getElementById('ecSRList');
+            if (srEl) {
+                srEl.innerHTML = srs.slice(0, 8).map(function(sr) {
+                    var dist = (sr.dist * 100).toFixed(2);
+                    var dir = sr.price > cp ? '⬆' : '⬇';
+                    return '<div class="ec-sr-item"><span class="ec-sr-tag ' + sr.type + '">' + (sr.type === 'res' ? 'RES' : 'SUP') + '</span>'
+                        + '<span class="ec-sr-price">' + fmtEC(sr.price) + '</span>'
+                        + '<span class="ec-sr-dist">' + dir + ' ' + dist + '%</span></div>';
+                }).join('');
+            }
+
+            /* trend + recommendation */
+            updateRec(cs, ma20, ma50, ma200, ema9, ema21, rsiA, macdD, srs, cp, closes);
+        }
+
+        /* ── Volume chart ─────────────────────────────────────── */
+        function drawVol(cs) {
+            if (!_ecOvs.vol) return;
+            var canvas = document.getElementById('ecVolChart');
+            if (!canvas) return;
+            var ctx = setupC(canvas);
+            var W = ctx._W, H = ctx._H;
+            var PAD_B = 12, PAD_T = 3;
+            var vols = cs.map(function(c) { return c.volume; });
+            var maxV = Math.max.apply(null, vols) || 1;
+            var n = cs.length, cw = W / n, chartH = H - PAD_T - PAD_B;
+            var volMA = calcMA(vols, 20);
+            ctx.fillStyle = '#020814'; ctx.fillRect(0, 0, W, H);
+            cs.forEach(function(c, i) {
+                var bh = (c.volume / maxV) * chartH;
+                var x = (i + 0.5) * cw;
+                ctx.fillStyle = c.close >= c.open ? 'rgba(74,222,128,.5)' : 'rgba(248,113,113,.5)';
+                ctx.fillRect(x - cw * 0.35, H - PAD_B - bh, cw * 0.7, bh);
+            });
+            ctx.beginPath(); var s = false;
+            volMA.forEach(function(v, i) { if (v == null) return; var x = (i + 0.5) * cw, y = H - PAD_B - (v / maxV) * chartH; if (!s) { ctx.moveTo(x, y); s = true; } else ctx.lineTo(x, y); });
+            ctx.strokeStyle = 'rgba(251,191,36,.7)'; ctx.lineWidth = 1; ctx.stroke();
+            ctx.fillStyle = 'rgba(100,116,139,.8)'; ctx.font = '8px monospace'; ctx.textAlign = 'left';
+            ctx.fillText('VOL', 4, H - 2);
+        }
+
+        /* ── MACD chart ───────────────────────────────────────── */
+        function drawMACD(cs) {
+            if (!_ecOvs.macd) return;
+            var canvas = document.getElementById('ecMacdChart');
+            if (!canvas) return;
+            var ctx = setupC(canvas);
+            var W = ctx._W, H = ctx._H;
+            var PAD_T = 8, PAD_B = 14;
+            var closes = cs.map(function(c) { return c.close; });
+            var d = calcMACD(closes);
+            var allV = d.macd.concat(d.signal).concat(d.hist).filter(function(v) { return v != null; });
+            var maxA = Math.max.apply(null, allV.map(Math.abs)) || 1;
+            var n = cs.length, cw = W / n;
+            var zY = PAD_T + (H - PAD_T - PAD_B) / 2;
+            var hH = (H - PAD_T - PAD_B) / 2;
+            ctx.fillStyle = '#020814'; ctx.fillRect(0, 0, W, H);
+            ctx.beginPath(); ctx.moveTo(0, zY); ctx.lineTo(W, zY);
+            ctx.strokeStyle = 'rgba(56,189,248,.1)'; ctx.lineWidth = 1; ctx.stroke();
+            d.hist.forEach(function(v, i) {
+                if (v == null) return;
+                var x = (i + 0.5) * cw, bh = Math.abs(v) / maxA * hH;
+                ctx.fillStyle = v > 0 ? 'rgba(74,222,128,.5)' : 'rgba(248,113,113,.5)';
+                if (v > 0) ctx.fillRect(x - cw * 0.4, zY - bh, cw * 0.8, bh);
+                else       ctx.fillRect(x - cw * 0.4, zY, cw * 0.8, bh);
+            });
+            function dLine(arr, col, w) {
+                ctx.beginPath(); var s = false;
+                arr.forEach(function(v, i) { if (v == null) return; var x = (i+0.5)*cw, y = zY - v/maxA*hH; if (!s) { ctx.moveTo(x,y); s=true; } else ctx.lineTo(x,y); });
+                ctx.strokeStyle = col; ctx.lineWidth = w; ctx.stroke();
+            }
+            dLine(d.macd, 'rgba(56,189,248,.9)', 1.2);
+            dLine(d.signal, 'rgba(251,146,60,.9)', 1.2);
+            ctx.fillStyle = 'rgba(100,116,139,.8)'; ctx.font = '8px monospace'; ctx.textAlign = 'left';
+            ctx.fillText('MACD(12,26,9)', 4, H - 2);
+        }
+
+        /* ── Trend analysis + recommendation ─────────────────── */
+        function updateRec(cs, ma20, ma50, ma200, ema9, ema21, rsiA, macdD, srs, cp, closes) {
+            var last = cs.length - 1;
+            var bull = 0, bear = 0;
+            function score(v, ref) { if (v == null || ref == null) return; ref > cp ? bear++ : bull++; }
+            score(ma20  && ma20[last]);
+            if (ma20  && ma20[last]  != null) cp > ma20[last]  ? bull++ : bear++;
+            if (ma50  && ma50[last]  != null) cp > ma50[last]  ? bull++ : bear++;
+            if (ma200 && ma200[last] != null) cp > ma200[last] ? bull++ : bear++;
+            if (ema9  && ema9[last]  != null) cp > ema9[last]  ? bull++ : bear++;
+            if (ema21 && ema21[last] != null) cp > ema21[last] ? bull++ : bear++;
+            var rsiV = rsiA[last];
+            if (rsiV != null) { rsiV > 50 ? bull++ : bear++; if (rsiV > 70) bear++; if (rsiV < 30) bull++; }
+            var mV = macdD.macd[last], sV = macdD.signal[last];
+            if (mV != null && sV != null) mV > sV ? bull++ : bear++;
+
+            var tot = bull + bear || 1, pct = bull / tot;
+            var rec, recTxt, trendTxt;
+            if (pct >= 0.72)      { rec = 'LONG';    recTxt = 'Indikator mayoritas bullish. Momentum naik kuat.'; trendTxt = '📈 Bullish'; }
+            else if (pct <= 0.28) { rec = 'SHORT';   recTxt = 'Indikator mayoritas bearish. Tekanan jual dominan.'; trendTxt = '📉 Bearish'; }
+            else if (pct >= 0.58) { rec = 'WAIT';    recTxt = 'Bias bullish lemah. Tunggu konfirmasi breakout.'; trendTxt = '🟡 Mild Bullish'; }
+            else if (pct <= 0.42) { rec = 'WAIT';    recTxt = 'Bias bearish lemah. Tunggu konfirmasi breakdown.'; trendTxt = '🟡 Mild Bearish'; }
+            else                  { rec = 'NEUTRAL'; recTxt = 'Sinyal mixed. Pasar sideways, tunggu arah jelas.'; trendTxt = '⚪ Sideways'; }
+
+            var badge = document.getElementById('ecTrendBadge');
+            if (badge) { badge.textContent = trendTxt; badge.className = 'ec-header-badge ' + (rec === 'LONG' ? 'bull' : rec === 'SHORT' ? 'bear' : ''); }
+            var rb = document.getElementById('ecRecBadge'), rt = document.getElementById('ecRecText');
+            if (rb) { rb.textContent = rec; rb.className = 'ec-rec-badge ' + rec; }
+            if (rt)  rt.textContent = recTxt;
+
+            var nearR = srs.filter(function(s) { return s.type === 'res' && s.price > cp; }).slice(0,2);
+            var nearS = srs.filter(function(s) { return s.type === 'sup' && s.price < cp; }).slice(0,2);
+            var lev = document.getElementById('ecRecLevels');
+            if (lev) {
+                var lines = [];
+                nearR.forEach(function(r) { lines.push('🔴 Resistance: ' + fmtEC(r.price) + ' (' + (r.dist * 100).toFixed(1) + '%)'); });
+                nearS.forEach(function(s) { lines.push('🟢 Support: ' + fmtEC(s.price) + ' (' + (s.dist * 100).toFixed(1) + '%)'); });
+                lev.innerHTML = lines.join('<br>');
+            }
+            buildAnalysis(cs, pct, ma20, ma50, rsiV, macdD, srs, cp);
+        }
+
+        function buildAnalysis(cs, pct, ma20, ma50, rsiV, macdD, srs, cp) {
+            var tfNames = {'1m':'1 Menit','5m':'5 Menit','15m':'15 Menit','1h':'1 Jam','4h':'4 Jam','1d':'1 Hari','1w':'1 Minggu'};
+            var lbl = document.getElementById('ecAnalysisTfLabel');
+            if (lbl) lbl.textContent = tfNames[_ecTF] || _ecTF;
+            var last = cs.length - 1;
+            var lines = [];
+            lines.push('<strong>📊 ' + _ecSym + ' — ' + (tfNames[_ecTF] || _ecTF) + '</strong>\n');
+            if (pct >= 0.65)       lines.push('<span class="bull-txt">🟢 Trend: BULLISH — harga di atas MA/EMA utama</span>');
+            else if (pct <= 0.35)  lines.push('<span class="bear-txt">🔴 Trend: BEARISH — harga di bawah MA/EMA utama</span>');
+            else                   lines.push('🟡 Trend: SIDEWAYS — sinyal campur, konsolidasi');
+            lines.push('');
+            if (ma20 && ma50 && ma20[last] != null && ma50[last] != null) {
+                if (ma20[last] > ma50[last]) lines.push('<span class="bull-txt">✅ MA20 &gt; MA50 → Golden Cross area</span>');
+                else                        lines.push('<span class="bear-txt">❌ MA20 &lt; MA50 → Death Cross area</span>');
+            }
+            if (rsiV != null) {
+                if      (rsiV > 70) lines.push('<span class="bear-txt">⚠ RSI ' + rsiV.toFixed(0) + ' → Overbought, potensi koreksi</span>');
+                else if (rsiV < 30) lines.push('<span class="bull-txt">⚡ RSI ' + rsiV.toFixed(0) + ' → Oversold, potensi rebound</span>');
+                else if (rsiV > 50) lines.push('<span class="bull-txt">📈 RSI ' + rsiV.toFixed(0) + ' → Momentum positif</span>');
+                else                lines.push('<span class="bear-txt">📉 RSI ' + rsiV.toFixed(0) + ' → Momentum negatif</span>');
+            }
+            var mV = macdD.macd[last], sV = macdD.signal[last];
+            if (mV != null && sV != null) {
+                if (mV > sV) lines.push('<span class="bull-txt">✅ MACD &gt; Signal → Momentum beli</span>');
+                else         lines.push('<span class="bear-txt">❌ MACD &lt; Signal → Momentum jual</span>');
+            }
+            lines.push('');
+            var nR = srs.filter(function(s) { return s.type === 'res' && s.price > cp; }).slice(0,2);
+            var nS = srs.filter(function(s) { return s.type === 'sup' && s.price < cp; }).slice(0,2);
+            if (nR.length) lines.push('🔴 Resistance: ' + nR.map(function(r){return fmtEC(r.price);}).join(', '));
+            if (nS.length) lines.push('🟢 Support: ' + nS.map(function(s){return fmtEC(s.price);}).join(', '));
+            var el = document.getElementById('ecAnalysisText');
+            if (el) el.innerHTML = lines.join('\n');
+        }
+
+        /* ── Render all canvases ─────────────────────────────── */
+        function renderAll() {
+            if (!_ecData.length) return;
+            drawMain(_ecData);
+            drawVol(_ecData);
+            drawMACD(_ecData);
+        }
+
+        /* ── Load data from proxy ────────────────────────────── */
+        async function loadData() {
+            var loading = document.getElementById('ecChartLoading');
+            if (loading) { loading.style.display = 'flex'; loading.innerHTML = '<span style="font-size:2.2rem">📊</span><span>Memuat data...</span>'; }
+            try {
+                var url = 'http://127.0.0.1:3001/api/ohlc/' + _ecSym + '?interval=' + _ecTF + '&limit=200';
+                var res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+                var raw = await res.json();
+                if (!Array.isArray(raw) || raw.length === 0) throw new Error('Data kosong');
+                _ecData = raw.map(function(r) {
+                    if (Array.isArray(r)) return { time: +r[0], open: +r[1], high: +r[2], low: +r[3], close: +r[4], volume: +r[5] };
+                    return { time: +(r.t || r.time || 0), open: +(r.o || r.open || 0), high: +(r.h || r.high || 0), low: +(r.l || r.low || 0), close: +(r.c || r.close || 0), volume: +(r.v || r.volume || 0) };
+                });
+                if (loading) loading.style.display = 'none';
+                var priceEl = document.getElementById('ecPriceLive');
+                if (priceEl) priceEl.textContent = '$' + fmtEC(_ecData[_ecData.length - 1].close);
+                renderAll();
+            } catch(e) {
+                if (loading) loading.innerHTML = '<span style="font-size:1.5rem">⚠</span><span>Gagal: ' + e.message + '</span>';
+                console.error('[ExpertChart]', e);
+            }
+        }
+
+        /* ── Public: open modal ──────────────────────────────── */
+        window.openExpertChart = async function(symbol) {
+            _ecSym = symbol.toUpperCase();
+            _ecTF  = '1h';
+            _ecData = [];
+
+            var modal = document.getElementById('expertChartModal');
+            if (!modal) return;
+            modal.style.display = 'flex';
+
+            var symLbl = document.getElementById('ecSymbolLabel');
+            if (symLbl) symLbl.textContent = _ecSym.replace('USDT', '') + ' / USDT';
+            var priceLbl = document.getElementById('ecPriceLive');
+            if (priceLbl) priceLbl.textContent = '…';
+            var tBadge = document.getElementById('ecTrendBadge');
+            if (tBadge) { tBadge.textContent = '…'; tBadge.className = 'ec-header-badge'; }
+
+            /* set active TF button */
+            document.querySelectorAll('.ec-tf-btn').forEach(function(b) { b.classList.toggle('active', b.dataset.tf === '1h'); });
+
+            /* TF button clicks */
+            document.querySelectorAll('.ec-tf-btn').forEach(function(btn) {
+                btn.onclick = function() {
+                    document.querySelectorAll('.ec-tf-btn').forEach(function(b) { b.classList.remove('active'); });
+                    btn.classList.add('active');
+                    _ecTF = btn.dataset.tf;
+                    loadData();
+                };
+            });
+
+            /* Overlay toggle clicks */
+            document.querySelectorAll('[data-ec-ov]').forEach(function(btn) {
+                btn.onclick = function() {
+                    var ov = btn.dataset.ecOv;
+                    _ecOvs[ov] = !_ecOvs[ov];
+                    btn.classList.toggle('active', _ecOvs[ov]);
+                    var vw = document.getElementById('ecVolWrap');
+                    var mw = document.getElementById('ecMacdWrap');
+                    if (vw)  vw.style.display  = _ecOvs.vol  ? '' : 'none';
+                    if (mw)  mw.style.display = _ecOvs.macd ? '' : 'none';
+                    renderAll();
+                };
+            });
+
+            await loadData();
+        };
+
+        /* ── Public: close modal ─────────────────────────────── */
+        window.closeExpertChart = function() {
+            var modal = document.getElementById('expertChartModal');
+            if (modal) modal.style.display = 'none';
+            _ecData = [];
+        };
+
+        /* ── ESC key + resize ────────────────────────────────── */
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                var m = document.getElementById('expertChartModal');
+                if (m && m.style.display !== 'none') window.closeExpertChart();
+            }
+        });
+        window.addEventListener('resize', function() {
+            var m = document.getElementById('expertChartModal');
+            if (m && m.style.display !== 'none' && _ecData.length) renderAll();
+        });
+
+    })();
+    </script>
+
 </body>
 </html>

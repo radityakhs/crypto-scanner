@@ -290,7 +290,12 @@ function switchTab(tabName) {
             if (typeof solanaSwap !== 'undefined') solanaSwap.init();
             break;
         case 'smart-money':
-            if (typeof SmartMoneyIntel !== 'undefined') SmartMoneyIntel.render();
+            if (typeof SmartMoneyIntel !== 'undefined') {
+                SmartMoneyIntel.render();
+            } else {
+                const root = document.getElementById('smIntelRoot');
+                if (root) root.innerHTML = '<div style="padding:40px;text-align:center;color:#ef4444">⚠ Module smart-money-intel.js gagal dimuat. Coba hard refresh (Cmd+Shift+R).</div>';
+            }
             break;
     }
 
@@ -1965,6 +1970,7 @@ function displayCryptoData() {
                 <td class="td-chart">${renderSparkline(coin.sparkline_in_7d?.price)}</td>
                 <td class="td-action">
                     <button class="btn-analyze" onclick="analyzeCoin('${coin.id}')">▶ Analyze</button>
+                    <button class="ec-open-btn" onclick="openExpertChart('${coin.symbol.toUpperCase()}USDT')" title="Expert Chart — MA/EMA/MACD/S&R">📊 Chart</button>
                 </td>
             </tr>
         `;
@@ -3067,6 +3073,11 @@ function showWhaleDetails(type) {
                 </div>
                 <p id="whaleDetailsDesc" style="font-size:13px;color:#94a3b8;margin:0 0 14px;"></p>
                 <div id="whaleDetailsBody"></div>
+                <div style="margin-top:14px;text-align:right;">
+                    <button id="wdTgBtn"
+                        style="background:linear-gradient(135deg,#0ea5e9,#0284c7);color:#fff;border:none;padding:6px 16px;border-radius:8px;font-size:12px;cursor:pointer;font-weight:600;"
+                        onclick="sendWhaleDetailsToTg(this)">📱 Kirim ke Telegram</button>
+                </div>
             </div>
         `;
         modal.addEventListener('click', e => { if (e.target === modal) closeWhaleDetails(); });
@@ -3129,6 +3140,73 @@ function showWhaleDetails(type) {
 function closeWhaleDetails() {
     const modal = document.getElementById('whaleDetailsModal');
     if (modal) modal.classList.remove('active');
+}
+
+async function sendWhaleDetailsToTg(btn) {
+    const origText = btn ? btn.textContent : '';
+    if (btn) { btn.textContent = '⏳ Mengirim…'; btn.disabled = true; }
+
+    try {
+        // Ambil data dari tabel yang sedang ditampilkan
+        const title   = document.getElementById('whaleDetailsTitle')?.textContent || 'Whale Report';
+        const desc    = document.getElementById('whaleDetailsDesc')?.textContent  || '';
+        const rows    = document.querySelectorAll('#whaleDetailsBody tbody tr');
+
+        if (!rows.length) {
+            if (btn) btn.textContent = '⚠️ Tidak ada data';
+            setTimeout(() => { if (btn) { btn.textContent = origText; btn.disabled = false; } }, 2500);
+            return;
+        }
+
+        const timeStr = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
+        const isAccum = title.includes('Accumulation');
+        const isDist  = title.includes('Distribution');
+        const emoji   = isAccum ? '🟢' : isDist ? '🔴' : '🟡';
+
+        // Build coin lines dari data cryptoData yang ter-filter
+        const type = isAccum ? 'accumulation' : isDist ? 'distribution' : 'neutral';
+        const filtered = cryptoData.filter(coin => {
+            const status = getWhaleActivityStatus(coin);
+            if (type === 'accumulation') return status === '🟢 Accumulation';
+            if (type === 'distribution') return status === '🔴 Distribution';
+            return status === '🟡 Neutral';
+        }).slice(0, 12);
+
+        const lines = filtered.map((coin, i) => {
+            const ratio  = coin.market_cap ? (coin.total_volume / coin.market_cap * 100).toFixed(1) : '–';
+            const chg    = coin.price_change_percentage_24h;
+            const chgStr = chg != null ? (chg >= 0 ? `+${chg.toFixed(2)}%` : `${chg.toFixed(2)}%`) : '–';
+            const medal  = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}.`;
+            return `${medal} <b>${coin.name}</b> (${coin.symbol?.toUpperCase()})\n` +
+                   `   $${formatNumber(coin.current_price)} · ${chgStr} · Vol/MC: ${ratio}%`;
+        }).join('\n\n');
+
+        const msg =
+            `${emoji} <b>${title}</b>\n` +
+            `<i>${desc}</i>\n` +
+            `🕐 ${timeStr} WIB\n` +
+            `📊 ${filtered.length} coins terdeteksi\n\n` +
+            `${lines}\n\n` +
+            `⚠️ <i>Bukan financial advice. DYOR.</i>`;
+
+        const PROXY = window.PROXY_BASE || 'http://localhost:3001';
+        const r = await fetch(`${PROXY}/api/whale-alert-tg`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: msg }),
+        });
+        const d = await r.json();
+
+        if (d.ok) {
+            if (btn) btn.textContent = '✅ Terkirim!';
+        } else {
+            if (btn) btn.textContent = '❌ ' + (d.error || 'Gagal');
+        }
+    } catch (e) {
+        if (btn) btn.textContent = '❌ Server offline';
+    }
+
+    setTimeout(() => { if (btn) { btn.textContent = origText; btn.disabled = false; } }, 3000);
 }
 
 function analyzeMarketNarratives() {
