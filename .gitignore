@@ -5,6 +5,7 @@
 # ── Secrets & Environment ────────────────────────
 .env
 .env.*
+!.env.example
 telegram-config.json
 *.secret
 *.key
@@ -19,14 +20,12 @@ binance-proxy.js
 dex-trader-proxy.js
 hyperliquid-proxy.js
 okx-trading.js
-telegram-notify.js
 twitter-bot.js
 twitter-posted.json
 
 # ── Auto-trader backend (server-only, bukan frontend) ──
 auto-trader.js
 auto-trader-complete.js
-signal-bot.js
 
 # ── Runtime state (berubah terus, bukan source code) ──
 auto-trader-state.json
