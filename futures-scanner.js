@@ -27,9 +27,11 @@ const TOP_N        = parseInt(getArg('--coins', '50'));
 const LTF          = getArg('--tf', '1h');          // main timeframe sinyal
 const HTF          = getArg('--htf', '4h');         // higher timeframe konfirmasi
 const DAILY_TF     = '1d';                           // daily untuk mega-trend
-const MIN_CONF     = parseInt(getArg('--min-conf', '45'));
-const MIN_BULLISH  = parseInt(getArg('--min-bull', '58'));
-const MIN_BEARISH  = parseInt(getArg('--min-bear', '58'));
+// Preset default dibuat selektif: lebih sedikit sinyal, tetapi hanya setup
+// dengan konfirmasi yang memadai. Nilai ini tetap dapat dioverride dari CLI.
+const MIN_CONF     = parseInt(getArg('--min-conf', '60'));
+const MIN_BULLISH  = parseInt(getArg('--min-bull', '62'));
+const MIN_BEARISH  = parseInt(getArg('--min-bear', '62'));
 const CANDLE_LIMIT = parseInt(getArg('--candles', '200'));  // candles per request
 const PROXY_HOST   = '127.0.0.1';
 const PROXY_PORT   = 3001;
@@ -605,6 +607,48 @@ function calcRealisasiChance(dirProb, conf, htf, engines, signal) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+//  QUALITY GATE — hindari entry hanya karena satu indikator ekstrem
+// ═══════════════════════════════════════════════════════════════════════════════
+function strictSignalGate(signal, htf, engines, candles) {
+    const { ms, macd, ma, of, whale, mom, bb } = engines;
+    const bullish = signal === 'LONG';
+    const reasons = [];
+
+    // Sinyal tidak boleh melawan struktur timeframe yang lebih tinggi.
+    const expectedTrends = bullish ? ['uptrend', 'reversal_bottom'] : ['downtrend', 'reversal_top'];
+    const htfConfirmed = expectedTrends.includes(htf.htfTrend);
+    const dayConfirmed = expectedTrends.includes(htf.dayTrend);
+    if (!htfConfirmed && !dayConfirmed) return { pass:false, reasons:['HTF tidak searah'] };
+
+    const checks = [
+        [bullish ? ms.bos === 'bullish_bos' : ms.bos === 'bearish_bos', 'break of structure'],
+        [bullish ? macd.cross === 'bullish_cross' || macd.hist > 0 : macd.cross === 'bearish_cross' || macd.hist < 0, 'MACD searah'],
+        [bullish ? ma.aligned === 'strong_bullish' : ma.aligned === 'strong_bearish', 'MA searah'],
+        [bullish ? of.cvdTrend === 'positive' : of.cvdTrend === 'negative', 'order flow searah'],
+        [bullish ? whale.bias === 'bullish' : whale.bias === 'bearish', 'tekanan whale searah'],
+        [bullish ? ['up', 'strong_up'].includes(mom.trend) : ['down', 'strong_down'].includes(mom.trend), 'momentum searah'],
+        [bullish ? bb.pos < 80 : bb.pos > 20, 'ruang gerak Bollinger'],
+    ];
+    const confirmations = checks.filter(([ok]) => ok).map(([, label]) => label);
+
+    // Volume candle terakhir harus minimal setara rata-rata 20 candle terakhir.
+    const recent = candles.slice(-21, -1).map(c => c.volume || 0);
+    const avgVolume = mean(recent);
+    const volumeRatio = avgVolume > 0 ? (candles.at(-1).volume || 0) / avgVolume : 1;
+    if (volumeRatio < 1) return { pass:false, reasons:['volume di bawah rata-rata'], confirmations:confirmations.length, volumeRatio };
+    reasons.push(`volume ${volumeRatio.toFixed(1)}x rata-rata`);
+
+    if (htfConfirmed) reasons.push('4H searah');
+    if (dayConfirmed) reasons.push('1D searah');
+    reasons.push(...confirmations);
+
+    // Minimal tiga konfirmasi teknikal independen, ditambah volume yang mendukung.
+    const required = 3;
+    if (confirmations.length < required) return { pass:false, reasons, confirmations:confirmations.length, volumeRatio };
+    return { pass:true, reasons, confirmations:confirmations.length, volumeRatio };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 //  SCAN SATU COIN
 // ═══════════════════════════════════════════════════════════════════════════════
 async function scanCoin(instId) {
@@ -658,6 +702,10 @@ async function scanCoin(instId) {
     // Tolak LONG jika RSI sangat overbought (> 78)
     if (signal === 'LONG' && rsi.rsi > 78) return null;
 
+    // Quality gate akhir: pastikan setup didukung beberapa sumber data independen.
+    const quality = strictSignalGate(signal, htf, engines, ltfCandles);
+    if (!quality.pass) return null;
+
     // Tingkat realisasi
     const real = calcRealisasiChance(dir, conf, htf, engines, signal);
 
@@ -679,6 +727,11 @@ async function scanCoin(instId) {
         confidence: conf,
         realisasi : real.pct,
         realisasiFactors: real.factors,
+        quality: {
+            confirmations: quality.confirmations,
+            volumeRatio: +quality.volumeRatio.toFixed(2),
+            reasons: quality.reasons,
+        },
         subScores : dir.subScores,
         levels,
         htf,
