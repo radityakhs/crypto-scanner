@@ -351,6 +351,32 @@ function analyzeMarketStructure(prices) {
     return { trend, pattern, bos, choch, lastHighs: last3H, lastLows: last3L, structureQuality, currentPrice, lastSwingHigh, lastSwingLow };
 }
 
+// Pola chart dari swing yang telah terkonfirmasi. Hanya pola jelas yang diberi
+// arah; pola netral dibiarkan tanpa bias agar tidak memaksakan prediksi.
+function detectStructurePattern(structure) {
+    const highs = structure.lastHighs || [];
+    const lows  = structure.lastLows || [];
+    if (highs.length < 3 || lows.length < 3) return { name:'Struktur belum cukup', bias:'neutral', confidence:0 };
+
+    const [h1, h2, h3] = highs;
+    const [l1, l2, l3] = lows;
+    const near = (a, b) => Math.abs(a - b) / Math.max(a, b) <= 0.015;
+
+    if (near(h2, h3) && l2 > l1 && l3 > l2) {
+        return { name:'Ascending triangle', bias:'bullish', confidence:72 };
+    }
+    if (near(l2, l3) && h2 < h1 && h3 < h2) {
+        return { name:'Descending triangle', bias:'bearish', confidence:72 };
+    }
+    if (h2 > h1 && h3 > h2 && l2 > l1 && l3 > l2) {
+        return { name:'Higher high / higher low', bias:'bullish', confidence:68 };
+    }
+    if (h2 < h1 && h3 < h2 && l2 < l1 && l3 < l2) {
+        return { name:'Lower high / lower low', bias:'bearish', confidence:68 };
+    }
+    return { name:'Konsolidasi / pola netral', bias:'neutral', confidence:45 };
+}
+
 function analyzeLiquidity(prices, structure) {
     if (!prices || prices.length < 10) return { buySideLiq: null, sellSideLiq: null, equalHighs: false, equalLows: false, sweepProbability: 0, liquidityScore: 50 };
     const { highs, lows } = detectSwings(prices, 3);
@@ -905,12 +931,16 @@ function hasValidTradeLevels(levels, currentPrice) {
 
 // Filter gratis berbasis data chart yang sama: hanya alert breakout yang didukung
 // volume relatif. Ini mengurangi sinyal dari pergerakan kecil/noise.
-function localQualityGate(signal, structure, whale, prices, volumes) {
+function localQualityGate(signal, structure, whale, prices, volumes, chartPattern) {
     const lastVolume = volumes.at(-1) || 0;
     const avgVolume  = mean(volumes.slice(-21, -1));
     const volumeRatio = avgVolume > 0 ? lastVolume / avgVolume : 0;
     const expectedBos = signal === 'LONG' ? 'bullish_bos' : 'bearish_bos';
     const expectedWhale = signal === 'LONG' ? 'accumulation' : 'distribution';
+
+    if (chartPattern.bias !== 'neutral' && chartPattern.bias !== (signal === 'LONG' ? 'bullish' : 'bearish')) {
+        return { pass:false, reason:`pola ${chartPattern.name} berlawanan`, volumeRatio };
+    }
 
     if (structure.bos !== expectedBos) {
         return { pass:false, reason:`belum ada ${expectedBos}` , volumeRatio };
@@ -921,7 +951,7 @@ function localQualityGate(signal, structure, whale, prices, volumes) {
     if (whale.whaleBias !== expectedWhale) {
         return { pass:false, reason:`volume/OBV tidak mendukung (${whale.whaleBias})`, volumeRatio };
     }
-    return { pass:true, reason:`BOS + volume ${volumeRatio.toFixed(2)}x + ${expectedWhale}`, volumeRatio };
+    return { pass:true, reason:`${chartPattern.name} + BOS + volume ${volumeRatio.toFixed(2)}x + ${expectedWhale}`, volumeRatio };
 }
 
 // ─── RUN ALL 12 ENGINES ────────────────────────────────────────────────────────
@@ -931,6 +961,7 @@ function runEngines(coin, marketChart) {
     if (prices.length < 10) return null;
 
     const structure     = analyzeMarketStructure(prices);
+    const chartPattern  = detectStructurePattern(structure);
     const liquidity     = analyzeLiquidity(prices, structure);
     const supplyDemand  = analyzeSupplyDemand(prices, volumes);
     const volumeProfile = analyzeVolumeProfile(prices, volumes);
@@ -942,7 +973,7 @@ function runEngines(coin, marketChart) {
     const dirProb       = calcDirectionalProb(structure, liquidity, volumeProfile, orderFlow, whale, volatility, monteCarlo, coin, technicals);
     const tradeLevels   = calcTradeLevels(prices, structure, volumeProfile, dirProb, supplyDemand);
 
-    return { structure, liquidity, supplyDemand, volumeProfile, orderFlow, whale, volatility, monteCarlo, technicals, dirProb, tradeLevels, prices, volumes, currentPrice: prices.at(-1) };
+    return { structure, chartPattern, liquidity, supplyDemand, volumeProfile, orderFlow, whale, volatility, monteCarlo, technicals, dirProb, tradeLevels, prices, volumes, currentPrice: prices.at(-1) };
 }
 
 // ─── SIGNAL STORAGE ────────────────────────────────────────────────────────────
@@ -1027,7 +1058,7 @@ async function scanCoin(coin, regimeCtx = null) {
             log(`  Skip ${coin.symbol.toUpperCase()}: urutan SL/TP tidak valid`, 'WARN');
             return null;
         }
-        const quality = localQualityGate(tl.signal, s, result.whale, result.prices, result.volumes);
+        const quality = localQualityGate(tl.signal, s, result.whale, result.prices, result.volumes, result.chartPattern);
         if (!quality.pass) {
             log(`  Skip ${coin.symbol.toUpperCase()}: ${quality.reason}`, 'INFO');
             return null;
@@ -1099,6 +1130,9 @@ async function scanCoin(coin, regimeCtx = null) {
             tp3            : tl.tp3,
             rr             : tl.rr,
             trend          : s.trend,
+            chartPattern   : result.chartPattern.name,
+            patternBias    : result.chartPattern.bias,
+            patternConfidence: result.chartPattern.confidence,
             bos            : s.bos,
             whaleBias      : result.whale.whaleBias,
             whaleScore     : result.whale.pressureScore,

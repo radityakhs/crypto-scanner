@@ -125,6 +125,7 @@ ${icon} <b>SIGNAL ${entry.signal}</b> — <b>${entry.coinSymbol.toUpperCase()}</
 📐 TP2: ${fmt(entry.tp2)} | TP3: ${fmt(entry.tp3)}
 📐 R:R: <b>1:${entry.rr}</b> | Kelly: <b>${((entry.kellyFraction || 0) * 100).toFixed(2)}%</b>
 ${techLine ? `\n📈 ${techLine}` : ''}${div}
+${entry.chartPattern ? `📐 Pola: <b>${entry.chartPattern}</b> (${entry.patternBias || 'neutral'})\n` : ''}
 ${entry.qualityReason ? `🔎 ${entry.qualityReason}\n` : ''}
 📝 ${entry.signalReason}
 🕐 ${ts} WIB
