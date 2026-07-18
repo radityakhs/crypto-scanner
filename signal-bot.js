@@ -53,9 +53,9 @@ function getWeights() {
 const CONFIG = {
     INTERVAL_MIN      : 15,          // polling interval (menit)
     // Mode selektif: kualitas setup lebih penting daripada jumlah alert.
-    MIN_CONFIDENCE    : 65,
-    MIN_BULLISH       : 65,
-    MIN_BEARISH       : 65,
+    MIN_CONFIDENCE    : 60,
+    MIN_BULLISH       : 62,
+    MIN_BEARISH       : 62,
     TOP_N_COINS       : 80,          // scan top N coin by volume (reduced to avoid CoinGecko rate limits)
     MIN_VOLATILITY_PCT: 5,           // min 24h price change % (filter coin volatile)
     MIN_VOLUME_USD    : 10_000_000,  // min volume 24h $10jt (filter likuiditas)
@@ -274,10 +274,10 @@ async function detectMarketRegime(topCoins) {
 async function getHTFConfirmation(coinId, ltfSignal) {
     try {
         const htfChart = await fetchMarketChartHTF(coinId);
-        if (!htfChart) return { aligned: false, htfTrend: 'unknown', penalty: -30, reason: 'HTF tidak tersedia' };
+        if (!htfChart) return { aligned: false, htfTrend: 'unknown', penalty: -8, reason: 'HTF tidak tersedia' };
 
         const prices = (htfChart.prices || []).map(p => p[1]);
-        if (prices.length < 20) return { aligned: false, htfTrend: 'unknown', penalty: -30, reason: 'Data HTF tidak cukup' };
+        if (prices.length < 20) return { aligned: false, htfTrend: 'unknown', penalty: -8, reason: 'Data HTF tidak cukup' };
 
         // Analisa struktur di HTF
         const htfStructure = analyzeMarketStructure(prices);
@@ -291,10 +291,10 @@ async function getHTFConfirmation(coinId, ltfSignal) {
         let aligned = true, penalty = 0, reason = '';
 
         if (isLong && bearish.includes(htfTrend)) {
-            aligned = false; penalty = -30;
+            aligned = false; penalty = htfTrend === 'reversal_top' ? -14 : -10;
             reason  = `HTF ${htfTrend} (kontra LONG)`;
         } else if (!isLong && bullish.includes(htfTrend)) {
-            aligned = false; penalty = -30;
+            aligned = false; penalty = htfTrend === 'reversal_bottom' ? -14 : -10;
             reason  = `HTF ${htfTrend} (kontra SHORT)`;
         } else if (isLong && bullish.includes(htfTrend)) {
             penalty = 5; // bonus alignment
@@ -306,7 +306,7 @@ async function getHTFConfirmation(coinId, ltfSignal) {
 
         return { aligned, htfTrend, penalty, reason };
     } catch {
-        return { aligned: false, htfTrend: 'unknown', penalty: -30, reason: 'HTF fetch error' };
+        return { aligned: false, htfTrend: 'unknown', penalty: -8, reason: 'HTF fetch error' };
     }
 }
 
@@ -1038,22 +1038,10 @@ async function scanCoin(coin, regimeCtx = null) {
     const mtf = await getHTFConfirmation(coin.id, tl.signal);
     await sleep(1200); // extra delay setelah HTF fetch (lebih longgar)
 
-        // Veto keras: alert tidak boleh melawan HTF atau teknikal lokal.
-        if (!mtf.aligned) {
-            log(`  Skip ${coin.symbol.toUpperCase()}: ${mtf.reason || 'HTF tidak searah'}`, 'INFO');
-            return null;
-        }
+        // HTF dan indikator lagging dinilai sebagai penalty. Pada awal breakout,
+        // keduanya sering terlambat; BOS, volume, dan OBV tetap menjadi gate keras.
         const tech = result.technicals;
         const expectedTechBias = tl.signal === 'LONG' ? 'bullish' : 'bearish';
-        if (!tech?.techConfirmed || tech.techBias !== expectedTechBias) {
-            log(`  Skip ${coin.symbol.toUpperCase()}: technical tidak mengonfirmasi ${tl.signal} (${tech?.techBias || 'unknown'})`, 'INFO');
-            return null;
-        }
-        if ((regimeCtx?.regime === 'bear' && tl.signal === 'LONG') ||
-            (regimeCtx?.regime === 'bull' && tl.signal === 'SHORT')) {
-            log(`  Skip ${coin.symbol.toUpperCase()}: ${tl.signal} melawan regime ${regimeCtx.regime.toUpperCase()}`, 'INFO');
-            return null;
-        }
         if (!hasValidTradeLevels(tl, result.currentPrice)) {
             log(`  Skip ${coin.symbol.toUpperCase()}: urutan SL/TP tidak valid`, 'WARN');
             return null;
@@ -1064,23 +1052,28 @@ async function scanCoin(coin, regimeCtx = null) {
             return null;
         }
 
-        // Terapkan MTF penalty ke confidence
+        // Terapkan penalty konfirmasi tanpa membuang setup momentum yang valid.
         let adjustedConfidence = dp.confidence + mtf.penalty;
         adjustedConfidence     = Math.max(0, Math.min(100, adjustedConfidence));
+
+        let technicalPenalty = 0;
+        if (!tech?.techConfirmed) technicalPenalty = -3;
+        else if (tech.techBias !== expectedTechBias) technicalPenalty = -12;
+        adjustedConfidence = Math.max(0, Math.min(100, adjustedConfidence + technicalPenalty));
 
         // Terapkan regime filter: di bear regime, SHORT lebih mudah lolos; LONG lebih ketat
         let regimeAdjust = 0;
         if (regimeCtx && regimeCtx.regime !== 'unknown') {
-            if (regimeCtx.regime === 'bear'    && tl.signal === 'LONG')  regimeAdjust = -10;
-            if (regimeCtx.regime === 'bull'    && tl.signal === 'SHORT') regimeAdjust = -10;
+            if (regimeCtx.regime === 'bear'    && tl.signal === 'LONG')  regimeAdjust = -7;
+            if (regimeCtx.regime === 'bull'    && tl.signal === 'SHORT') regimeAdjust = -7;
             if (regimeCtx.regime === 'bear'    && tl.signal === 'SHORT') regimeAdjust = +5;
             if (regimeCtx.regime === 'bull'    && tl.signal === 'LONG')  regimeAdjust = +5;
             adjustedConfidence = Math.max(0, Math.min(100, adjustedConfidence + regimeAdjust));
         }
 
-        // Tolak jika confidence setelah MTF + regime adjustment < minimum
+        // Tolak hanya jika seluruh evidence setelah penalty memang lemah.
         if (adjustedConfidence < CONFIG.MIN_CONFIDENCE) {
-            log(`  Skip ${coin.symbol.toUpperCase()}: Confidence ${dp.confidence}% → ${adjustedConfidence}% setelah MTF/Regime (${mtf.reason})`, 'INFO');
+            log(`  Skip ${coin.symbol.toUpperCase()}: Confidence ${dp.confidence}% → ${adjustedConfidence}% setelah HTF/tech/regime (${mtf.reason})`, 'INFO');
             return null;
         }
 
@@ -1115,6 +1108,7 @@ async function scanCoin(coin, regimeCtx = null) {
             htfTrend       : mtf.htfTrend,
             htfAligned     : mtf.aligned,
             mtfReason      : mtf.reason || '',
+            technicalPenalty,
             // Regime info
             marketRegime   : regimeCtx?.regime || 'unknown',
             regimeScore    : regimeCtx?.score  || 50,
