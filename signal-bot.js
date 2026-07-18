@@ -56,6 +56,8 @@ const CONFIG = {
     MIN_CONFIDENCE    : 60,
     MIN_BULLISH       : 62,
     MIN_BEARISH       : 62,
+    // Stop yang terlalu jauh bukan setup entry yang actionable; tunggu retest.
+    MAX_STOP_DISTANCE_PCT: 12,
     TOP_N_COINS       : 80,          // scan top N coin by volume (reduced to avoid CoinGecko rate limits)
     MIN_VOLATILITY_PCT: 5,           // min 24h price change % (filter coin volatile)
     MIN_VOLUME_USD    : 10_000_000,  // min volume 24h $10jt (filter likuiditas)
@@ -1046,6 +1048,11 @@ async function scanCoin(coin, regimeCtx = null) {
             log(`  Skip ${coin.symbol.toUpperCase()}: urutan SL/TP tidak valid`, 'WARN');
             return null;
         }
+        const stopDistancePct = Math.abs(result.currentPrice - tl.stopLoss) / result.currentPrice * 100;
+        if (stopDistancePct > CONFIG.MAX_STOP_DISTANCE_PCT) {
+            log(`  Skip ${coin.symbol.toUpperCase()}: SL terlalu jauh (${stopDistancePct.toFixed(1)}%, maks ${CONFIG.MAX_STOP_DISTANCE_PCT}%)`, 'INFO');
+            return null;
+        }
         const quality = localQualityGate(tl.signal, s, result.whale, result.prices, result.volumes, result.chartPattern);
         if (!quality.pass) {
             log(`  Skip ${coin.symbol.toUpperCase()}: ${quality.reason}`, 'INFO');
@@ -1119,6 +1126,7 @@ async function scanCoin(coin, regimeCtx = null) {
             entryLow       : tl.entryLow,
             entryHigh      : tl.entryHigh,
             stopLoss       : tl.stopLoss,
+            stopDistancePct: +stopDistancePct.toFixed(2),
             tp1            : tl.tp1,
             tp2            : tl.tp2,
             tp3            : tl.tp3,

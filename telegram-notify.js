@@ -93,9 +93,12 @@ function sendWalletMessage(text, parseMode = 'HTML') {
 
 // ── Format helpers ────────────────────────────────────────────────────────────
 function fmt(v, decimals = 4) {
-    if (v == null) return '—';
-    if (v > 1000)  return '$' + v.toLocaleString('en-US', { maximumFractionDigits: 2 });
-    return '$' + (+v).toFixed(decimals);
+    const value = Number(v);
+    if (!Number.isFinite(value)) return '—';
+    if (value > 1000) return '$' + value.toLocaleString('en-US', { maximumFractionDigits: 2 });
+    // Empat desimal membuat token mikro seperti XEC tampak bernilai nol.
+    const precision = value < 0.0001 ? 8 : value < 0.01 ? 6 : decimals;
+    return '$' + value.toFixed(precision);
 }
 
 function fmtPct(v) { return v >= 0 ? `+${v.toFixed(2)}%` : `${v.toFixed(2)}%`; }
@@ -121,7 +124,7 @@ ${icon} <b>SIGNAL ${entry.signal}</b> — <b>${entry.coinSymbol.toUpperCase()}</
 🎯 Confidence: <b>${entry.confidence}%</b>
 🌍 Regime: <b>${regime}</b> (score: ${entry.regimeScore})
 
-📐 SL: ${fmt(entry.stopLoss)} | TP1: ${fmt(entry.tp1)}
+📐 SL: ${fmt(entry.stopLoss)} (${(entry.stopDistancePct || 0).toFixed(2)}%) | TP1: ${fmt(entry.tp1)}
 📐 TP2: ${fmt(entry.tp2)} | TP3: ${fmt(entry.tp3)}
 📐 R:R: <b>1:${entry.rr}</b> | Kelly: <b>${((entry.kellyFraction || 0) * 100).toFixed(2)}%</b>
 ${techLine ? `\n📈 ${techLine}` : ''}${div}
